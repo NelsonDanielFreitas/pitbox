@@ -1,0 +1,9 @@
+# Revisão obrigatória nas áreas sensíveis (substituir @o-teu-utilizador)
+/proto/                      @o-teu-utilizador
+/backend/internal/platform/  @o-teu-utilizador
+/backend/internal/identity/  @o-teu-utilizador
+/backend/internal/sync/      @o-teu-utilizador
+/backend/db/                 @o-teu-utilizador
+/backend/authz/              @o-teu-utilizador
+/firmware/                   @o-teu-utilizador
+/.github/                    @o-teu-utilizador

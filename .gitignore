@@ -1,0 +1,36 @@
+# Segredos e ambiente local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Go
+/backend/bin/
+*.test
+coverage.out
+
+# Node / app
+node_modules/
+/app/dist/
+/app/android/app/build/
+/app/ios/App/Pods/
+
+# Rust
+/firmware/target/
+
+# Python
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# Claude Code (notas pessoais)
+CLAUDE.local.md
+.claude/settings.local.json

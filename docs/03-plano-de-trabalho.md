@@ -1,0 +1,219 @@
+# PitBox — Plano de Trabalho
+
+Oct 11, 2026 · @Nelson Freitas
+
+## Como usar este quadro
+
+Começa pelo cartão F0-01 e segue a ordem dos IDs: cada fase acaba com um cartão **Gate**, que só se fecha depois de usares o que construíste numa prova ou num treino real.
+
+- **Um cartão de cada vez.** No máximo 2 cartões "Em curso"; só começas um novo quando fechares outro
+- **Pronto quando** é o critério para mudar o estado para "Feito": se não está cumprido, o cartão não está feito
+- **Bloqueado** = depende de algo fora do teu controlo (peça encomendada, resposta de um fornecedor); escreve o motivo num comentário no cartão
+- Cada cartão é um branch e um pull request com o ID no nome (ex.: `f1-07-setup-service`), mesmo trabalhando sozinho: treina o processo das empresas e deixa histórico
+- Para passar isto para o Trello ou GitHub Projects: uma lista por estado, uma etiqueta por fase, e o "Pronto quando" como checklist do cartão
+
+Referem-se a: PitBox — Especificação Funcional (o quê) e PitBox — Arquitetura Técnica (como). Os ficheiros `schema.sql` e testes da base de dados entram no cartão F0-06.
+
+## Fase 0 — Preparação
+
+Objetivo: ter um repositório onde `make up` levanta todo o ambiente local e o CI corre em cada pull request, antes de escrever qualquer funcionalidade.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e ferramentas | Para quê |
+| --- | --- | --- |
+| Ambiente | WSL2 com Ubuntu 24.04, VS Code + extensão WSL, mise | Desenvolvimento em Linux; versões de Go, Node, Rust e Python fixadas por projeto |
+| Linguagens | Go 1.27 (versão estável atual), Node 22 + pnpm, Rust stable (rustup), Python 3.12 + uv | Backend, app, firmware e análise |
+| Contentores | Docker Engine (ou Docker Desktop com integração WSL), Docker Compose | Ambiente local reproduzível |
+| Serviços locais | PostgreSQL 16 (imagem `timescale/timescaledb-ha`), Valkey 8, Zitadel, OpenFGA, MinIO, Jaeger | Os mesmos serviços da produção, em contentores |
+| Contratos | Buf CLI, protoc-gen-go, protoc-gen-connect-go, protoc-gen-es | Gerar código Go e TypeScript a partir dos `.proto` |
+| Base de dados | Atlas, sqlc, psql | Migrações versionadas e queries SQL tipadas |
+| Qualidade | golangci-lint, gitleaks, lefthook (git hooks) | Lint e deteção de segredos antes do commit |
+| CI e gestão | GitHub, GitHub Actions, GitHub Projects | Repositório, pipeline e quadro de cartões |
+| Documentação | Markdown (ADRs), Mermaid | Decisões e diagramas no repositório |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F0-01 | Criar o monorepo | Repositório no GitHub com a estrutura de pastas da arquitetura (§16.1), `README`, licença, `.editorconfig`, `.gitignore` | Estrutura no `main`; branch protegida com PR obrigatório | Por fazer |
+| F0-02 | Instalar ferramentas | Go 1.27, Node 22 + pnpm, Rust (rustup + espup), Docker, Buf, sqlc, Atlas, golangci-lint; documentar versões num ficheiro `.tool-versions` (mise ou asdf) | Um colega consegue instalar tudo só com o README | Por fazer |
+| F0-03 | Ambiente local com Docker Compose | Serviços: Postgres 16 (imagem TimescaleDB), Valkey, Zitadel, OpenFGA, MinIO; `Makefile` com `up`, `down`, `reset` | `make up` levanta tudo e os health checks passam | Por fazer |
+| F0-04 | Primeiros contratos Protobuf | `buf.yaml`, `buf.gen.yaml`, pacote `pitbox.identity.v1` com um `TeamService` mínimo; geração para Go e TypeScript | `buf lint` e `buf generate` sem erros | Por fazer |
+| F0-05 | CI inicial | GitHub Actions: `buf lint` + `buf breaking`, `golangci-lint`, `go test -race`, gitleaks; ações fixadas por SHA, permissões mínimas | PR de teste fica verde; PR com um segredo falso fica vermelho | Por fazer |
+| F0-06 | Base de dados no repositório | `schema.sql` em `backend/db/schema`, Atlas configurado para gerar migrações, testes SQL a correr no CI contra Postgres em contentor | `atlas migrate diff` gera a migração inicial; testes de RLS passam no CI | Por fazer |
+| F0-07 | ADRs e threat model inicial | `docs/adr` com as 8 decisões da arquitetura (§16.2); `docs/threat-model` com a tabela STRIDE | Ficheiros no `main` | Por fazer |
+| F0-08 | Quadro do projeto | Passar estes cartões para GitHub Projects (ou Trello) com etiquetas por fase | Todos os cartões da Fase 0 e 1 no quadro | Por fazer |
+
+## Fase 1 — v0.1 Fundações
+
+Objetivo: o mecânico faz login, regista carros, motores e pneus, e grava setups na app sem rede, que sincronizam depois. Primeiro o backend, depois a app, depois o sync.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e bibliotecas | Para quê |
+| --- | --- | --- |
+| API (Go) | `connectrpc.com/connect`, `buf.build/go/protovalidate`, `connectrpc.com/grpcreflect` (só em desenvolvimento) | Serviços Connect/gRPC e validação das mensagens |
+| Base de dados (Go) | `jackc/pgx/v5`, sqlc, Atlas | Ligação ao Postgres, queries geradas, migrações |
+| Autenticação (Go) | `coreos/go-oidc/v3`, `golang.org/x/oauth2`, `lestrrat-go/jwx/v3`, `redis/go-redis/v9` | Fluxo OIDC + PKCE no BFF, validação de JWT, sessões no Valkey |
+| Autorização | OpenFGA, `openfga/go-sdk`, CLI `fga` (testes de asserções) | Permissões por recurso |
+| Plataforma (Go) | `log/slog`, `go.opentelemetry.io/otel`, `caarlos0/env`, `riverqueue/river` | Logs, traces, configuração, fila de tarefas e outbox |
+| Testes (Go) | `testing`, `stretchr/testify`, `testcontainers-go`, `google/go-cmp` | Testes unitários e de integração com Postgres real |
+| App | React 19, Vite, TypeScript (strict), TanStack Router, TanStack Query | Estrutura da app e acesso a dados |
+| Interface | Tailwind CSS, Radix UI, React Hook Form, Zod | Componentes acessíveis e formulários validados |
+| API na app | `@connectrpc/connect-web`, `@bufbuild/protobuf` | Cliente gerado a partir dos `.proto` |
+| Base local | `wa-sqlite` (OPFS), `vite-plugin-pwa` (Workbox) | SQLite no browser e funcionamento offline |
+| Sync | `uuidv7` (npm), `google/uuid` (Go), Web Crypto (ECDSA P-256) | IDs gerados offline e assinatura das operações por dispositivo |
+| Testes (app) | Vitest, Testing Library, Playwright | Testes de componentes e E2E em modo avião |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F1-01 | Esqueleto do `pitbox-api` | `cmd/api`, configuração por variáveis de ambiente, logs slog em JSON, OpenTelemetry, health check, arranque e paragem graciosos | `curl /healthz` responde; traces visíveis num Jaeger local | Por fazer |
+| F1-02 | Interceptors Connect | Recuperação de panics, limites de tamanho e deadline, protovalidate, registo de auditoria (§4.4) | Testes unitários de cada interceptor | Por fazer |
+| F1-03 | Login com Zitadel + BFF | Projeto e aplicação OIDC no Zitadel local; fluxo Authorization Code + PKCE no BFF; cookie `__Host-` HttpOnly; validação de JWT com JWKS em cache | Login e logout no browser; token adulterado é rejeitado num teste | Por fazer |
+| F1-04 | Contexto de equipa e RLS | Middleware que abre a transação e faz `SET LOCAL app.user_id` e `app.team_id`; ligação como `pitbox_app` | Teste de integração: utilizador da equipa B não lê dados da equipa A | Por fazer |
+| F1-05 | Autorização com OpenFGA | Modelo `.fga` (§6.1) com ficheiro de asserções; `Check` em cada caso de uso; worker sincroniza membros → relações | Asserções no CI; piloto recebe `PERMISSION_DENIED` ao editar um setup | Por fazer |
+| F1-06 | Equipas e convites | `TeamService` e `MemberService`: criar equipa, convidar por email ou link, aceitar, mudar papéis | Fluxo completo testado; convite expirado ou reutilizado falha | Por fazer |
+| F1-07 | Garagem no backend | `CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico | CRUD testado com testcontainers; motor não fica em dois carros | Por fazer |
+| F1-08 | Setups no backend | `SetupService`: criar, nova versão, comparar duas versões, link de partilha; esquema JSON v1 dos campos 1/8 TT | Diferenças entre versões corretas; link revogado deixa de funcionar | Por fazer |
+| F1-09 | Esqueleto da app | Vite + React + TypeScript strict, TanStack Router e Query, Tailwind, cliente Connect gerado, login via BFF | App abre, faz login e mostra a lista de equipas | Por fazer |
+| F1-10 | Base local na app | SQLite (wa-sqlite + OPFS), migrações locais, repositórios por funcionalidade | Dados persistem depois de fechar e reabrir o browser | Por fazer |
+| F1-11 | Ecrãs de garagem | Listas e formulários de carros, motores, pneus e peças, a ler e escrever na base local | Registar um carro completo em menos de 1 min no telemóvel | Por fazer |
+| F1-12 | Ecrãs de setup | Ficha por grupos (§5.1 da especificação), copiar de outro setup, comparar lado a lado, feedback do piloto | Setup completo gravado em menos de 2 min | Por fazer |
+| F1-13 | Sincronização | `SyncService` Push/Pull, fila de operações com UUIDv7, assinatura por dispositivo, resolução de conflitos por campo (§8) | Reenviar a mesma fila não duplica nada; conflito aparece ao mecânico | Por fazer |
+| F1-14 | Teste em modo avião | Playwright: criar setup offline, voltar a ligar, verificar no servidor | Teste E2E verde no CI | Por fazer |
+| F1-15 | **Gate v0.1** | Usar a app num treino ou prova real para registar todos os setups | Nenhum setup registado em papel nesse dia; lista de problemas anotada | Por fazer |
+
+## Fase 2 — v0.2 Box
+
+Objetivo: gerir um fim de semana de corrida inteiro na app, incluindo uma final com reabastecimentos, sem rede e sem papel.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e bibliotecas | Para quê |
+| --- | --- | --- |
+| Backend | `riverqueue/river`, outbox em `platform.outbox` | Atualizar contadores do motor e gerar avisos de manutenção de forma assíncrona |
+| Modo final | XState v5 + `@xstate/react` | Máquina de estados da corrida (em pista, em box, flameout) |
+| Lógica de estratégia | TypeScript puro, `fast-check` | Cálculos de paragens e testes de propriedades |
+| App nativa | Capacitor 8, Android Studio | Empacotar a app para Android |
+| Plugins Capacitor | `@capacitor/haptics`, `@capacitor/local-notifications`, `@capacitor-community/keep-awake`, `@capacitor-community/sqlite` (SQLCipher), armazenamento seguro (Keystore) | Vibração, avisos, ecrã sempre ligado, base local cifrada, guardar tokens |
+| Login no telemóvel | AppAuth (via plugin Capacitor) | Login OIDC + PKCE no browser do sistema |
+| Datas e tempos | `date-fns`, `performance.now()` | Horário do dia e cronómetro preciso |
+| Testes | Vitest, Playwright (emulação de telemóvel e modo avião) | Simular uma final completa sem rede |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F2-01 | Provas e sessões no backend | `EventService` e `SessionService`: pistas, campeonatos, provas, sessões com carro, motor, pneus, setup e condições | Sessão ligada a uma versão de setup imutável | Por fazer |
+| F2-02 | Horário do dia na app | Lista de sessões, contagem decrescente, aviso a 15 e 5 min, ajuste de atraso global | Notificação local dispara com o telemóvel bloqueado | Por fazer |
+| F2-03 | Resultado manual e voltas | Introdução rápida de resultado e voltas; incidentes por volta | Resultado de uma manga registado em menos de 1 min | Por fazer |
+| F2-04 | Manutenção | `MaintenanceService`: intervenções com peças do stock, regras, vista de estado; contadores do motor atualizados por eventos (outbox + River) | Motor passa a "vencido" ao atingir o limite de depósitos | Por fazer |
+| F2-05 | Checklists | Modelos de checklist pré-prova e pré-sessão; itens obrigatórios bloqueiam o "pronto" | Checklist pré-prova gerada a partir das regras vencidas | Por fazer |
+| F2-06 | Capacitor no Android | Empacotar a app; plugins de vibração, ecrã sempre ligado, notificações locais, armazenamento seguro, SQLite nativo cifrado | App instalada no teu telemóvel por APK de teste | Por fazer |
+| F2-07 | Motor de estratégia | Funções puras em TypeScript: número de paragens, volta de aviso (fórmula §9.1), recálculo após flameout; testes de propriedades | Cobertura total; casos de 30 e 45 min verificados à mão | Por fazer |
+| F2-08 | Ecrã do modo final | Máquina de estados (XState), cronómetro, contador de voltas por toque, botões grandes, avisos com vibração e som | Simulação de 45 min em modo avião sem falhas nem atrasos | Por fazer |
+| F2-09 | Paragens e plano | Registo de paragens só de acrescento; plano antes da final com cenários | Paragem corrigida fica como nova linha, a original mantém-se | Por fazer |
+| F2-10 | Relatório pós-final | Linha do tempo da corrida, tempo na box vs plano, atualização de voltas por depósito | Relatório gerado automaticamente ao terminar a final | Por fazer |
+| F2-11 | Ensaio com o teu pai | Treino com final simulada de 30 min: tu na box com a app, o teu pai a pilotar | Lista de melhorias anotada e as críticas resolvidas | Por fazer |
+| F2-12 | **Gate v0.2** | Gerir uma prova real inteira, incluindo a final, só na app | Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência; nenhum dado perdido | Por fazer |
+
+## Fase 3 — v0.3 Análise
+
+Objetivo: os tempos de cada prova entram sozinhos (ou por ficheiro) e a app mostra que alterações de setup tornaram o carro mais rápido e mais consistente.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e bibliotecas | Para quê |
+| --- | --- | --- |
+| Importação (Go) | `encoding/csv`, `golang.org/x/net/html`, `golang.org/x/time/rate` | Ler CSV e HTML de resultados com limite de pedidos |
+| Armazenamento | `aws-sdk-go-v2` (S3), MinIO em local | Guardar as respostas brutas para reprocessar |
+| Segurança dos parsers | Go native fuzzing (`go test -fuzz`) | Garantir que páginas malformadas não partem o serviço |
+| Streaming | Connect server-streaming | Atualizações ao vivo durante uma final |
+| Gráficos na app | uPlot, Recharts | Voltas por sessão e resumos |
+| Análise (Python) | uv, JupyterLab, Polars (ou pandas), `psycopg` 3, Matplotlib, SciPy | Estudar o efeito dos setups e o desgaste dos pneus |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F3-01 | Levantamento das fontes | Ver que plataformas de resultados usam as provas onde correm, que exportações oferecem e o que os termos permitem | Tabela de fontes com decisão por fornecedor (usar, só CSV, não usar) | Por fazer |
+| F3-02 | Importação por ficheiro | Upload de CSV/HTML, `raw_import` no armazenamento de objetos, parser com limites, correspondência por transponder | Resultados de uma prova real importados corretamente | Por fazer |
+| F3-03 | Fuzzing dos parsers | Go native fuzzing com páginas reais guardadas como corpus | 1 h de fuzzing sem panics no CI noturno | Por fazer |
+| F3-04 | Primeiro conector automático | Implementar `TimingProvider` para o fornecedor aprovado em F3-01, no worker, com limite de pedidos | Resultados chegam sem ação manual até 5 min após publicados | Por fazer |
+| F3-05 | Rivais | Competidores vistos nos resultados; marcar rivais; comparação volta a volta | Gráfico tu vs rival numa manga | Por fazer |
+| F3-06 | Análise por sessão | Gráfico de voltas com incidentes; melhor, média, mediana, consistência, melhores 5 consecutivas | Valores batem com um cálculo manual numa folha de cálculo | Por fazer |
+| F3-07 | Exploração em Python | Notebook em `analysis/` que lê a base de dados (papel `pitbox_readonly`) e estuda efeito de setups e desgaste de pneus | Uma conclusão real sobre o vosso carro, com o número de sessões em que se baseia | Por fazer |
+| F3-08 | Análises ao longo da época na app | Evolução por pista; antes/depois de uma alteração com condições semelhantes | Ecrã mostra o número de sessões usadas em cada conclusão | Por fazer |
+| F3-09 | **Gate v0.3** | Prova inteira com tempos importados e análise feita na mesma noite | Tempos casados pelo transponder sem correções manuais | Por fazer |
+
+## Fase 4 — v0.4 Telemetria
+
+Objetivo: um módulo no carro grava temperatura, rotações, tensão e impactos para cartão, e os dados aparecem na app sobre os tempos de volta. Esta fase pode começar em paralelo com a Fase 3: as peças demoram a chegar.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e bibliotecas | Para quê |
+| --- | --- | --- |
+| Hardware | ESP32-S3, SX1262, MAX31855 + termopar K, sensor Hall, LSM6DSO, leitor microSD | Módulo no carro |
+| Ferramentas Rust | `espup`, `espflash` / `cargo-espflash`, `usbipd-win` (para ver o USB dentro do WSL) | Compilar e gravar firmware no ESP32 |
+| Firmware (Rust) | `esp-hal`, `esp-hal-embassy`, `embassy-executor`, `embassy-time`, `embassy-sync`, `embedded-hal` 1.0 | Base do firmware assíncrono sem sistema operativo |
+| Dados no firmware | `postcard` + `serde`, `heapless`, `crc`, `embedded-sdmmc` | Formato compacto, estruturas sem alocação, gravação no cartão |
+| BLE | `trouble-host` (ou o BLE do `esp-wifi`) no módulo; `@capacitor-community/bluetooth-le` na app | Emparelhamento e descarga dos ficheiros |
+| Segurança do dispositivo | Secure boot v2 e cifra da flash (ferramentas `espsecure` / `espefuse` do ESP-IDF), `ed25519-dalek` | Assinar firmware e impedir firmware não autorizado |
+| Ingestão (Go) | `pgx` `CopyFrom`, TimescaleDB, URLs pré-assinados S3 | Inserir milhares de amostras de forma eficiente |
+| Gráficos | uPlot | Séries longas de telemetria sobre os tempos de volta |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F4-01 | Confirmar regulamento | Ler o regulamento das provas sobre equipamento a bordo e transmissão; registar em `events.event.telemetry_allowed` | Resposta escrita para treinos, mangas e finais | Por fazer |
+| F4-02 | Encomendar o hardware | ESP32-S3 (2 unidades), SX1262 (2), MAX31855 + termopar K, sensor Hall + íman, LSM6DSO, leitor microSD, regulador, caixa | Peças recebidas | Por fazer |
+| F4-03 | Rust embarcado: primeiros passos | Ler o livro "The Rust on ESP Book"; piscar um LED e ler um sensor com `esp-hal` + Embassy | Leitura de temperatura na consola a 5 Hz | Por fazer |
+| F4-04 | Protocolo partilhado | Crate `firmware/protocol` (`no_std`, postcard): formato dos blocos no cartão com CRC, pacote LoRa resumido; usado no firmware e num leitor em Go | Teste de ida e volta Rust → Go passa | Por fazer |
+| F4-05 | Aquisição em bancada | Tarefas Embassy por sensor, às frequências da especificação (§10.1); watchdog | 30 min em bancada sem perder amostras | Por fazer |
+| F4-06 | Gravação em cartão | Escrita em blocos de 4 KiB, início e fim automáticos pela rotação | Cartão lido no computador com o leitor em Go | Por fazer |
+| F4-07 | Emparelhamento e descarga por BLE | Emparelhamento por código da app (§5.3); descarga do ficheiro para o telemóvel | Ficheiro de uma sessão descarregado na app | Por fazer |
+| F4-08 | `pitbox-ingest` | Upload por URL pré-assinado, validação, inserção com `COPY`, associação à sessão | Ficheiro de 20 min processado em menos de 5 min | Por fazer |
+| F4-09 | Gráficos e alertas | uPlot sobre os tempos de volta; limites de temperatura, tensão e impacto | Alerta gerado num teste com dados sintéticos | Por fazer |
+| F4-10 | Montagem no carro | Caixa, fixação anti-vibração, alimentação isolada do sinal dos servos; pesar | ≤ 40 g; carro comporta-se igual com o módulo desligado ou avariado | Por fazer |
+| F4-11 | Segurança do dispositivo | Secure boot v2, cifra da flash, firmware assinado com Ed25519, anti-rollback | Firmware não assinado é recusado no arranque | Por fazer |
+| F4-12 | **Gate v0.4** | 10 sessões de treino gravadas e vistas na app | Nenhuma falha que afete o controlo do carro; dados de todas as sessões completos | Por fazer |
+
+## Fase 5 — v1.0 Produção
+
+Objetivo: a plataforma corre na cloud, segura, monitorizada e com backups testados, pronta para outras equipas. Os cartões F5-04 a F5-09 podem ser feitos mais cedo se quiseres prática de infraestrutura entre fases.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e bibliotecas | Para quê |
+| --- | --- | --- |
+| LoRa (Rust) | `lora-phy`, `chacha20poly1305` (RustCrypto) | Envio em tempo real autenticado e cifrado |
+| Atualização de firmware | Partições OTA do ESP32 (`esp-bootloader-esp-idf` / `esp-storage`) | Atualizar o módulo com regresso à versão anterior |
+| Infraestrutura | OpenTofu, Google Cloud (Cloud Run, base de dados gerida, Memorystore, Cloud Storage, Secret Manager, KMS) | Ambientes de staging e produção como código |
+| Borda | Cloudflare (DNS, TLS, WAF, rate limiting), Cloudflare Pages | Proteger a API e servir a app web |
+| Entrega | `ko`, Syft, Trivy, cosign, `slsa-github-generator`, Renovate | Imagens mínimas, SBOM, scanning, assinatura e proveniência |
+| Observabilidade | OpenTelemetry Collector, Grafana Cloud (Prometheus, Tempo, Loki), Sentry | Traces, métricas, logs, alertas e erros da app |
+| Carga e segurança | k6, ghz, OWASP ZAP, checklist OWASP ASVS 5.0 | Testes de carga e revisão de segurança |
+| Lojas | Google Play Console, Apple Developer, runners macOS do GitHub Actions, fastlane | Publicar a app (iOS exige macOS) |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F5-01 | Recetor LoRa na box | Segundo ESP32-S3 + SX1262 como ponte LoRa → BLE para a app | Pacotes recebidos a 1 Hz a 100 m numa pista | Por fazer |
+| F5-02 | LoRa autenticado | ChaCha20-Poly1305 com chave de sessão do emparelhamento; sequência no nonce; rejeitar repetições; respeitar duty cycle da sub-banda | Pacote repetido ou alterado é descartado num teste | Por fazer |
+| F5-03 | Atualização OTA assinada | Firmware descarregado do servidor pela app e passado por BLE; verificação de assinatura; regresso à versão anterior se o arranque falhar | Atualização interrompida a meio não estraga o módulo | Por fazer |
+| F5-04 | Infraestrutura como código | OpenTofu: projetos de staging e produção, Cloud Run, base de dados gerida, Valkey, armazenamento, Secret Manager, KMS | `tofu apply` cria o ambiente de staging do zero | Por fazer |
+| F5-05 | Borda com Cloudflare | DNS, TLS, WAF, rate limiting; origem só aceita tráfego da Cloudflare | Pedido direto à origem é recusado | Por fazer |
+| F5-06 | Pipeline de entrega | Build com `ko`, SBOM com Syft, Trivy, assinatura cosign, proveniência SLSA, deploy gradual com rollback (§14) | Imagem não assinada não chega a produção | Por fazer |
+| F5-07 | Observabilidade e SLOs | OpenTelemetry para Grafana Cloud; dashboards por módulo; alertas dos SLOs (§13) com runbooks | Erro provocado em staging gera alerta no telemóvel | Por fazer |
+| F5-08 | Backups e restauro | PITR, `pg_dump` diário para outra conta com bloqueio de objetos, teste de restauro mensal automático | Restauro completo feito e cronometrado (≤ 4 h) | Por fazer |
+| F5-09 | Testes de carga | k6 e ghz em staging com 500 equipas simuladas | p95 ≤ 300 ms nas leituras e escritas | Por fazer |
+| F5-10 | RGPD | Exportar e apagar conta na app, política de privacidade, termos, registo de tratamentos, procedimento de violação de dados | Exportação e apagamento testados de ponta a ponta | Por fazer |
+| F5-11 | Revisão de segurança interna | Rever o threat model; correr OWASP ZAP contra staging; verificar ASVS nível 2 item a item | Lista de falhas corrigidas ou aceites por escrito | Por fazer |
+| F5-12 | Teste de intrusão externo | Pedir a um colega do mestrado ou a uma empresa um teste à API, web e app; publicar `security.txt` | Relatório recebido e falhas críticas corrigidas | Por fazer |
+| F5-13 | Publicação nas lojas | Contas Google Play e Apple Developer; testes fechados com 2–3 equipas amigas | App aprovada nas duas lojas | Por fazer |
+| F5-14 | **Gate v1.0** | Uma prova com outra equipa a usar o PitBox além da vossa | Nenhum incidente de segurança ou perda de dados; SLOs cumpridos nesse fim de semana | Por fazer |
+
+## Cartões contínuos
+
+Estes hábitos repetem-se em todas as fases; são eles que transformam o projeto num portfólio que se mostra numa entrevista.
+
+- [ ] No fim de cada fase: rever o threat model e atualizar os ADRs
+- [ ] No fim de cada fase: escrever um artigo curto no blog ou no `docs/` (ex.: "Como isolei equipas com RLS e FKs compostas", "Firmware Rust num carro de 1/8")
+- [ ] Todas as semanas: deixar o Renovate atualizar dependências e rever os alertas de segurança
+- [ ] Depois de cada prova: 15 minutos com o teu pai a anotar o que falhou ou fez falta na app, e criar cartões para isso
+- [ ] Uma vez por mês: confirmar que o teste de restauro passou e que o CI noturno de fuzzing está verde
+- [ ] Sempre que possível: ligar um cartão a um trabalho do mestrado (threat modeling, criptografia do LoRa, segurança da supply chain)

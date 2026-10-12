@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -75,7 +75,10 @@ gen: ## Regenera o código dos contratos (backend/gen, app/src/gen). O sqlc entr
 	@find backend/gen app/src/gen -type f \( -name '*.pb.go' -o -name '*.connect.go' -o -name '*_pb.ts' \) -delete
 	buf generate
 
-gen-check: gen ## Falha se o código gerado não estiver commitado (apanha também ficheiros novos)
+check-tool-versions: ## Os geradores de mise.toml têm de coincidir com as bibliotecas de backend/go.mod
+	python3 -I scripts/check-tool-versions.py
+
+gen-check: check-tool-versions gen ## Falha se os geradores não coincidirem com go.mod ou o código gerado não estiver commitado
 	@test -z "$$(git status --porcelain -- backend/gen app/src/gen)" || \
 	  { git status --porcelain -- backend/gen app/src/gen; echo "generated code is stale: run make gen and commit"; exit 1; }
 

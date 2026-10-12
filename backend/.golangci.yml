@@ -1,0 +1,46 @@
+# golangci-lint v2 (versão fixada em mise.toml). Corre a partir de backend/ (make lint-go).
+# Um falso positivo resolve-se na linha, com justificação: //nolint:<linter> // <motivo>.
+# Não se desativam linters globalmente para fazer passar código.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose # corpos de resposta HTTP sempre fechados
+    - errorlint # errors.Is/As em vez de == e type assertions; %w nos wraps
+    - forbidigo # panic e fmt.Print* só em testes (ver settings)
+    - gosec # problemas de segurança comuns (G-rules)
+    - nilerr # devolver nil depois de testar err != nil
+    - noctx # pedidos HTTP e comandos sem context
+    - sloglint # slog consistente (ver settings)
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^panic$
+          msg: "sem panic em código de produção: devolve um erro (regra do backend)"
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: "usa o slog (logs em JSON) em vez de fmt.Print*"
+    sloglint:
+      context: all # obriga a InfoContext/ErrorContext..., para o trace_id ir sempre no log
+      no-global: all # logger injetado, nunca slog.Info global
+      static-msg: true # mensagens constantes; o variável vai em atributos
+  exclusions:
+    generated: lax # ignora ficheiros com "Code generated ... DO NOT EDIT" (backend/gen, sqlcgen)
+    paths:
+      - gen
+    rules:
+      - path: _test\.go
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - gen

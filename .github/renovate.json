@@ -30,6 +30,23 @@
         "major"
       ],
       "enabled": false
+    },
+    {
+      "description": "Connect v2 (saiu em 10/2026) é uma migração, não uma atualização: muda imports, gerador e interceptors. Aparece no Dependency Dashboard e só abre PR quando aprovada (ver ADR a propor antes do F1-02)",
+      "matchPackageNames": [
+        "connectrpc.com/connect"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "otel (v1.x) e contrib (v0.x) têm de subir juntos: versões desalinhadas partem a compilação",
+      "matchPackageNames": [
+        "go.opentelemetry.io/**"
+      ],
+      "groupName": "opentelemetry-go"
     }
   ],
   "customManagers": [

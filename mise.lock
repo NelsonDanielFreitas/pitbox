@@ -79,13 +79,13 @@ url_api = "https://api.github.com/repos/golangci/golangci-lint/releases/assets/5
 provenance = "github-attestations"
 
 [[tools.node]]
-version = "22.23.3"
+version = "24.21.0"
 backend = "core:node"
-specifiers = ["22.23.3"]
+specifiers = ["24.21.0"]
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af"
-url = "https://nodejs.org/dist/v22.23.3/node-v22.23.3-linux-x64.tar.gz"
+checksum = "sha256:6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
+url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz"
 
 [[tools.pnpm]]
 version = "12.11.2"

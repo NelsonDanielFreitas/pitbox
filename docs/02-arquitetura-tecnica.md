@@ -19,7 +19,7 @@ A arquitetura é um monólito modular em Go, com contratos gRPC/Connect, Postgre
 | Decisão | Escolha | Porquê | Alternativa considerada |
 | --- | --- | --- | --- |
 | Linguagem do backend | Go 1.27 | Ecossistema cloud-native, gRPC de primeira classe, binário único | .NET, Node (experiência existente) |
-| Estilo de API | Connect (connect-go) sobre Protobuf | Fala gRPC, gRPC-Web e HTTP/JSON com o mesmo código; funciona no browser sem proxy | gRPC puro + Envoy para gRPC-Web |
+| Estilo de API | Connect v2 (connect-go) sobre Protobuf | Fala gRPC, gRPC-Web e HTTP/JSON com o mesmo código; funciona no browser sem proxy | gRPC puro + Envoy para gRPC-Web |
 | Forma do backend | Monólito modular | Equipa de 1–2 pessoas; microserviços só aumentariam o custo operacional | Microserviços desde o início |
 | App | PWA em TypeScript (React + Vite) + Capacitor para as lojas | Um código para web, Android e iOS; acesso a vibração, Bluetooth e ecrã sempre ligado via Capacitor | Flutter, React Native |
 | Base de dados | PostgreSQL 16 + TimescaleDB para telemetria | Uma tecnologia para dados relacionais e séries temporais | Postgres + InfluxDB |
@@ -150,6 +150,8 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 
 ### 4.4 Interceptors (ordem)
 
+Implementam-se como `connect.ServerInterceptor` (Connect v2, ADR 0012) e passam-se a `connect.NewServer` por esta ordem: o primeiro é o mais externo.
+
 1. Recuperação de panics
 2. OpenTelemetry (trace, métricas)
 3. Limites: tamanho máximo de mensagem (4 MiB; 32 MiB só na ingestão de telemetria), deadline máximo (30 s)
@@ -162,7 +164,7 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 
 | Função | Biblioteca |
 | --- | --- |
-| API | connectrpc.com/connect, google.golang.org/grpc (interno) |
+| API | connectrpc.com/connect/v2 (+ `connecthttp`), validate, otelconnect, grpchealth/v2, grpcreflect/v2 (ADR 0012) |
 | Postgres | jackc/pgx v5 + sqlc |
 | Migrações | Atlas Community: SQL escrito à mão, `atlas.sum`, teste de desvio contra `schema.sql` e lint por script (ADR 0010) |
 | Fila de tarefas | riverqueue/river |

@@ -32,9 +32,16 @@
       "enabled": false
     },
     {
-      "description": "Connect v2 (saiu em 10/2026) é uma migração, não uma atualização: muda imports, gerador e interceptors. Aparece no Dependency Dashboard e só abre PR quando aprovada (ver ADR a propor antes do F1-02)",
+      "description": "Ecossistema Connect (ADR 0012): biblioteca, validate, otelconnect, grpchealth/v2 e grpcreflect/v2 sobem juntos; o gerador em mise.toml tem de coincidir com connectrpc.com/connect/v2 (verificado por make gen-check). Versões major só com aprovação no Dependency Dashboard",
       "matchPackageNames": [
-        "connectrpc.com/connect"
+        "connectrpc.com/**"
+      ],
+      "groupName": "connectrpc"
+    },
+    {
+      "description": "Uma major do Connect (v3) é uma migração: muda imports, gerador e interceptors",
+      "matchPackageNames": [
+        "connectrpc.com/**"
       ],
       "matchUpdateTypes": [
         "major"

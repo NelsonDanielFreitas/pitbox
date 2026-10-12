@@ -11,6 +11,7 @@ paths:
 - `gofmt`/`goimports`; `golangci-lint run` sem avisos.
 - Erros com contexto: `fmt.Errorf("create car: %w", err)`; comparar com `errors.Is/As`; erros de domínio em `domain/errors.go` (ex.: `ErrNotFound`, `ErrConflict`, `ErrInvalid`).
 - `transport/` converte erros de domínio em códigos Connect: NotFound → `CodeNotFound`, sem permissão → `CodePermissionDenied`, validação → `CodeInvalidArgument`, conflito de versão → `CodeAborted`. Mensagens para o cliente nunca incluem detalhes internos; o detalhe vai para o log.
+- Connect v2 (ADR 0012): só um `*connect.Error` mostra a mensagem ao cliente (um `error` normal sai só com o código). Escreve `connect.NewError(code, "mensagem pública fixa").WithCause(err)`; **nunca** `connect.NewError(code, err.Error())` (é o que a ferramenta de migração gera e vazaria detalhes internos).
 - Sem `panic` fora de `main` e de inicializações impossíveis de recuperar.
 
 ## Contexto e concorrência
@@ -35,7 +36,8 @@ paths:
 
 ## API e validação
 - Toda a mensagem de entrada tem regras protovalidate no `.proto`; o interceptor valida antes do handler.
-- Limites: 4 MiB por mensagem (32 MiB só no ingest), deadline máximo 30 s. Reflection gRPC só em desenvolvimento.
+- Limites: 4 MiB por mensagem (32 MiB só no ingest), deadline máximo 30 s. O limite é sempre explícito (`connecthttp.WithReadMaxBytes`); **nunca** `WithReadMaxBytes(0)` (ilimitado, o que a ferramenta de migração escreve para preservar a v1). Reflection gRPC só em desenvolvimento (`grpcreflect.Register`).
+- Handlers montam-se com `connect.NewServer(interceptors...)` + `connecthttp.Mount`; os interceptors são `connect.ServerInterceptor` e o primeiro argumento é o mais externo (ordem da arquitetura §4.4).
 - Escritas aceitam `request_id` (UUIDv7) para idempotência.
 
 ## Logs e observabilidade

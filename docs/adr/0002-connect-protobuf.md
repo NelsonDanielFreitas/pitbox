@@ -3,6 +3,7 @@
 - **Estado:** Aceite (Nelson, 2026-10-11)
 - **Data:** 2026-10-11 (decisão); registado em 2026-10-12
 - **Cartão:** F0-07 (registo); origem: arquitetura §1, §4.3
+- **Atualizado por:** [ADR 0012](0012-connect-v2-antes-do-f1-02.md): a decisão mantém-se; a biblioteca passa a ser `connectrpc.com/connect/v2`
 
 ## Contexto
 

@@ -274,7 +274,7 @@
         "backend"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Feito",
       "todo": "`cmd/api`, configuração por variáveis de ambiente, logs slog em JSON, OpenTelemetry, health check, arranque e paragem graciosos",
       "done_when": [
         "`curl /healthz` responde",
@@ -289,8 +289,38 @@
         "area:backend"
       ],
       "security_notes": "",
-      "pull_request": null,
+      "pull_request": 15,
       "adrs": []
+    },
+    {
+      "id": "F1-01b",
+      "title": "Migrar para Connect v2",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "infra"
+      ],
+      "gate": false,
+      "status": "Em curso",
+      "todo": "Gerador e biblioteca `connectrpc.com/connect/v2` (ADR 0012); `make gen-check` verifica que os geradores coincidem com `go.mod`",
+      "done_when": [
+        "`make gen`, `make lint`, `make test` e `make vuln` verdes só com `connectrpc.com/connect/v2` no `go.mod`"
+      ],
+      "done_when_raw": "`make gen`, `make lint`, `make test` e `make vuln` verdes só com `connectrpc.com/connect/v2` no `go.mod`",
+      "doc_references": [],
+      "suggested_branch": "f1-01b-v2Connect",
+      "issue_title": "F1-01b — Migrar para Connect v2",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0012"
+      ]
     },
     {
       "id": "F1-02",
@@ -305,9 +335,12 @@
       "status": "Por fazer",
       "todo": "Recuperação de panics, limites de tamanho e deadline, protovalidate, registo de auditoria (§4.4)",
       "done_when": [
-        "Testes unitários de cada interceptor"
+        "Testes unitários de cada interceptor",
+        "um handler que devolve um erro interno (`fmt.Errorf(\"pg: ...\")`) faz o cliente receber só o código, sem a mensagem",
+        "um corpo acima de 4 MiB é recusado (`CodeResourceExhausted`)",
+        "regra de lint contra `connect.NewError(code, err.Error())` e `WithReadMaxBytes(0)` (ADR 0012)"
       ],
-      "done_when_raw": "Testes unitários de cada interceptor",
+      "done_when_raw": "Testes unitários de cada interceptor; um handler que devolve um erro interno (`fmt.Errorf(\"pg: ...\")`) faz o cliente receber só o código, sem a mensagem; um corpo acima de 4 MiB é recusado (`CodeResourceExhausted`); regra de lint contra `connect.NewError(code, err.Error())` e `WithReadMaxBytes(0)` (ADR 0012)",
       "doc_references": [
         "§4.4"
       ],
@@ -320,7 +353,9 @@
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0012"
+      ]
     },
     {
       "id": "F1-03",

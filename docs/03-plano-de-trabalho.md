@@ -25,7 +25,7 @@ Objetivo: ter um repositório onde `make up` levanta todo o ambiente local e o C
 | Ambiente | WSL2 com Ubuntu 24.04, VS Code + extensão WSL, mise | Desenvolvimento em Linux; versões de Go, Node, Rust e Python fixadas por projeto |
 | Linguagens | Go 1.27 (versão estável atual), Node 22 + pnpm, Rust stable (rustup), Python 3.12 + uv | Backend, app, firmware e análise |
 | Contentores | Docker Engine (ou Docker Desktop com integração WSL), Docker Compose | Ambiente local reproduzível |
-| Serviços locais | PostgreSQL 16 (imagem `timescale/timescaledb-ha`), Valkey 8, Zitadel, OpenFGA, MinIO, Jaeger | Os mesmos serviços da produção, em contentores |
+| Serviços locais | PostgreSQL 16 (imagem `timescale/timescaledb`), Valkey 8, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger | Os mesmos serviços da produção, em contentores |
 | Contratos | Buf CLI, protoc-gen-go, protoc-gen-connect-go, protoc-gen-es | Gerar código Go e TypeScript a partir dos `.proto` |
 | Base de dados | Atlas, sqlc, psql | Migrações versionadas e queries SQL tipadas |
 | Qualidade | golangci-lint, gitleaks, lefthook (git hooks) | Lint e deteção de segredos antes do commit |
@@ -36,7 +36,7 @@ Objetivo: ter um repositório onde `make up` levanta todo o ambiente local e o C
 | --- | --- | --- | --- | --- |
 | F0-01 | Criar o monorepo | Repositório no GitHub com a estrutura de pastas da arquitetura (§16.1), `README`, licença, `.editorconfig`, `.gitignore` | Estrutura no `main`; branch protegida com PR obrigatório | Por fazer |
 | F0-02 | Instalar ferramentas | Go 1.27, Node 22 + pnpm, Rust (rustup + espup), Docker, Buf, sqlc, Atlas, golangci-lint; documentar versões num ficheiro `.tool-versions` (mise ou asdf) | Um colega consegue instalar tudo só com o README | Por fazer |
-| F0-03 | Ambiente local com Docker Compose | Serviços: Postgres 16 (imagem TimescaleDB), Valkey, Zitadel, OpenFGA, MinIO; `Makefile` com `up`, `down`, `reset` | `make up` levanta tudo e os health checks passam | Por fazer |
+| F0-03 | Ambiente local com Docker Compose | Serviços: Postgres 16 (imagem TimescaleDB), Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger; `Makefile` com `init`, `up`, `down`, `reset` | `make up` levanta tudo e os health checks passam | Por fazer |
 | F0-04 | Primeiros contratos Protobuf | `buf.yaml`, `buf.gen.yaml`, pacote `pitbox.identity.v1` com um `TeamService` mínimo; geração para Go e TypeScript | `buf lint` e `buf generate` sem erros | Por fazer |
 | F0-05 | CI inicial | GitHub Actions: `buf lint` + `buf breaking`, `golangci-lint`, `go test -race`, gitleaks; ações fixadas por SHA, permissões mínimas | PR de teste fica verde; PR com um segredo falso fica vermelho | Por fazer |
 | F0-06 | Base de dados no repositório | `schema.sql` em `backend/db/schema`, Atlas configurado para gerar migrações, testes SQL a correr no CI contra Postgres em contentor | `atlas migrate diff` gera a migração inicial; testes de RLS passam no CI | Por fazer |
@@ -123,7 +123,7 @@ Objetivo: os tempos de cada prova entram sozinhos (ou por ficheiro) e a app most
 | Área | Tecnologias e bibliotecas | Para quê |
 | --- | --- | --- |
 | Importação (Go) | `encoding/csv`, `golang.org/x/net/html`, `golang.org/x/time/rate` | Ler CSV e HTML de resultados com limite de pedidos |
-| Armazenamento | `aws-sdk-go-v2` (S3), MinIO em local | Guardar as respostas brutas para reprocessar |
+| Armazenamento | `aws-sdk-go-v2` (S3), SeaweedFS em local | Guardar as respostas brutas para reprocessar |
 | Segurança dos parsers | Go native fuzzing (`go test -fuzz`) | Garantir que páginas malformadas não partem o serviço |
 | Streaming | Connect server-streaming | Atualizações ao vivo durante uma final |
 | Gráficos na app | uPlot, Recharts | Voltas por sessão e resumos |

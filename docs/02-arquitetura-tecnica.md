@@ -443,7 +443,7 @@ Gatilhos: mais de 3 processos com escalas diferentes, necessidade de rede privad
 
 | Ambiente | Propósito | Dados |
 | --- | --- | --- |
-| local | Desenvolvimento | Docker Compose: Postgres+Timescale, Valkey, Zitadel, OpenFGA, MinIO |
+| local | Desenvolvimento | Docker Compose: Postgres+Timescale, Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger |
 | preview | Um por pull request (Cloud Run revision com tag) | Base de dados efémera com dados sintéticos |
 | staging | Igual a produção, testes E2E e de carga | Sintéticos; nunca cópias de produção |
 | production | Utilizadores reais | Reais; acesso humano só por break-glass auditado |

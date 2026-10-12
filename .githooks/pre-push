@@ -1,0 +1,15 @@
+#!/bin/sh
+# Hook local (ativar com `make hooks`). O gitleaks no CI deteta, não previne:
+# quando o CI fica vermelho, o segredo já está no GitHub e tem de ser rodado.
+# Falha fechada: se não for possível correr o gitleaks, o push é recusado.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+if command -v mise >/dev/null 2>&1; then
+  exec mise exec -- make secrets
+fi
+if command -v gitleaks >/dev/null 2>&1; then
+  exec make secrets
+fi
+echo "pre-push: gitleaks não encontrado (corre 'mise install'); push recusado." >&2
+exit 1

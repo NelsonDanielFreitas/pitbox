@@ -41,7 +41,7 @@ services:
   # Versão 8.0 para ficar alinhada com o Memorystore (7.2, 8.0, 9.0). Sem persistência.
   valkey:
     <<: *hardening
-    image: valkey/valkey:8.0.11-alpine3.24@sha256:fd348c9b6999ef15719a1d6b43b810ee1bf2068ded2d7ab6f6dd15943841f28b
+    image: valkey/valkey:8.1.10-alpine3.24@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
     restart: unless-stopped
     environment:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?corre 'make init'}   # lido pelo health check

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -108,7 +108,31 @@ workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKE
 	actionlint
 	zizmor $(if $(GH_TOKEN),,--offline) .github/workflows
 
-ci: lint test gen-check app-typecheck secrets vuln workflows ## Corre localmente o mesmo que o CI
+db-validate: ## Atlas: checksum (atlas.sum) e sintaxe das migrações
+	atlas migrate validate --env local
+
+db-lint: ## Migrações novas (vs main) sem DROP/TRUNCATE/RENAME/ALTER TYPE/SET NOT NULL (sem `-- lint:allow`)
+	python3 -I scripts/db-lint.py main
+
+db-test: ## Contentores descartáveis: migrações (Atlas) + schema.sql + testes SQL + teste de desvio
+	bash scripts/db-test.sh
+
+db-new: ## Nova migração vazia: make db-new name=<nome>; escreve o SQL e edita também schema.sql
+	@test -n "$(name)" || { echo "uso: make db-new name=<nome>"; exit 1; }
+	atlas migrate new $(name) --env local
+
+db-migrate: ## Aplica as migrações ao Postgres do compose (make up) como pitbox_migrator; não apaga nada
+	@test -f $(ENV_FILE) || { echo "Falta $(ENV_FILE): corre 'make init'."; exit 1; }
+	@ok=$$($(COMPOSE) exec -T postgres psql -X -At -U postgres -d pitbox -c "SELECT (SELECT rolcanlogin FROM pg_roles WHERE rolname='pitbox_owner') AND 'role=pitbox_owner' = ANY (SELECT unnest(rolconfig) FROM pg_roles WHERE rolname='pitbox_migrator') AND (SELECT count(*) FROM pg_extension WHERE extname IN ('citext','btree_gist','timescaledb')) = 3" 2>/dev/null); \
+	if [ "$$ok" != "t" ]; then \
+	  echo "O bootstrap deste volume é anterior ao F0-06 (falta pitbox_owner com LOGIN, o 'role' do pitbox_migrator ou extensões)."; \
+	  echo "Opção segura: 'make reset' (apaga os volumes, incluindo o Zitadel). Nada foi alterado."; exit 1; \
+	fi
+	@set -a; . ./$(ENV_FILE); set +a; \
+	DATABASE_URL="postgres://pitbox_migrator:$$PITBOX_MIGRATOR_PASSWORD@127.0.0.1:$${POSTGRES_PORT:-5432}/pitbox?sslmode=disable" \
+	atlas migrate apply --env local --allow-dirty
+
+ci: lint test gen-check app-typecheck secrets vuln workflows db-test ## Corre localmente o mesmo que o CI
 
 hooks: ## Ativa os hooks de .githooks (pre-push: gitleaks antes de cada push)
 	git config core.hooksPath .githooks

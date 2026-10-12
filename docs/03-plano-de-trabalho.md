@@ -41,7 +41,7 @@ Objetivo: ter um repositório onde `make up` levanta todo o ambiente local e o C
 | F0-05 | CI inicial | GitHub Actions: `buf lint` + `buf breaking`, `golangci-lint`, `go test -race`, gitleaks; ações fixadas por SHA, permissões mínimas | PR de teste fica verde; PR com um segredo falso fica vermelho | Por fazer |
 | F0-06 | Base de dados no repositório | `schema.sql` em `backend/db/schema`, Atlas Community com migrações escritas à mão (ADR 0010), testes SQL a correr no CI contra Postgres em contentor | A `0001_initial` é validada e aplicada pelo Atlas; o teste de desvio entre migrações e `schema.sql` passa; os testes de RLS passam no CI | Por fazer |
 | F0-07 | ADRs e threat model inicial | `docs/adr` com as 8 decisões da arquitetura (§16.2); `docs/threat-model` com a tabela STRIDE | Ficheiros no `main` | Por fazer |
-| F0-08 | Quadro do projeto | Passar estes cartões para GitHub Projects (ou Trello) com etiquetas por fase | Todos os cartões da Fase 0 e 1 no quadro | Por fazer |
+| F0-08 | Quadro do projeto | GitHub Projects com etiquetas por fase; os cartões criam-se como issues quando se começa cada um (dados em `docs/cartoes.json`), por isso o quadro só tem cartões por fazer ou em curso | Quadro criado e todos os cartões por fazer da Fase 0 e 1 (F0-08 e F1-01 a F1-15) lá; os cartões já feitos ficam só no plano | Por fazer |
 
 ## Fase 1 — v0.1 Fundações
 

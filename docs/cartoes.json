@@ -1,0 +1,1966 @@
+{
+  "source": "docs/03-plano-de-trabalho.md",
+  "generated": "2026-10-12",
+  "phases": {
+    "0": {
+      "title": "Fase 0 — Preparação",
+      "description": "ter um repositório onde `make up` levanta todo o ambiente local e o CI corre em cada pull request, antes de escrever qualquer funcionalidade."
+    },
+    "1": {
+      "title": "Fase 1 — v0.1 Fundações",
+      "description": "o mecânico faz login, regista carros, motores e pneus, e grava setups na app sem rede, que sincronizam depois. Primeiro o backend, depois a app, depois o sync."
+    },
+    "2": {
+      "title": "Fase 2 — v0.2 Box",
+      "description": "gerir um fim de semana de corrida inteiro na app, incluindo uma final com reabastecimentos, sem rede e sem papel."
+    },
+    "3": {
+      "title": "Fase 3 — v0.3 Análise",
+      "description": "os tempos de cada prova entram sozinhos (ou por ficheiro) e a app mostra que alterações de setup tornaram o carro mais rápido e mais consistente."
+    },
+    "4": {
+      "title": "Fase 4 — v0.4 Telemetria",
+      "description": "um módulo no carro grava temperatura, rotações, tensão e impactos para cartão, e os dados aparecem na app sobre os tempos de volta. Esta fase pode começar em paralelo com a Fase 3: as peças demoram a chegar."
+    },
+    "5": {
+      "title": "Fase 5 — v1.0 Produção",
+      "description": "a plataforma corre na cloud, segura, monitorizada e com backups testados, pronta para outras equipas. Os cartões F5-04 a F5-09 podem ser feitos mais cedo se quiseres prática de infraestrutura entre fases."
+    }
+  },
+  "cards": [
+    {
+      "id": "F0-01",
+      "title": "Criar o monorepo",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "infra"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "Repositório no GitHub com a estrutura de pastas da arquitetura (§16.1), `README`, licença, `.editorconfig`, `.gitignore`",
+      "done_when": [
+        "Estrutura no `main`",
+        "branch protegida com PR obrigatório"
+      ],
+      "done_when_raw": "Estrutura no `main`; branch protegida com PR obrigatório",
+      "doc_references": [
+        "§16.1"
+      ],
+      "suggested_branch": "f0-01-criar-o-monorepo",
+      "issue_title": "F0-01 — Criar o monorepo",
+      "labels": [
+        "fase-0",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F0-02",
+      "title": "Instalar ferramentas",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "infra"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "Go 1.27, Node 24 + pnpm, Rust (rustup + espup), Docker, Buf, sqlc, Atlas, golangci-lint; documentar versões num ficheiro `.tool-versions` (mise ou asdf)",
+      "done_when": [
+        "Um colega consegue instalar tudo só com o README"
+      ],
+      "done_when_raw": "Um colega consegue instalar tudo só com o README",
+      "doc_references": [],
+      "suggested_branch": "f0-02-instalar-ferramentas",
+      "issue_title": "F0-02 — Instalar ferramentas",
+      "labels": [
+        "fase-0",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": 1,
+      "adrs": []
+    },
+    {
+      "id": "F0-03",
+      "title": "Ambiente local com Docker Compose",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "infra"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "Serviços: Postgres 16 (imagem TimescaleDB), Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger; `Makefile` com `init`, `up`, `down`, `reset`",
+      "done_when": [
+        "`make up` levanta tudo e os health checks passam"
+      ],
+      "done_when_raw": "`make up` levanta tudo e os health checks passam",
+      "doc_references": [],
+      "suggested_branch": "f0-03-ambiente-local-com-docker-compose",
+      "issue_title": "F0-03 — Ambiente local com Docker Compose",
+      "labels": [
+        "fase-0",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": 2,
+      "adrs": [
+        "0009"
+      ]
+    },
+    {
+      "id": "F0-04",
+      "title": "Primeiros contratos Protobuf",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "backend",
+        "app"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "`buf.yaml`, `buf.gen.yaml`, pacote `pitbox.identity.v1` com um `TeamService` mínimo; geração para Go e TypeScript",
+      "done_when": [
+        "`buf lint` e `buf generate` sem erros"
+      ],
+      "done_when_raw": "`buf lint` e `buf generate` sem erros",
+      "doc_references": [],
+      "suggested_branch": "f0-04-primeiros-contratos-protobuf",
+      "issue_title": "F0-04 — Primeiros contratos Protobuf",
+      "labels": [
+        "fase-0",
+        "area:backend",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": 3,
+      "adrs": []
+    },
+    {
+      "id": "F0-05",
+      "title": "CI inicial",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "infra",
+        "security"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "GitHub Actions: `buf lint` + `buf breaking`, `golangci-lint`, `go test -race`, gitleaks; ações fixadas por SHA, permissões mínimas",
+      "done_when": [
+        "PR de teste fica verde",
+        "PR com um segredo falso fica vermelho"
+      ],
+      "done_when_raw": "PR de teste fica verde; PR com um segredo falso fica vermelho",
+      "doc_references": [],
+      "suggested_branch": "f0-05-ci-inicial",
+      "issue_title": "F0-05 — CI inicial",
+      "labels": [
+        "fase-0",
+        "area:infra",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": 4,
+      "adrs": []
+    },
+    {
+      "id": "F0-06",
+      "title": "Base de dados no repositório",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "db"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "`schema.sql` em `backend/db/schema`, Atlas Community com migrações escritas à mão (ADR 0010), testes SQL a correr no CI contra Postgres em contentor",
+      "done_when": [
+        "A `0001_initial` é validada e aplicada pelo Atlas",
+        "o teste de desvio entre migrações e `schema.sql` passa",
+        "os testes de RLS passam no CI"
+      ],
+      "done_when_raw": "A `0001_initial` é validada e aplicada pelo Atlas; o teste de desvio entre migrações e `schema.sql` passa; os testes de RLS passam no CI",
+      "doc_references": [],
+      "suggested_branch": "f0-06-base-de-dados-no-repositorio",
+      "issue_title": "F0-06 — Base de dados no repositório",
+      "labels": [
+        "fase-0",
+        "area:db"
+      ],
+      "security_notes": "",
+      "pull_request": 10,
+      "adrs": [
+        "0010",
+        "0011"
+      ]
+    },
+    {
+      "id": "F0-07",
+      "title": "ADRs e threat model inicial",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "docs",
+        "security"
+      ],
+      "gate": false,
+      "status": "Feito",
+      "todo": "`docs/adr` com as 8 decisões da arquitetura (§16.2); `docs/threat-model` com a tabela STRIDE",
+      "done_when": [
+        "Ficheiros no `main`"
+      ],
+      "done_when_raw": "Ficheiros no `main`",
+      "doc_references": [
+        "§16.2"
+      ],
+      "suggested_branch": "f0-07-adrs-e-threat-model-inicial",
+      "issue_title": "F0-07 — ADRs e threat model inicial",
+      "labels": [
+        "fase-0",
+        "area:docs",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": 11,
+      "adrs": [
+        "0001",
+        "0002",
+        "0003",
+        "0004",
+        "0005",
+        "0006",
+        "0007",
+        "0008"
+      ]
+    },
+    {
+      "id": "F0-08",
+      "title": "Quadro do projeto",
+      "phase": "0",
+      "phase_title": "Fase 0 — Preparação",
+      "areas": [
+        "docs"
+      ],
+      "gate": false,
+      "status": "Em curso",
+      "todo": "GitHub Projects com etiquetas por fase; os cartões criam-se como issues quando se começa cada um (dados em `docs/cartoes.json`), por isso o quadro só tem cartões por fazer ou em curso",
+      "done_when": [
+        "Quadro criado e todos os cartões por fazer da Fase 0 e 1 (F0-08 e F1-01 a F1-15) lá",
+        "os cartões já feitos ficam só no plano"
+      ],
+      "done_when_raw": "Quadro criado e todos os cartões por fazer da Fase 0 e 1 (F0-08 e F1-01 a F1-15) lá; os cartões já feitos ficam só no plano",
+      "doc_references": [],
+      "suggested_branch": "f0-08-quadro-do-projeto",
+      "issue_title": "F0-08 — Quadro do projeto",
+      "labels": [
+        "fase-0",
+        "area:docs"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-01",
+      "title": "Esqueleto do `pitbox-api`",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`cmd/api`, configuração por variáveis de ambiente, logs slog em JSON, OpenTelemetry, health check, arranque e paragem graciosos",
+      "done_when": [
+        "`curl /healthz` responde",
+        "traces visíveis num Jaeger local"
+      ],
+      "done_when_raw": "`curl /healthz` responde; traces visíveis num Jaeger local",
+      "doc_references": [],
+      "suggested_branch": "f1-01-esqueleto-do-pitbox-api",
+      "issue_title": "F1-01 — Esqueleto do `pitbox-api`",
+      "labels": [
+        "fase-1",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-02",
+      "title": "Interceptors Connect",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Recuperação de panics, limites de tamanho e deadline, protovalidate, registo de auditoria (§4.4)",
+      "done_when": [
+        "Testes unitários de cada interceptor"
+      ],
+      "done_when_raw": "Testes unitários de cada interceptor",
+      "doc_references": [
+        "§4.4"
+      ],
+      "suggested_branch": "f1-02-interceptors-connect",
+      "issue_title": "F1-02 — Interceptors Connect",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-03",
+      "title": "Login com Zitadel + BFF",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Projeto e aplicação OIDC no Zitadel local; fluxo Authorization Code + PKCE no BFF; cookie `__Host-` HttpOnly; validação de JWT com JWKS em cache",
+      "done_when": [
+        "Login e logout no browser",
+        "token adulterado é rejeitado num teste"
+      ],
+      "done_when_raw": "Login e logout no browser; token adulterado é rejeitado num teste",
+      "doc_references": [],
+      "suggested_branch": "f1-03-login-com-zitadel-bff",
+      "issue_title": "F1-03 — Login com Zitadel + BFF",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-04",
+      "title": "Contexto de equipa e RLS",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "db",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Middleware que abre a transação e faz `SET LOCAL app.user_id` e `app.team_id`; ligação como `pitbox_app`",
+      "done_when": [
+        "Teste de integração: utilizador da equipa B não lê dados da equipa A"
+      ],
+      "done_when_raw": "Teste de integração: utilizador da equipa B não lê dados da equipa A",
+      "doc_references": [],
+      "suggested_branch": "f1-04-contexto-de-equipa-e-rls",
+      "issue_title": "F1-04 — Contexto de equipa e RLS",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:db",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-05",
+      "title": "Autorização com OpenFGA",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Modelo `.fga` (§6.1) com ficheiro de asserções; `Check` em cada caso de uso; worker sincroniza membros → relações",
+      "done_when": [
+        "Asserções no CI",
+        "piloto recebe `PERMISSION_DENIED` ao editar um setup"
+      ],
+      "done_when_raw": "Asserções no CI; piloto recebe `PERMISSION_DENIED` ao editar um setup",
+      "doc_references": [
+        "§6.1"
+      ],
+      "suggested_branch": "f1-05-autorizacao-com-openfga",
+      "issue_title": "F1-05 — Autorização com OpenFGA",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-06",
+      "title": "Equipas e convites",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`TeamService` e `MemberService`: criar equipa, convidar por email ou link, aceitar, mudar papéis",
+      "done_when": [
+        "Fluxo completo testado",
+        "convite expirado ou reutilizado falha"
+      ],
+      "done_when_raw": "Fluxo completo testado; convite expirado ou reutilizado falha",
+      "doc_references": [],
+      "suggested_branch": "f1-06-equipas-e-convites",
+      "issue_title": "F1-06 — Equipas e convites",
+      "labels": [
+        "fase-1",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-07",
+      "title": "Garagem no backend",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "db"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico",
+      "done_when": [
+        "CRUD testado com testcontainers",
+        "motor não fica em dois carros"
+      ],
+      "done_when_raw": "CRUD testado com testcontainers; motor não fica em dois carros",
+      "doc_references": [],
+      "suggested_branch": "f1-07-garagem-no-backend",
+      "issue_title": "F1-07 — Garagem no backend",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:db"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-08",
+      "title": "Setups no backend",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`SetupService`: criar, nova versão, comparar duas versões, link de partilha; esquema JSON v1 dos campos 1/8 TT",
+      "done_when": [
+        "Diferenças entre versões corretas",
+        "link revogado deixa de funcionar"
+      ],
+      "done_when_raw": "Diferenças entre versões corretas; link revogado deixa de funcionar",
+      "doc_references": [],
+      "suggested_branch": "f1-08-setups-no-backend",
+      "issue_title": "F1-08 — Setups no backend",
+      "labels": [
+        "fase-1",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-09",
+      "title": "Esqueleto da app",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Vite + React + TypeScript strict, TanStack Router e Query, Tailwind, cliente Connect gerado, login via BFF",
+      "done_when": [
+        "App abre, faz login e mostra a lista de equipas"
+      ],
+      "done_when_raw": "App abre, faz login e mostra a lista de equipas",
+      "doc_references": [],
+      "suggested_branch": "f1-09-esqueleto-da-app",
+      "issue_title": "F1-09 — Esqueleto da app",
+      "labels": [
+        "fase-1",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-10",
+      "title": "Base local na app",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "SQLite (wa-sqlite + OPFS), migrações locais, repositórios por funcionalidade",
+      "done_when": [
+        "Dados persistem depois de fechar e reabrir o browser"
+      ],
+      "done_when_raw": "Dados persistem depois de fechar e reabrir o browser",
+      "doc_references": [],
+      "suggested_branch": "f1-10-base-local-na-app",
+      "issue_title": "F1-10 — Base local na app",
+      "labels": [
+        "fase-1",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-11",
+      "title": "Ecrãs de garagem",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Listas e formulários de carros, motores, pneus e peças, a ler e escrever na base local",
+      "done_when": [
+        "Registar um carro completo em menos de 1 min no telemóvel"
+      ],
+      "done_when_raw": "Registar um carro completo em menos de 1 min no telemóvel",
+      "doc_references": [],
+      "suggested_branch": "f1-11-ecras-de-garagem",
+      "issue_title": "F1-11 — Ecrãs de garagem",
+      "labels": [
+        "fase-1",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-12",
+      "title": "Ecrãs de setup",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Ficha por grupos (§5.1 da especificação), copiar de outro setup, comparar lado a lado, feedback do piloto",
+      "done_when": [
+        "Setup completo gravado em menos de 2 min"
+      ],
+      "done_when_raw": "Setup completo gravado em menos de 2 min",
+      "doc_references": [
+        "§5.1"
+      ],
+      "suggested_branch": "f1-12-ecras-de-setup",
+      "issue_title": "F1-12 — Ecrãs de setup",
+      "labels": [
+        "fase-1",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-13",
+      "title": "Sincronização",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "app",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`SyncService` Push/Pull, fila de operações com UUIDv7, assinatura por dispositivo, resolução de conflitos por campo (§8)",
+      "done_when": [
+        "Reenviar a mesma fila não duplica nada",
+        "conflito aparece ao mecânico"
+      ],
+      "done_when_raw": "Reenviar a mesma fila não duplica nada; conflito aparece ao mecânico",
+      "doc_references": [
+        "§8"
+      ],
+      "suggested_branch": "f1-13-sincronizacao",
+      "issue_title": "F1-13 — Sincronização",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:app",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-14",
+      "title": "Teste em modo avião",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Playwright: criar setup offline, voltar a ligar, verificar no servidor",
+      "done_when": [
+        "Teste E2E verde no CI"
+      ],
+      "done_when_raw": "Teste E2E verde no CI",
+      "doc_references": [],
+      "suggested_branch": "f1-14-teste-em-modo-aviao",
+      "issue_title": "F1-14 — Teste em modo avião",
+      "labels": [
+        "fase-1",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-15",
+      "title": "Gate v0.1",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "pista"
+      ],
+      "gate": true,
+      "status": "Por fazer",
+      "todo": "Usar a app num treino ou prova real para registar todos os setups",
+      "done_when": [
+        "Nenhum setup registado em papel nesse dia",
+        "lista de problemas anotada"
+      ],
+      "done_when_raw": "Nenhum setup registado em papel nesse dia; lista de problemas anotada",
+      "doc_references": [],
+      "suggested_branch": "f1-15-gate-v0-1",
+      "issue_title": "F1-15 — Gate v0.1",
+      "labels": [
+        "fase-1",
+        "area:pista",
+        "gate"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-01",
+      "title": "Provas e sessões no backend",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`EventService` e `SessionService`: pistas, campeonatos, provas, sessões com carro, motor, pneus, setup e condições",
+      "done_when": [
+        "Sessão ligada a uma versão de setup imutável"
+      ],
+      "done_when_raw": "Sessão ligada a uma versão de setup imutável",
+      "doc_references": [],
+      "suggested_branch": "f2-01-provas-e-sessoes-no-backend",
+      "issue_title": "F2-01 — Provas e sessões no backend",
+      "labels": [
+        "fase-2",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-02",
+      "title": "Horário do dia na app",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Lista de sessões, contagem decrescente, aviso a 15 e 5 min, ajuste de atraso global",
+      "done_when": [
+        "Notificação local dispara com o telemóvel bloqueado"
+      ],
+      "done_when_raw": "Notificação local dispara com o telemóvel bloqueado",
+      "doc_references": [],
+      "suggested_branch": "f2-02-horario-do-dia-na-app",
+      "issue_title": "F2-02 — Horário do dia na app",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-03",
+      "title": "Resultado manual e voltas",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Introdução rápida de resultado e voltas; incidentes por volta",
+      "done_when": [
+        "Resultado de uma manga registado em menos de 1 min"
+      ],
+      "done_when_raw": "Resultado de uma manga registado em menos de 1 min",
+      "doc_references": [],
+      "suggested_branch": "f2-03-resultado-manual-e-voltas",
+      "issue_title": "F2-03 — Resultado manual e voltas",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-04",
+      "title": "Manutenção",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`MaintenanceService`: intervenções com peças do stock, regras, vista de estado; contadores do motor atualizados por eventos (outbox + River)",
+      "done_when": [
+        "Motor passa a \"vencido\" ao atingir o limite de depósitos"
+      ],
+      "done_when_raw": "Motor passa a \"vencido\" ao atingir o limite de depósitos",
+      "doc_references": [],
+      "suggested_branch": "f2-04-manutencao",
+      "issue_title": "F2-04 — Manutenção",
+      "labels": [
+        "fase-2",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-05",
+      "title": "Checklists",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "backend",
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Modelos de checklist pré-prova e pré-sessão; itens obrigatórios bloqueiam o \"pronto\"",
+      "done_when": [
+        "Checklist pré-prova gerada a partir das regras vencidas"
+      ],
+      "done_when_raw": "Checklist pré-prova gerada a partir das regras vencidas",
+      "doc_references": [],
+      "suggested_branch": "f2-05-checklists",
+      "issue_title": "F2-05 — Checklists",
+      "labels": [
+        "fase-2",
+        "area:backend",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-06",
+      "title": "Capacitor no Android",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Empacotar a app; plugins de vibração, ecrã sempre ligado, notificações locais, armazenamento seguro, SQLite nativo cifrado",
+      "done_when": [
+        "App instalada no teu telemóvel por APK de teste"
+      ],
+      "done_when_raw": "App instalada no teu telemóvel por APK de teste",
+      "doc_references": [],
+      "suggested_branch": "f2-06-capacitor-no-android",
+      "issue_title": "F2-06 — Capacitor no Android",
+      "labels": [
+        "fase-2",
+        "area:app",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-07",
+      "title": "Motor de estratégia",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Funções puras em TypeScript: número de paragens, volta de aviso (fórmula §9.1), recálculo após flameout; testes de propriedades",
+      "done_when": [
+        "Cobertura total",
+        "casos de 30 e 45 min verificados à mão"
+      ],
+      "done_when_raw": "Cobertura total; casos de 30 e 45 min verificados à mão",
+      "doc_references": [
+        "§9.1"
+      ],
+      "suggested_branch": "f2-07-motor-de-estrategia",
+      "issue_title": "F2-07 — Motor de estratégia",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-08",
+      "title": "Ecrã do modo final",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Máquina de estados (XState), cronómetro, contador de voltas por toque, botões grandes, avisos com vibração e som",
+      "done_when": [
+        "Simulação de 45 min em modo avião sem falhas nem atrasos"
+      ],
+      "done_when_raw": "Simulação de 45 min em modo avião sem falhas nem atrasos",
+      "doc_references": [],
+      "suggested_branch": "f2-08-ecra-do-modo-final",
+      "issue_title": "F2-08 — Ecrã do modo final",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-09",
+      "title": "Paragens e plano",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Registo de paragens só de acrescento; plano antes da final com cenários",
+      "done_when": [
+        "Paragem corrigida fica como nova linha, a original mantém-se"
+      ],
+      "done_when_raw": "Paragem corrigida fica como nova linha, a original mantém-se",
+      "doc_references": [],
+      "suggested_branch": "f2-09-paragens-e-plano",
+      "issue_title": "F2-09 — Paragens e plano",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-10",
+      "title": "Relatório pós-final",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Linha do tempo da corrida, tempo na box vs plano, atualização de voltas por depósito",
+      "done_when": [
+        "Relatório gerado automaticamente ao terminar a final"
+      ],
+      "done_when_raw": "Relatório gerado automaticamente ao terminar a final",
+      "doc_references": [],
+      "suggested_branch": "f2-10-relatorio-pos-final",
+      "issue_title": "F2-10 — Relatório pós-final",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-11",
+      "title": "Ensaio com o teu pai",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "pista"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Treino com final simulada de 30 min: tu na box com a app, o teu pai a pilotar",
+      "done_when": [
+        "Lista de melhorias anotada e as críticas resolvidas"
+      ],
+      "done_when_raw": "Lista de melhorias anotada e as críticas resolvidas",
+      "doc_references": [],
+      "suggested_branch": "f2-11-ensaio-com-o-teu-pai",
+      "issue_title": "F2-11 — Ensaio com o teu pai",
+      "labels": [
+        "fase-2",
+        "area:pista"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-12",
+      "title": "Gate v0.2",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "pista"
+      ],
+      "gate": true,
+      "status": "Por fazer",
+      "todo": "Gerir uma prova real inteira, incluindo a final, só na app",
+      "done_when": [
+        "Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência",
+        "nenhum dado perdido"
+      ],
+      "done_when_raw": "Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência; nenhum dado perdido",
+      "doc_references": [],
+      "suggested_branch": "f2-12-gate-v0-2",
+      "issue_title": "F2-12 — Gate v0.2",
+      "labels": [
+        "fase-2",
+        "area:pista",
+        "gate"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-01",
+      "title": "Levantamento das fontes",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "docs"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Ver que plataformas de resultados usam as provas onde correm, que exportações oferecem e o que os termos permitem",
+      "done_when": [
+        "Tabela de fontes com decisão por fornecedor (usar, só CSV, não usar)"
+      ],
+      "done_when_raw": "Tabela de fontes com decisão por fornecedor (usar, só CSV, não usar)",
+      "doc_references": [],
+      "suggested_branch": "f3-01-levantamento-das-fontes",
+      "issue_title": "F3-01 — Levantamento das fontes",
+      "labels": [
+        "fase-3",
+        "area:docs"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-02",
+      "title": "Importação por ficheiro",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Upload de CSV/HTML, `raw_import` no armazenamento de objetos, parser com limites, correspondência por transponder",
+      "done_when": [
+        "Resultados de uma prova real importados corretamente"
+      ],
+      "done_when_raw": "Resultados de uma prova real importados corretamente",
+      "doc_references": [],
+      "suggested_branch": "f3-02-importacao-por-ficheiro",
+      "issue_title": "F3-02 — Importação por ficheiro",
+      "labels": [
+        "fase-3",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-03",
+      "title": "Fuzzing dos parsers",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Go native fuzzing com páginas reais guardadas como corpus",
+      "done_when": [
+        "1 h de fuzzing sem panics no CI noturno"
+      ],
+      "done_when_raw": "1 h de fuzzing sem panics no CI noturno",
+      "doc_references": [],
+      "suggested_branch": "f3-03-fuzzing-dos-parsers",
+      "issue_title": "F3-03 — Fuzzing dos parsers",
+      "labels": [
+        "fase-3",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-04",
+      "title": "Primeiro conector automático",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Implementar `TimingProvider` para o fornecedor aprovado em F3-01, no worker, com limite de pedidos",
+      "done_when": [
+        "Resultados chegam sem ação manual até 5 min após publicados"
+      ],
+      "done_when_raw": "Resultados chegam sem ação manual até 5 min após publicados",
+      "doc_references": [],
+      "suggested_branch": "f3-04-primeiro-conector-automatico",
+      "issue_title": "F3-04 — Primeiro conector automático",
+      "labels": [
+        "fase-3",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-05",
+      "title": "Rivais",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "backend",
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Competidores vistos nos resultados; marcar rivais; comparação volta a volta",
+      "done_when": [
+        "Gráfico tu vs rival numa manga"
+      ],
+      "done_when_raw": "Gráfico tu vs rival numa manga",
+      "doc_references": [],
+      "suggested_branch": "f3-05-rivais",
+      "issue_title": "F3-05 — Rivais",
+      "labels": [
+        "fase-3",
+        "area:backend",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-06",
+      "title": "Análise por sessão",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Gráfico de voltas com incidentes; melhor, média, mediana, consistência, melhores 5 consecutivas",
+      "done_when": [
+        "Valores batem com um cálculo manual numa folha de cálculo"
+      ],
+      "done_when_raw": "Valores batem com um cálculo manual numa folha de cálculo",
+      "doc_references": [],
+      "suggested_branch": "f3-06-analise-por-sessao",
+      "issue_title": "F3-06 — Análise por sessão",
+      "labels": [
+        "fase-3",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-07",
+      "title": "Exploração em Python",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "analise"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Notebook em `analysis/` que lê a base de dados (papel `pitbox_readonly`) e estuda efeito de setups e desgaste de pneus",
+      "done_when": [
+        "Uma conclusão real sobre o vosso carro, com o número de sessões em que se baseia"
+      ],
+      "done_when_raw": "Uma conclusão real sobre o vosso carro, com o número de sessões em que se baseia",
+      "doc_references": [],
+      "suggested_branch": "f3-07-exploracao-em-python",
+      "issue_title": "F3-07 — Exploração em Python",
+      "labels": [
+        "fase-3",
+        "area:analise"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-08",
+      "title": "Análises ao longo da época na app",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Evolução por pista; antes/depois de uma alteração com condições semelhantes",
+      "done_when": [
+        "Ecrã mostra o número de sessões usadas em cada conclusão"
+      ],
+      "done_when_raw": "Ecrã mostra o número de sessões usadas em cada conclusão",
+      "doc_references": [],
+      "suggested_branch": "f3-08-analises-ao-longo-da-epoca-na-app",
+      "issue_title": "F3-08 — Análises ao longo da época na app",
+      "labels": [
+        "fase-3",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F3-09",
+      "title": "Gate v0.3",
+      "phase": "3",
+      "phase_title": "Fase 3 — v0.3 Análise",
+      "areas": [
+        "pista"
+      ],
+      "gate": true,
+      "status": "Por fazer",
+      "todo": "Prova inteira com tempos importados e análise feita na mesma noite",
+      "done_when": [
+        "Tempos casados pelo transponder sem correções manuais"
+      ],
+      "done_when_raw": "Tempos casados pelo transponder sem correções manuais",
+      "doc_references": [],
+      "suggested_branch": "f3-09-gate-v0-3",
+      "issue_title": "F3-09 — Gate v0.3",
+      "labels": [
+        "fase-3",
+        "area:pista",
+        "gate"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-01",
+      "title": "Confirmar regulamento",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "docs"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Ler o regulamento das provas sobre equipamento a bordo e transmissão; registar em `events.event.telemetry_allowed`",
+      "done_when": [
+        "Resposta escrita para treinos, mangas e finais"
+      ],
+      "done_when_raw": "Resposta escrita para treinos, mangas e finais",
+      "doc_references": [],
+      "suggested_branch": "f4-01-confirmar-regulamento",
+      "issue_title": "F4-01 — Confirmar regulamento",
+      "labels": [
+        "fase-4",
+        "area:docs"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-02",
+      "title": "Encomendar o hardware",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "hardware"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "ESP32-S3 (2 unidades), SX1262 (2), MAX31855 + termopar K, sensor Hall + íman, LSM6DSO, leitor microSD, regulador, caixa",
+      "done_when": [
+        "Peças recebidas"
+      ],
+      "done_when_raw": "Peças recebidas",
+      "doc_references": [],
+      "suggested_branch": "f4-02-encomendar-o-hardware",
+      "issue_title": "F4-02 — Encomendar o hardware",
+      "labels": [
+        "fase-4",
+        "area:hardware"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-03",
+      "title": "Rust embarcado: primeiros passos",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "firmware"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Ler o livro \"The Rust on ESP Book\"; piscar um LED e ler um sensor com `esp-hal` + Embassy",
+      "done_when": [
+        "Leitura de temperatura na consola a 5 Hz"
+      ],
+      "done_when_raw": "Leitura de temperatura na consola a 5 Hz",
+      "doc_references": [],
+      "suggested_branch": "f4-03-rust-embarcado-primeiros-passos",
+      "issue_title": "F4-03 — Rust embarcado: primeiros passos",
+      "labels": [
+        "fase-4",
+        "area:firmware"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-04",
+      "title": "Protocolo partilhado",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "firmware",
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Crate `firmware/protocol` (`no_std`, postcard): formato dos blocos no cartão com CRC, pacote LoRa resumido; usado no firmware e num leitor em Go",
+      "done_when": [
+        "Teste de ida e volta Rust → Go passa"
+      ],
+      "done_when_raw": "Teste de ida e volta Rust → Go passa",
+      "doc_references": [],
+      "suggested_branch": "f4-04-protocolo-partilhado",
+      "issue_title": "F4-04 — Protocolo partilhado",
+      "labels": [
+        "fase-4",
+        "area:firmware",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-05",
+      "title": "Aquisição em bancada",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "firmware"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Tarefas Embassy por sensor, às frequências da especificação (§10.1); watchdog",
+      "done_when": [
+        "30 min em bancada sem perder amostras"
+      ],
+      "done_when_raw": "30 min em bancada sem perder amostras",
+      "doc_references": [
+        "§10.1"
+      ],
+      "suggested_branch": "f4-05-aquisicao-em-bancada",
+      "issue_title": "F4-05 — Aquisição em bancada",
+      "labels": [
+        "fase-4",
+        "area:firmware"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-06",
+      "title": "Gravação em cartão",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "firmware"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Escrita em blocos de 4 KiB, início e fim automáticos pela rotação",
+      "done_when": [
+        "Cartão lido no computador com o leitor em Go"
+      ],
+      "done_when_raw": "Cartão lido no computador com o leitor em Go",
+      "doc_references": [],
+      "suggested_branch": "f4-06-gravacao-em-cartao",
+      "issue_title": "F4-06 — Gravação em cartão",
+      "labels": [
+        "fase-4",
+        "area:firmware"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-07",
+      "title": "Emparelhamento e descarga por BLE",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "firmware",
+        "app",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Emparelhamento por código da app (§5.3); descarga do ficheiro para o telemóvel",
+      "done_when": [
+        "Ficheiro de uma sessão descarregado na app"
+      ],
+      "done_when_raw": "Ficheiro de uma sessão descarregado na app",
+      "doc_references": [
+        "§5.3"
+      ],
+      "suggested_branch": "f4-07-emparelhamento-e-descarga-por-ble",
+      "issue_title": "F4-07 — Emparelhamento e descarga por BLE",
+      "labels": [
+        "fase-4",
+        "area:firmware",
+        "area:app",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-08",
+      "title": "`pitbox-ingest`",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Upload por URL pré-assinado, validação, inserção com `COPY`, associação à sessão",
+      "done_when": [
+        "Ficheiro de 20 min processado em menos de 5 min"
+      ],
+      "done_when_raw": "Ficheiro de 20 min processado em menos de 5 min",
+      "doc_references": [],
+      "suggested_branch": "f4-08-pitbox-ingest",
+      "issue_title": "F4-08 — `pitbox-ingest`",
+      "labels": [
+        "fase-4",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-09",
+      "title": "Gráficos e alertas",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "uPlot sobre os tempos de volta; limites de temperatura, tensão e impacto",
+      "done_when": [
+        "Alerta gerado num teste com dados sintéticos"
+      ],
+      "done_when_raw": "Alerta gerado num teste com dados sintéticos",
+      "doc_references": [],
+      "suggested_branch": "f4-09-graficos-e-alertas",
+      "issue_title": "F4-09 — Gráficos e alertas",
+      "labels": [
+        "fase-4",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-10",
+      "title": "Montagem no carro",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "hardware"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Caixa, fixação anti-vibração, alimentação isolada do sinal dos servos; pesar",
+      "done_when": [
+        "≤ 40 g",
+        "carro comporta-se igual com o módulo desligado ou avariado"
+      ],
+      "done_when_raw": "≤ 40 g; carro comporta-se igual com o módulo desligado ou avariado",
+      "doc_references": [],
+      "suggested_branch": "f4-10-montagem-no-carro",
+      "issue_title": "F4-10 — Montagem no carro",
+      "labels": [
+        "fase-4",
+        "area:hardware"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-11",
+      "title": "Segurança do dispositivo",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "firmware",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Secure boot v2, cifra da flash, firmware assinado com Ed25519, anti-rollback",
+      "done_when": [
+        "Firmware não assinado é recusado no arranque"
+      ],
+      "done_when_raw": "Firmware não assinado é recusado no arranque",
+      "doc_references": [],
+      "suggested_branch": "f4-11-seguranca-do-dispositivo",
+      "issue_title": "F4-11 — Segurança do dispositivo",
+      "labels": [
+        "fase-4",
+        "area:firmware",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F4-12",
+      "title": "Gate v0.4",
+      "phase": "4",
+      "phase_title": "Fase 4 — v0.4 Telemetria",
+      "areas": [
+        "pista"
+      ],
+      "gate": true,
+      "status": "Por fazer",
+      "todo": "10 sessões de treino gravadas e vistas na app",
+      "done_when": [
+        "Nenhuma falha que afete o controlo do carro",
+        "dados de todas as sessões completos"
+      ],
+      "done_when_raw": "Nenhuma falha que afete o controlo do carro; dados de todas as sessões completos",
+      "doc_references": [],
+      "suggested_branch": "f4-12-gate-v0-4",
+      "issue_title": "F4-12 — Gate v0.4",
+      "labels": [
+        "fase-4",
+        "area:pista",
+        "gate"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-01",
+      "title": "Recetor LoRa na box",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "firmware",
+        "hardware"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Segundo ESP32-S3 + SX1262 como ponte LoRa → BLE para a app",
+      "done_when": [
+        "Pacotes recebidos a 1 Hz a 100 m numa pista"
+      ],
+      "done_when_raw": "Pacotes recebidos a 1 Hz a 100 m numa pista",
+      "doc_references": [],
+      "suggested_branch": "f5-01-recetor-lora-na-box",
+      "issue_title": "F5-01 — Recetor LoRa na box",
+      "labels": [
+        "fase-5",
+        "area:firmware",
+        "area:hardware"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-02",
+      "title": "LoRa autenticado",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "firmware",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "ChaCha20-Poly1305 com chave de sessão do emparelhamento; sequência no nonce; rejeitar repetições; respeitar duty cycle da sub-banda e medir o tempo de antena real com o pacote final (ADR 0007)",
+      "done_when": [
+        "Pacote repetido ou alterado é descartado num teste",
+        "tempo de antena medido abaixo de 10% a 1 Hz (ou alternativa do ADR 0007)"
+      ],
+      "done_when_raw": "Pacote repetido ou alterado é descartado num teste; tempo de antena medido abaixo de 10% a 1 Hz (ou alternativa do ADR 0007)",
+      "doc_references": [],
+      "suggested_branch": "f5-02-lora-autenticado",
+      "issue_title": "F5-02 — LoRa autenticado",
+      "labels": [
+        "fase-5",
+        "area:firmware",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-03",
+      "title": "Atualização OTA assinada",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "firmware",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Firmware descarregado do servidor pela app e passado por BLE; verificação de assinatura; regresso à versão anterior se o arranque falhar",
+      "done_when": [
+        "Atualização interrompida a meio não estraga o módulo"
+      ],
+      "done_when_raw": "Atualização interrompida a meio não estraga o módulo",
+      "doc_references": [],
+      "suggested_branch": "f5-03-atualizacao-ota-assinada",
+      "issue_title": "F5-03 — Atualização OTA assinada",
+      "labels": [
+        "fase-5",
+        "area:firmware",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-04",
+      "title": "Infraestrutura como código",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "infra"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "OpenTofu: projetos de staging e produção, Cloud Run, base de dados gerida, Valkey, armazenamento, Secret Manager, KMS",
+      "done_when": [
+        "`tofu apply` cria o ambiente de staging do zero"
+      ],
+      "done_when_raw": "`tofu apply` cria o ambiente de staging do zero",
+      "doc_references": [],
+      "suggested_branch": "f5-04-infraestrutura-como-codigo",
+      "issue_title": "F5-04 — Infraestrutura como código",
+      "labels": [
+        "fase-5",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-05",
+      "title": "Borda com Cloudflare",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "infra",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "DNS, TLS, WAF, rate limiting; origem só aceita tráfego da Cloudflare",
+      "done_when": [
+        "Pedido direto à origem é recusado"
+      ],
+      "done_when_raw": "Pedido direto à origem é recusado",
+      "doc_references": [],
+      "suggested_branch": "f5-05-borda-com-cloudflare",
+      "issue_title": "F5-05 — Borda com Cloudflare",
+      "labels": [
+        "fase-5",
+        "area:infra",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-06",
+      "title": "Pipeline de entrega",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "infra",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Build com `ko`, SBOM com Syft, Trivy, assinatura cosign, proveniência SLSA, deploy gradual com rollback (§14)",
+      "done_when": [
+        "Imagem não assinada não chega a produção"
+      ],
+      "done_when_raw": "Imagem não assinada não chega a produção",
+      "doc_references": [
+        "§14"
+      ],
+      "suggested_branch": "f5-06-pipeline-de-entrega",
+      "issue_title": "F5-06 — Pipeline de entrega",
+      "labels": [
+        "fase-5",
+        "area:infra",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-07",
+      "title": "Observabilidade e SLOs",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "infra"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "OpenTelemetry para Grafana Cloud; dashboards por módulo; alertas dos SLOs (§13) com runbooks",
+      "done_when": [
+        "Erro provocado em staging gera alerta no telemóvel"
+      ],
+      "done_when_raw": "Erro provocado em staging gera alerta no telemóvel",
+      "doc_references": [
+        "§13"
+      ],
+      "suggested_branch": "f5-07-observabilidade-e-slos",
+      "issue_title": "F5-07 — Observabilidade e SLOs",
+      "labels": [
+        "fase-5",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-08",
+      "title": "Backups e restauro",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "infra",
+        "db"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "PITR, `pg_dump` diário para outra conta com bloqueio de objetos, teste de restauro mensal automático",
+      "done_when": [
+        "Restauro completo feito e cronometrado (≤ 4 h)"
+      ],
+      "done_when_raw": "Restauro completo feito e cronometrado (≤ 4 h)",
+      "doc_references": [],
+      "suggested_branch": "f5-08-backups-e-restauro",
+      "issue_title": "F5-08 — Backups e restauro",
+      "labels": [
+        "fase-5",
+        "area:infra",
+        "area:db"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-09",
+      "title": "Testes de carga",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "infra"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "k6 e ghz em staging com 500 equipas simuladas",
+      "done_when": [
+        "p95 ≤ 300 ms nas leituras e escritas"
+      ],
+      "done_when_raw": "p95 ≤ 300 ms nas leituras e escritas",
+      "doc_references": [],
+      "suggested_branch": "f5-09-testes-de-carga",
+      "issue_title": "F5-09 — Testes de carga",
+      "labels": [
+        "fase-5",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-10",
+      "title": "RGPD",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "backend",
+        "app",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Exportar e apagar conta na app, política de privacidade, termos, registo de tratamentos, procedimento de violação de dados",
+      "done_when": [
+        "Exportação e apagamento testados de ponta a ponta"
+      ],
+      "done_when_raw": "Exportação e apagamento testados de ponta a ponta",
+      "doc_references": [],
+      "suggested_branch": "f5-10-rgpd",
+      "issue_title": "F5-10 — RGPD",
+      "labels": [
+        "fase-5",
+        "area:backend",
+        "area:app",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-11",
+      "title": "Revisão de segurança interna",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Rever o threat model; correr OWASP ZAP contra staging; verificar ASVS nível 2 item a item",
+      "done_when": [
+        "Lista de falhas corrigidas ou aceites por escrito"
+      ],
+      "done_when_raw": "Lista de falhas corrigidas ou aceites por escrito",
+      "doc_references": [],
+      "suggested_branch": "f5-11-revisao-de-seguranca-interna",
+      "issue_title": "F5-11 — Revisão de segurança interna",
+      "labels": [
+        "fase-5",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-12",
+      "title": "Teste de intrusão externo",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Pedir a um colega do mestrado ou a uma empresa um teste à API, web e app; publicar `security.txt`",
+      "done_when": [
+        "Relatório recebido e falhas críticas corrigidas"
+      ],
+      "done_when_raw": "Relatório recebido e falhas críticas corrigidas",
+      "doc_references": [],
+      "suggested_branch": "f5-12-teste-de-intrusao-externo",
+      "issue_title": "F5-12 — Teste de intrusão externo",
+      "labels": [
+        "fase-5",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-13",
+      "title": "Publicação nas lojas",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Contas Google Play e Apple Developer; testes fechados com 2–3 equipas amigas",
+      "done_when": [
+        "App aprovada nas duas lojas"
+      ],
+      "done_when_raw": "App aprovada nas duas lojas",
+      "doc_references": [],
+      "suggested_branch": "f5-13-publicacao-nas-lojas",
+      "issue_title": "F5-13 — Publicação nas lojas",
+      "labels": [
+        "fase-5",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F5-14",
+      "title": "Gate v1.0",
+      "phase": "5",
+      "phase_title": "Fase 5 — v1.0 Produção",
+      "areas": [
+        "pista"
+      ],
+      "gate": true,
+      "status": "Por fazer",
+      "todo": "Uma prova com outra equipa a usar o PitBox além da vossa",
+      "done_when": [
+        "Nenhum incidente de segurança ou perda de dados",
+        "SLOs cumpridos nesse fim de semana"
+      ],
+      "done_when_raw": "Nenhum incidente de segurança ou perda de dados; SLOs cumpridos nesse fim de semana",
+      "doc_references": [],
+      "suggested_branch": "f5-14-gate-v1-0",
+      "issue_title": "F5-14 — Gate v1.0",
+      "labels": [
+        "fase-5",
+        "area:pista",
+        "gate"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    }
+  ]
+}

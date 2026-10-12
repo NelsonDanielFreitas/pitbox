@@ -1,0 +1,20 @@
+# Configuração estática do proxy do Zitadel (só desenvolvimento local).
+entryPoints:
+  web:
+    address: ":8080"
+
+ping:
+  entryPoint: web
+
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+
+api:
+  dashboard: false
+  insecure: false
+
+log:
+  level: INFO
+
+accessLog: {}

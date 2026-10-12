@@ -54,7 +54,7 @@ Módulos do backend: `identity`, `garage`, `setup`, `maintenance`, `events`, `ti
 ## Stack (versões estáveis atuais; confirmar antes de fixar)
 
 - **Backend**: Go 1.27, Connect (`connectrpc.com/connect`), protovalidate, pgx v5 + sqlc, Atlas, River, slog, OpenTelemetry
-- **Dados**: PostgreSQL 16 + TimescaleDB, Valkey, armazenamento S3 (MinIO em local)
+- **Dados**: PostgreSQL 16 + TimescaleDB, Valkey, armazenamento S3 (SeaweedFS em local, ADR 0009)
 - **Identidade/autorização**: Zitadel (OIDC + PKCE, passkeys, MFA), BFF com cookie `__Host-`, OpenFGA + RLS
 - **App**: React 19, Vite, TypeScript strict, TanStack Router/Query, Tailwind + Radix, Zod, wa-sqlite/SQLCipher, Capacitor 8, XState
 - **Firmware**: Rust, `esp-hal` + Embassy, ESP32-S3, SX1262 (LoRa 868 MHz), postcard
@@ -64,7 +64,7 @@ Módulos do backend: `identity`, `garage`, `setup`, `maintenance`, `events`, `ti
 ## Comandos
 
 ```bash
-make up            # levanta Postgres, Valkey, Zitadel, OpenFGA, MinIO, Jaeger (deploy/compose)
+make up            # levanta Postgres, Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger (deploy/compose)
 make down | reset  # para | apaga volumes e recria
 make gen           # buf generate + sqlc generate
 make lint          # buf lint, golangci-lint, eslint, cargo clippy

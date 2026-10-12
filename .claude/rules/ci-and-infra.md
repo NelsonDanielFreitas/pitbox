@@ -26,5 +26,5 @@ paths:
 - Recursos na UE. Backups com bloqueio de objetos noutra conta.
 
 ## Docker Compose local
-- `deploy/compose/docker-compose.yml`: Postgres 16 + TimescaleDB, Valkey, Zitadel, OpenFGA, MinIO, Jaeger, com health checks.
+- `deploy/compose/docker-compose.yml`: Postgres 16 + TimescaleDB, Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger, com health checks (Jaeger não tem: a imagem não tem shell).
 - Portas expostas só em `127.0.0.1`. Credenciais de desenvolvimento em `.env` (no `.gitignore`), com `.env.example` versionado.

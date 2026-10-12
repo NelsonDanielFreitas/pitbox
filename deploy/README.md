@@ -2,9 +2,56 @@
 
 | Pasta | Conteúdo |
 | --- | --- |
-| `compose/` | `docker-compose.yml` do ambiente local + configs de Zitadel, OpenFGA, Jaeger (F0-03) |
+| `compose/` | `docker-compose.yml` do ambiente local, init do Postgres e configs do proxy do Zitadel (F0-03) |
 | `tofu/modules/` | Módulos OpenTofu reutilizáveis (rede, base de dados, Cloud Run, segredos) |
 | `tofu/envs/staging`, `tofu/envs/production` | Um diretório por ambiente, cada um com o seu estado remoto (F5-04) |
 | `helm/` | Charts para a fase Kubernetes (fase 2, só quando necessário) |
 
 Regras em `.claude/rules/ci-and-infra.md`.
+
+## Ambiente local (`compose/`)
+
+```bash
+make init      # 1.ª vez: gera deploy/compose/.env com segredos aleatórios (fora do Git, modo 600)
+make up        # docker compose up -d --wait: espera pelos health checks
+make health    # estado dos serviços + sonda ao Jaeger
+make s3-smoke  # S3: casos negativos (403) e depois bucket, upload e download por URL pré-assinado
+make down      # para (mantém os dados)
+make reset     # APAGA os volumes e recria (pede confirmação)
+```
+
+| Serviço | Endereço (só `127.0.0.1`; portas configuráveis no `.env`) |
+| --- | --- |
+| PostgreSQL 16 + TimescaleDB | `5432` (bases `pitbox` e `zitadel`) |
+| Valkey 8.0 | `6379` (com palavra-passe) |
+| Zitadel | `http://localhost:8080` (usar `localhost`, **não** `127.0.0.1`: a instância só responde ao seu domínio) |
+| OpenFGA | HTTP `8090`, gRPC `8091` (chave pré-partilhada; sem playground) |
+| Jaeger | UI `16686`, OTLP gRPC `4317`, OTLP HTTP `4318`, health `13133/status` |
+| SeaweedFS (S3) | `8333` (ver [ADR 0009](../docs/adr/0009-seaweedfs-s3-local.md)) |
+
+As credenciais estão no `.env` (`ZITADEL_ADMIN_USERNAME` / `ZITADEL_ADMIN_PASSWORD`, `S3_ACCESS_KEY` / `S3_SECRET_KEY`, …).
+
+**Login no Zitadel:** em `http://localhost:8080` o campo de utilizador pede o *login name* completo, `<ZITADEL_ADMIN_USERNAME>@zitadel.localhost` (por omissão `zitadel-admin@zitadel.localhost`), e depois a opção **palavra-passe** com `ZITADEL_ADMIN_PASSWORD`. O utilizador já existe: não é preciso criar conta nem registar passkey. Só o nome sem `@zitadel.localhost` dá "utilizador não existe".
+
+### Papéis do Postgres
+
+| Papel | Tipo | Uso |
+| --- | --- | --- |
+| `postgres` | superutilizador | **só** o init (`compose/postgres/init`); nenhum serviço o usa |
+| `pitbox_owner`, `pitbox_app`, `pitbox_readonly` | grupo, `NOLOGIN`, `NOBYPASSRLS` | iguais aos do `schema.sql` |
+| `pitbox_migrator` | login, `IN ROLE pitbox_owner` | migrações (Atlas, F0-06) |
+| `pitbox_api` | login, `IN ROLE pitbox_app` | API, worker, ingest |
+| `openfga` | login | esquema `fga` da base `pitbox` |
+| `zitadel` | login | dono da base `zitadel` |
+
+### Cuidados
+
+- **Mudar um segredo no `.env` depois do primeiro arranque não tem efeito**: os scripts de init só correm com o volume vazio e o Zitadel guarda a masterkey cifrada. Nesse caso, `make reset`.
+- **Só desenvolvimento local.** Tudo em HTTP, sem TLS; nada disto vai para produção.
+- **Desvios ao endurecimento (aceites em local):**
+  - `zitadel-api` e `zitadel-login` correm como `root` (igual ao compose oficial), por causa do volume partilhado onde o Zitadel escreve o PAT do `login-client`. Alternativa limpa: um serviço de execução única que faz `chown` do volume.
+  - O PAT do `login-client` expira em 2099 (token de longa duração, só neste volume local). Em produção (Zitadel Cloud) não existe.
+  - A palavra-passe do Valkey aparece na linha de comandos do processo e no `docker inspect` (o entrypoint só larga privilégios com `valkey-server` como 1.º argumento).
+  - O Jaeger não tem health check do Docker (a imagem não tem shell): usar `make health`.
+  - O Postgres e o Valkey ficam sem `cap_drop` porque o entrypoint precisa de `CHOWN`/`SETUID`/`SETGID`.
+- Verificação de assinaturas cosign das imagens (por exemplo do OpenFGA): fica para o CI (F0-05 ou posterior).

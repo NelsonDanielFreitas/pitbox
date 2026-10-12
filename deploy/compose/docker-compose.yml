@@ -1,0 +1,233 @@
+# Ambiente local do PitBox (cartão F0-03). SÓ para desenvolvimento.
+# - Todas as portas publicadas só em 127.0.0.1 e configuráveis no .env.
+# - Segredos vêm do .env (gerado por `make init`, fora do Git).
+# - Imagens fixadas por tag + digest; o Renovate atualiza ambos.
+name: pitbox
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  # ---------------------------------------------------------------- Postgres
+  # Superutilizador só para o init (postgres/init). A aplicação usa pitbox_app.
+  postgres:
+    <<: *hardening
+    image: timescale/timescaledb:2.30.2-pg16@sha256:6f139d56042989bd35f50ba5986e492cd32e35cc6778c50be2659add298dc09f
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?corre 'make init'}
+      PITBOX_MIGRATOR_PASSWORD: ${PITBOX_MIGRATOR_PASSWORD:?}
+      PITBOX_API_PASSWORD: ${PITBOX_API_PASSWORD:?}
+      ZITADEL_DB_PASSWORD: ${ZITADEL_DB_PASSWORD:?}
+      OPENFGA_DB_PASSWORD: ${OPENFGA_DB_PASSWORD:?}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -h 127.0.0.1: o servidor temporário do init só escuta no socket Unix, por isso
+      # só o servidor definitivo (já com os papéis criados) responde por TCP.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  # ------------------------------------------------------------------ Valkey
+  # Versão 8.0 para ficar alinhada com o Memorystore (7.2, 8.0, 9.0). Sem persistência.
+  valkey:
+    <<: *hardening
+    image: valkey/valkey:8.0.11-alpine3.24@sha256:fd348c9b6999ef15719a1d6b43b810ee1bf2068ded2d7ab6f6dd15943841f28b
+    restart: unless-stopped
+    environment:
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD:?corre 'make init'}   # lido pelo health check
+    # Forma exec com valkey-server como 1.º argumento: o entrypoint oficial só troca
+    # para o utilizador "valkey" nesse caso (com "sh -c" ficaria a correr como root).
+    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:?corre 'make init'}", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD-SHELL", 'valkey-cli -a "$$VALKEY_PASSWORD" --no-auth-warning ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----------------------------------------------------------------- OpenFGA
+  # Mesmo Postgres (base pitbox, esquema fga, papel openfga). Migração antes do run.
+  openfga-migrate:
+    <<: *hardening
+    image: openfga/openfga:v1.22.0@sha256:9cf9a20af32a40434cd3a788c429879439ee9ea9abf65c9c200ee17cd43f769e
+    restart: "no"
+    command: migrate
+    cap_drop: [ALL]
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://openfga:${OPENFGA_DB_PASSWORD:?}@postgres:5432/pitbox?sslmode=disable&search_path=fga
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openfga:
+    <<: *hardening
+    image: openfga/openfga:v1.22.0@sha256:9cf9a20af32a40434cd3a788c429879439ee9ea9abf65c9c200ee17cd43f769e
+    restart: unless-stopped
+    command: run
+    cap_drop: [ALL]
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://openfga:${OPENFGA_DB_PASSWORD:?}@postgres:5432/pitbox?sslmode=disable&search_path=fga
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_PRESHARED_KEY:?}
+    ports:
+      - "127.0.0.1:${OPENFGA_HTTP_PORT:-8090}:8080"
+      - "127.0.0.1:${OPENFGA_GRPC_PORT:-8091}:8081"
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=localhost:8081"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ----------------------------------------------------------------- Zitadel
+  # Login v2 é obrigatório nesta versão: contentor próprio (zitadel-login) e um
+  # proxy que reparte por caminho na mesma porta (8080 no anfitrião).
+  zitadel-api:
+    <<: *hardening
+    image: ghcr.io/zitadel/zitadel:v4.19.4@sha256:90a3045b80a2b5b395e1e770302076906af3a5911225af7c464b4f3bd00d0a1b
+    restart: unless-stopped
+    # user "0": desvio ao endurecimento, igual ao compose oficial (escreve o PAT do
+    # login-client no volume partilhado). Só local; ver deploy/README.md.
+    user: "0"
+    mem_limit: 1g
+    command: ["start-from-init", "--masterkeyFromEnv"]
+    environment:
+      ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:?}
+      ZITADEL_PORT: 8080
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: ${ZITADEL_PORT:-8080}
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_DATABASE_POSTGRES_DSN: postgresql://zitadel:${ZITADEL_DB_PASSWORD:?}@postgres:5432/zitadel?sslmode=disable
+      # Admin inicial (só se aplica no primeiro arranque). Sem projeto nem app OIDC: F1-03.
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME:-zitadel-admin}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:?}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Automatically Initialized IAM_LOGIN_CLIENT
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/login?samlRequest=
+    volumes:
+      - zitadel-bootstrap:/zitadel/bootstrap:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+
+  zitadel-login:
+    <<: *hardening
+    image: ghcr.io/zitadel/zitadel-login:v4.19.4@sha256:93ffd1395b827f685ba29c02fa70aee881fc21102519c4e2bbb0b89c0e00f42c
+    restart: unless-stopped
+    user: "0"
+    environment:
+      ZITADEL_API_URL: http://zitadel-api:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
+      ZITADEL_SESSION_COOKIE_SECRET: ${ZITADEL_LOGIN_COOKIE_SECRET:?}
+      CUSTOM_REQUEST_HEADERS: Host:localhost:${ZITADEL_PORT:-8080},X-Forwarded-Proto:http
+    volumes:
+      - zitadel-bootstrap:/zitadel/bootstrap:ro
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 20s
+
+  # Proxy do Zitadel. Rotas por ficheiro (sem montar o docker.sock).
+  zitadel-proxy:
+    <<: *hardening
+    image: traefik:v3.7.14@sha256:575fa15b135078fe5e50aa847987d96dbddd7b093c172429618404df73f3fa7c
+    restart: unless-stopped
+    cap_drop: [ALL]
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    ports:
+      - "127.0.0.1:${ZITADEL_PORT:-8080}:8080"
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    depends_on:
+      zitadel-api:
+        condition: service_healthy
+      zitadel-login:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--configFile=/etc/traefik/traefik.yml"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # ------------------------------------------------------------------ Jaeger
+  # v2 com OTLP. A imagem não tem shell: sem health check do Docker; o
+  # `make health` sonda a porta 13133 a partir do anfitrião.
+  jaeger:
+    <<: *hardening
+    image: jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17
+    restart: unless-stopped
+    cap_drop: [ALL]
+    ports:
+      - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
+      - "127.0.0.1:${OTLP_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
+      - "127.0.0.1:${JAEGER_HEALTH_PORT:-13133}:13133"
+
+  # --------------------------------------------------------------- SeaweedFS
+  # Só a API S3 (ADR 0009). `mini` = master + volume + filer + S3 num processo.
+  # Credenciais por AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+  seaweedfs:
+    <<: *hardening
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    restart: unless-stopped
+    command: ["mini", "-dir=/data"]
+    # Sem root nem capabilities: o entrypoint só faz chown/su-exec quando arranca como root,
+    # e o volume nomeado já pertence ao utilizador seaweed (1000).
+    user: "1000:1000"
+    cap_drop: [ALL]
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?}
+    ports:
+      - "127.0.0.1:${S3_PORT:-8333}:8333"
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      # Sonda o gateway S3 (8333), não o master: o master pode estar pronto antes do S3.
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:8333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  postgres-data:
+  zitadel-bootstrap:
+  seaweedfs-data:

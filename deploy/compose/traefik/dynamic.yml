@@ -1,0 +1,48 @@
+# Rotas do Zitadel (equivalem às labels do compose oficial, sem o docker.sock).
+# Prioridade mais alta = avaliada primeiro.
+http:
+  routers:
+    zitadel-root:
+      rule: Path(`/`)
+      entryPoints: [web]
+      middlewares: [zitadel-root-rewrite]
+      service: zitadel-login
+      priority: 400
+
+    zitadel-login:
+      rule: PathPrefix(`/ui/v2/login`)
+      entryPoints: [web]
+      service: zitadel-login
+      priority: 250
+
+    zitadel-api-alias:
+      rule: PathPrefix(`/api`)
+      entryPoints: [web]
+      middlewares: [zitadel-strip-api]
+      service: zitadel-api
+      priority: 200
+
+    zitadel-canonical:
+      rule: PathPrefix(`/`)
+      entryPoints: [web]
+      service: zitadel-api
+      priority: 100
+
+  middlewares:
+    zitadel-root-rewrite:
+      replacePath:
+        path: /ui/v2/login/
+    zitadel-strip-api:
+      stripPrefix:
+        prefixes: [/api]
+        forceSlash: false
+
+  services:
+    zitadel-api:
+      loadBalancer:
+        servers:
+          - url: h2c://zitadel-api:8080
+    zitadel-login:
+      loadBalancer:
+        servers:
+          - url: http://zitadel-login:3000

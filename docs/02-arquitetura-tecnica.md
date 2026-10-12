@@ -25,7 +25,7 @@ A arquitetura é um monólito modular em Go, com contratos gRPC/Connect, Postgre
 | Base de dados | PostgreSQL 16 + TimescaleDB para telemetria | Uma tecnologia para dados relacionais e séries temporais | Postgres + InfluxDB |
 | Identidade | Zitadel (gerido ou self-hosted) | OIDC, passkeys, MFA, organizações; open-source, alojamento na UE | Keycloak, Auth0 |
 | Firmware | Rust (esp-hal + Embassy) em ESP32-S3 | Segurança de memória, async eficiente, ecossistema esp-rs maduro | C++ com ESP-IDF |
-| Infraestrutura | Kubernetes gerido (fase 2); Cloud Run ou Fly.io na fase 1 | Começar sem operar cluster; migrar quando houver necessidade | VM única com Docker Compose |
+| Infraestrutura | Kubernetes gerido (fase 2); Cloud Run na fase 1 (ADR 0008) | Começar sem operar cluster; migrar quando houver necessidade | Fly.io, VM única com Docker Compose |
 
 ## 2. Visão de contexto e de contentores
 
@@ -378,7 +378,7 @@ O módulo no carro grava tudo em cartão e envia um resumo por LoRa para um rece
 
 - Pacote de resumo de cerca de 24 bytes a 1 Hz: número de sequência, temperatura, RPM máxima e média do último segundo, tensão, flags de alerta
 - Autenticação e cifra com ChaCha20-Poly1305 e chave de sessão derivada no emparelhamento; o número de sequência faz parte do nonce e o recetor rejeita repetições
-- Banda e duty cycle: em 868 MHz a UE limita o tempo de emissão por sub-banda. Usar a sub-banda 869,4–869,65 MHz (10% de duty cycle) com SF7 e pacotes curtos mantém 1 Hz bem abaixo do limite; confirmar os valores na norma ETSI EN 300 220 e nas regras da ANACOM antes de produção
+- Banda e duty cycle: em 868 MHz a UE limita o tempo de emissão por sub-banda. Na sub-banda 869,4–869,65 MHz (10% de duty cycle), SF7/125 kHz e o pacote autenticado (44–48 B) dão 9,2–9,8% a 1 Hz, **à beira do limite** (ADR 0007: opções e questões em aberto); confirmar os valores na norma ETSI EN 300 220 e nas regras da ANACOM antes de produção
 
 ### 9.4 Ingestão no servidor (`pitbox-ingest`)
 
@@ -598,14 +598,16 @@ pitbox/
 
 | N.º | Decisão |
 | --- | --- |
-| 0001 | Monólito modular em Go em vez de microserviços na v1 |
-| 0002 | Connect sobre Protobuf como API única para web, mobile e interna |
-| 0003 | App offline-first com SQLite local e protocolo de sync próprio |
-| 0004 | Zitadel como IdP; BFF com cookie para a web |
-| 0005 | OpenFGA + RLS como dupla barreira de autorização |
-| 0006 | PostgreSQL + TimescaleDB em vez de base de séries temporais dedicada |
-| 0007 | Firmware em Rust com Embassy; LoRa 868 MHz para tempo real |
-| 0008 | Cloud Run na fase 1, Kubernetes na fase 2 com gatilhos definidos |
+| [0001](adr/0001-monolito-modular-go.md) | Monólito modular em Go em vez de microserviços na v1 |
+| [0002](adr/0002-connect-protobuf.md) | Connect sobre Protobuf como API única para web, mobile e interna |
+| [0003](adr/0003-app-offline-first-sync-proprio.md) | App offline-first com SQLite local e protocolo de sync próprio |
+| [0004](adr/0004-zitadel-bff.md) | Zitadel como IdP; BFF com cookie para a web |
+| [0005](adr/0005-openfga-rls-dupla-barreira.md) | OpenFGA + RLS como dupla barreira de autorização |
+| [0006](adr/0006-postgres-timescaledb.md) | PostgreSQL + TimescaleDB em vez de base de séries temporais dedicada |
+| [0007](adr/0007-firmware-rust-lora.md) | Firmware em Rust com Embassy; LoRa 868 MHz para tempo real (inclui migração para ML-DSA e tempo de antena) |
+| [0008](adr/0008-cloud-run-depois-kubernetes.md) | Cloud Run na fase 1, Kubernetes na fase 2 com gatilhos definidos |
+
+Posteriores: [0009](adr/0009-seaweedfs-s3-local.md) (SeaweedFS no ambiente local), [0010](adr/0010-migracoes-atlas-community.md) (migrações com Atlas Community) e [0011](adr/0011-telemetria-sem-compressao.md) (telemetria sem compressão). O threat model está em [threat-model/](threat-model/README.md).
 
 Cada ADR segue o formato: contexto, decisão, alternativas, consequências. Novas decisões estruturais exigem um ADR no mesmo PR.
 

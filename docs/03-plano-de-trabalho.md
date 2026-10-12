@@ -193,7 +193,7 @@ Objetivo: a plataforma corre na cloud, segura, monitorizada e com backups testad
 | ID | Cartão | O que fazer | Pronto quando | Estado |
 | --- | --- | --- | --- | --- |
 | F5-01 | Recetor LoRa na box | Segundo ESP32-S3 + SX1262 como ponte LoRa → BLE para a app | Pacotes recebidos a 1 Hz a 100 m numa pista | Por fazer |
-| F5-02 | LoRa autenticado | ChaCha20-Poly1305 com chave de sessão do emparelhamento; sequência no nonce; rejeitar repetições; respeitar duty cycle da sub-banda | Pacote repetido ou alterado é descartado num teste | Por fazer |
+| F5-02 | LoRa autenticado | ChaCha20-Poly1305 com chave de sessão do emparelhamento; sequência no nonce; rejeitar repetições; respeitar duty cycle da sub-banda e medir o tempo de antena real com o pacote final (ADR 0007) | Pacote repetido ou alterado é descartado num teste; tempo de antena medido abaixo de 10% a 1 Hz (ou alternativa do ADR 0007) | Por fazer |
 | F5-03 | Atualização OTA assinada | Firmware descarregado do servidor pela app e passado por BLE; verificação de assinatura; regresso à versão anterior se o arranque falhar | Atualização interrompida a meio não estraga o módulo | Por fazer |
 | F5-04 | Infraestrutura como código | OpenTofu: projetos de staging e produção, Cloud Run, base de dados gerida, Valkey, armazenamento, Secret Manager, KMS | `tofu apply` cria o ambiente de staging do zero | Por fazer |
 | F5-05 | Borda com Cloudflare | DNS, TLS, WAF, rate limiting; origem só aceita tráfego da Cloudflare | Pedido direto à origem é recusado | Por fazer |
@@ -211,7 +211,7 @@ Objetivo: a plataforma corre na cloud, segura, monitorizada e com backups testad
 
 Estes hábitos repetem-se em todas as fases; são eles que transformam o projeto num portfólio que se mostra numa entrevista.
 
-- [ ] No fim de cada fase: rever o threat model e atualizar os ADRs
+- [ ] No fim de cada fase: rever o threat model ([`docs/threat-model/`](threat-model/README.md)) e atualizar os ADRs ([`docs/adr/`](adr/))
 - [ ] No fim de cada fase: escrever um artigo curto no blog ou no `docs/` (ex.: "Como isolei equipas com RLS e FKs compostas", "Firmware Rust num carro de 1/8")
 - [ ] Todas as semanas: deixar o Renovate atualizar dependências e rever os alertas de segurança
 - [ ] Depois de cada prova: 15 minutos com o teu pai a anotar o que falhou ou fez falta na app, e criar cartões para isso

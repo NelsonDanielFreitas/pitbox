@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -107,6 +107,12 @@ vuln: ## govulncheck ao backend (novas vulnerabilidades aparecem sem mudar códi
 workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKEN, senão offline)
 	actionlint
 	zizmor $(if $(GH_TOKEN),,--offline) .github/workflows
+
+run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger local (make up); Ctrl+C para parar
+	cd backend && PITBOX_ENV=local OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:$${OTLP_HTTP_PORT:-4318} go run ./cmd/api
+
+smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)
+	bash scripts/api-smoke.sh
 
 db-validate: ## Atlas: checksum (atlas.sum) e sintaxe das migrações
 	atlas migrate validate --env local

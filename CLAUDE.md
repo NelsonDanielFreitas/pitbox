@@ -53,7 +53,7 @@ Módulos do backend: `identity`, `garage`, `setup`, `maintenance`, `events`, `ti
 
 ## Stack (versões estáveis atuais; confirmar antes de fixar)
 
-- **Backend**: Go 1.27, Connect (`connectrpc.com/connect`), protovalidate, pgx v5 + sqlc, Atlas Community (migrações à mão, ADR 0010), River, slog, OpenTelemetry
+- **Backend**: Go 1.27, Connect v2 (`connectrpc.com/connect/v2`, ADR 0012), protovalidate, pgx v5 + sqlc, Atlas Community (migrações à mão, ADR 0010), River, slog, OpenTelemetry
 - **Dados**: PostgreSQL 16 + TimescaleDB, Valkey, armazenamento S3 (SeaweedFS em local, ADR 0009)
 - **Identidade/autorização**: Zitadel (OIDC + PKCE, passkeys, MFA), BFF com cookie `__Host-`, OpenFGA + RLS
 - **App**: React 19, Vite, TypeScript strict, TanStack Router/Query, Tailwind + Radix, Zod, wa-sqlite/SQLCipher, Capacitor 8, XState

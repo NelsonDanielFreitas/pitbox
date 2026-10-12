@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package pitbox.identity.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// TeamService manages teams and the caller's memberships.
+//
+// Authorization: every RPC runs as the authenticated principal; the caller's
+// identity never travels in a request message. A team the caller is not a
+// member of is reported as NOT_FOUND, never PERMISSION_DENIED, so team ids
+// cannot be probed.
+service TeamService {
+  // CreateTeam creates a team and makes the caller its owner.
+  // Idempotent per request_id.
+  rpc CreateTeam(CreateTeamRequest) returns (CreateTeamResponse);
+
+  // ListMyTeams lists the teams the caller belongs to, with the caller's role
+  // in each one, ordered by a stable cursor.
+  rpc ListMyTeams(ListMyTeamsRequest) returns (ListMyTeamsResponse);
+}
+
+// TeamRole is the role of a user inside a team. Mirrors identity.team_role.
+enum TeamRole {
+  // Never sent by the server; means "field missing".
+  TEAM_ROLE_UNSPECIFIED = 0;
+  TEAM_ROLE_OWNER = 1;
+  TEAM_ROLE_MECHANIC = 2;
+  TEAM_ROLE_PILOT = 3;
+  TEAM_ROLE_GUEST = 4;
+}
+
+// Team is a racing team (the unit of data isolation).
+message Team {
+  // Server-generated UUIDv7.
+  string id = 1;
+  string name = 2;
+  string category = 3;
+  optional string club = 4;
+  // ISO 3166-1 alpha-2, upper case.
+  string country_code = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// TeamMembership is a team together with the caller's role in it.
+message TeamMembership {
+  Team team = 1;
+  TeamRole role = 2;
+}
+
+message CreateTeamRequest {
+  // Client-generated UUIDv7 used as the idempotency key (kept for 7 days).
+  // The UUID version is checked in the domain, not here.
+  string request_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Team name. Length is counted in characters, matching the database CHECK.
+  // Leading and trailing whitespace is trimmed in the domain.
+  string name = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+
+  // Empty means the server default ("1/8 TT nitro").
+  string category = 3 [(buf.validate.field).string.max_len = 40];
+
+  optional string club = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+
+  // ISO 3166-1 alpha-2, upper case. The pattern accepts unassigned codes
+  // (e.g. "ZZ"); the ISO list is checked in the domain.
+  string country_code = 5 [(buf.validate.field).string.pattern = "^[A-Z]{2}$"];
+}
+
+message CreateTeamResponse {
+  Team team = 1;
+}
+
+message ListMyTeamsRequest {
+  // 0 means the server default; never more than 200.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+
+  // Opaque cursor from a previous response. Malformed cursors are rejected
+  // with INVALID_ARGUMENT.
+  string page_token = 2 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListMyTeamsResponse {
+  repeated TeamMembership teams = 1;
+  // Empty when there are no more pages.
+  string next_page_token = 2;
+}

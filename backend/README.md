@@ -1,6 +1,6 @@
 # backend
 
-Módulo Go do PitBox (`go.mod` próprio, criado no cartão F1-01). Três binários partilham o mesmo código:
+Módulo Go do PitBox (`go.mod` próprio). O `pitbox-api` tem o esqueleto do F1-01 (config, logs, traces, health checks e paragem graciosa): ver [`cmd/api/README.md`](cmd/api/README.md). Três binários partilham o mesmo código:
 
 | Pasta | Conteúdo |
 | --- | --- |

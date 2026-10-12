@@ -53,7 +53,7 @@ Módulos do backend: `identity`, `garage`, `setup`, `maintenance`, `events`, `ti
 
 ## Stack (versões estáveis atuais; confirmar antes de fixar)
 
-- **Backend**: Go 1.27, Connect (`connectrpc.com/connect`), protovalidate, pgx v5 + sqlc, Atlas, River, slog, OpenTelemetry
+- **Backend**: Go 1.27, Connect (`connectrpc.com/connect`), protovalidate, pgx v5 + sqlc, Atlas Community (migrações à mão, ADR 0010), River, slog, OpenTelemetry
 - **Dados**: PostgreSQL 16 + TimescaleDB, Valkey, armazenamento S3 (SeaweedFS em local, ADR 0009)
 - **Identidade/autorização**: Zitadel (OIDC + PKCE, passkeys, MFA), BFF com cookie `__Host-`, OpenFGA + RLS
 - **App**: React 19, Vite, TypeScript strict, TanStack Router/Query, Tailwind + Radix, Zod, wa-sqlite/SQLCipher, Capacitor 8, XState
@@ -69,8 +69,8 @@ make down | reset  # para | apaga volumes e recria
 make gen           # buf generate + sqlc generate
 make lint          # buf lint, golangci-lint, eslint, cargo clippy
 make test          # testes de todo o repositório
-make db-diff name=<nome>   # atlas migrate diff a partir de backend/db/schema
-make db-test       # testes SQL de RLS e restrições
+make db-new name=<nome>    # migração nova (SQL à mão; atlas.sum) — editar também schema.sql
+make db-test       # migrações + schema.sql em contentores, testes SQL de RLS e restrições, teste de desvio
 
 # Por área
 cd backend  && go test -race ./... && golangci-lint run && govulncheck ./...

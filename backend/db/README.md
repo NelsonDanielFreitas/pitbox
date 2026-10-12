@@ -1,23 +1,40 @@
 # PitBox — Base de dados
 
-Esquema PostgreSQL 16 (com TimescaleDB opcional) do PitBox: 55 tabelas em 10 esquemas, com Row-Level Security por equipa em todas as tabelas de dados.
+Esquema PostgreSQL 16 + TimescaleDB do PitBox: 55 tabelas em 10 esquemas, com Row-Level Security por equipa em todas as tabelas de dados.
 
 ## Ficheiros
 
 | Ficheiro | Conteúdo |
 | --- | --- |
-| `schema.sql` | Esquema completo: extensões, papéis, tipos, tabelas, índices, vistas, triggers, RLS e permissões |
-| `tests/rls_and_constraints_test.sql` | Testes: isolamento entre equipas, FKs compostas, imutabilidade, triggers e vistas |
+| `schema/schema.sql` | Estado desejado, legível: tipos, tabelas, índices, vistas, triggers, RLS, permissões e hypertable. Não cria papéis nem extensões (bootstrap) |
+| `migrations/` | Migrações versionadas (Atlas Community) e `atlas.sum`; a `0001_initial` é uma cópia do `schema.sql` |
+| `tests/rls_and_constraints_test.sql` | Isolamento entre equipas, FKs compostas, imutabilidade, triggers, vistas, idempotência por utilizador, CHECKs |
+| `tests/structure_test.sql` | Toda a tabela tem RLS (exceto lista explícita) e política, donos, papéis, privilégios de `pitbox_app` e `pitbox_readonly`, telemetria |
+| `tests/default_privileges_test.sql` | Uma tabela criada por migração futura herda os privilégios certos; `pitbox_owner` sem palavra-passe |
+| `tests/drift_snapshot.sql` | Papéis, extensões e jobs usados pelo teste de desvio |
 
 ## Como correr
 
 ```bash
-createdb pitbox
-psql -d pitbox -v ON_ERROR_STOP=1 -f schema.sql
-psql -d pitbox -v ON_ERROR_STOP=1 -f tests/rls_and_constraints_test.sql   # termina com ROLLBACK
+make db-test            # contentores descartáveis (mesma imagem do compose): migrações + schema.sql + testes + desvio
+make db-validate        # atlas.sum e sintaxe (offline)
+make db-lint            # migrações novas sem operações destrutivas (offline)
+make db-new name=add_x  # migração nova, vazia
 ```
 
-Em produção, o `schema.sql` serve de estado desejado para o Atlas (`atlas schema apply`), que gera as migrações versionadas.
+Não precisa de `make up`: o `db-test` cria dois Postgres próprios, com palavras-passe aleatórias e portas só em `127.0.0.1`.
+
+## Fluxo para alterar a base de dados (ADR 0010)
+
+1. `make db-new name=<nome>` e escrever o SQL da migração (sem `BEGIN`/`COMMIT`; o Atlas já usa uma transação).
+2. Fazer **a mesma alteração** em `schema/schema.sql`.
+3. `atlas migrate hash --env local` só se editaste uma migração **ainda não commitada**; nunca editar uma já aplicada.
+4. Acrescentar testes em `tests/`; `make db-test` tem de passar (apanha desvios entre 1 e 2).
+5. Operações destrutivas (`DROP`, `RENAME`, `ALTER ... TYPE`, ...) só no passo "contract" do expand/contract, com `-- lint:allow <motivo>`.
+
+**Bootstrap vs migrações.** Papéis, extensões e bases são criados como superutilizador por `deploy/compose/postgres/init/` (em produção, pelo OpenTofu). As migrações correm como `pitbox_migrator` (sem superutilizador), que assume `pitbox_owner`. Uma tabela nova sensível a `pitbox_readonly` leva `REVOKE SELECT` na migração e entra na lista de `tests/structure_test.sql`.
+
+Aplicar manualmente (por exemplo no compose): `DATABASE_URL=postgres://pitbox_migrator:<palavra-passe>@127.0.0.1:5432/pitbox?sslmode=disable atlas migrate apply --env local --allow-dirty` (o `--allow-dirty` é preciso porque o bootstrap já criou o esquema `fga` e as extensões).
 
 ## Esquemas e tabelas
 
@@ -41,6 +58,7 @@ Em produção, o `schema.sql` serve de estado desejado para o Atlas (`atlas sche
 - **Tabelas só de acrescento**: `setup_version`, `stock_movement`, `audit_log` (triggers + `REVOKE`); `pit_stop` só permite fechar a paragem uma vez.
 - **Segredos nunca guardados em claro**: convites, links de partilha e códigos de emparelhamento guardam apenas o hash SHA-256.
 - **Restrições de tempo na base de dados**: convites ≤ 7 dias, passes offline ≤ 72 h, acesso de suporte ≤ 24 h, códigos de emparelhamento ≤ 5 min.
+- **Telemetria com RLS e sem compressão** (ADR 0011): hypertable com retenção de 24 meses.
 - **Exclusão temporal**: um motor não pode estar montado em dois carros ao mesmo tempo (`EXCLUDE USING gist`).
 
 ## Convenções

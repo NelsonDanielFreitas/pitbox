@@ -164,7 +164,7 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 | --- | --- |
 | API | connectrpc.com/connect, google.golang.org/grpc (interno) |
 | Postgres | jackc/pgx v5 + sqlc |
-| Migrações | Atlas (declarativo, com lint de migrações perigosas) |
+| Migrações | Atlas Community: SQL escrito à mão, `atlas.sum`, teste de desvio contra `schema.sql` e lint por script (ADR 0010) |
 | Fila de tarefas | riverqueue/river |
 | JWT e OIDC | coreos/go-oidc, lestrrat-go/jwx |
 | Autorização | OpenFGA Go SDK (secção 6) |
@@ -269,7 +269,7 @@ Um único PostgreSQL 16 gerido guarda os dados de negócio (um esquema por módu
 | Dados | Onde | Notas |
 | --- | --- | --- |
 | Negócio (equipas, garagem, setups, provas) | PostgreSQL 16, esquema por módulo | Gerido (ex.: Neon, Crunchy Bridge, Cloud SQL, RDS) na UE; réplica de leitura na fase 2 |
-| Telemetria em séries | Extensão TimescaleDB, esquema `telemetry` | Compressão após 7 dias; agregações contínuas por volta e por segundo |
+| Telemetria em séries | Extensão TimescaleDB, esquema `telemetry` | Hypertable com retenção de 24 meses; **sem compressão** enquanto houver RLS (ADR 0011); agregações contínuas por volta e por segundo (com acesso por vista `security_barrier`, ADR 0011) |
 | Ficheiros de telemetria brutos, fotografias, exportações | Armazenamento de objetos compatível S3 (ex.: Cloudflare R2, Scaleway, S3 eu-west) | Cifrado; URLs pré-assinados de 5 min; lifecycle de 24 meses para brutos |
 | Sessões web, rate limiting, cache | Valkey (compatível Redis) | Sem dados que não possam ser perdidos |
 | Relações de autorização | OpenFGA com armazenamento no mesmo Postgres (esquema `fga`) | Papel de base de dados próprio |
@@ -512,7 +512,7 @@ Todos os processos emitem traces, métricas e logs por OpenTelemetry para um col
 
 Cada alteração passa pelo mesmo pipeline no GitHub Actions, e só imagens construídas, assinadas e verificadas por ele chegam a produção.
 
-1. **Verificações do PR**: `buf lint` + `buf breaking`; `golangci-lint`; `go test -race` com testcontainers; ESLint + TypeScript strict + Vitest; `cargo clippy` + `cargo test` no firmware; Atlas lint das migrações
+1. **Verificações do PR**: `buf lint` + `buf breaking`; `golangci-lint`; `go test -race` com testcontainers; ESLint + TypeScript strict + Vitest; `cargo clippy` + `cargo test` no firmware; `make db-test` (migrações, testes de RLS e desvio) e lint das migrações por script
 2. **Segurança do código**: Semgrep (regras Go, TypeScript e segredos), gitleaks, govulncheck, `npm audit`/osv-scanner, `cargo audit`
 3. **Testes de autorização**: asserções OpenFGA + testes de acesso cruzado entre equipas + verificação de RLS em todas as tabelas
 4. **Build**: imagens com `ko` (Go, distroless, reproduzíveis); SBOM com Syft; scanning com Trivy (falha em vulnerabilidades críticas corrigíveis)

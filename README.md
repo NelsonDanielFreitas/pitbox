@@ -41,6 +41,7 @@ O CI corre os mesmos `make` que corres localmente, com as ferramentas de `mise.t
 | `backend` | `golangci-lint`, `go test -race`, `govulncheck` |
 | `secrets` | `gitleaks` sobre o histórico completo |
 | `workflows` | `actionlint` e `zizmor` aos próprios workflows |
+| `database` | `make db-test`: migrações (Atlas) e `schema.sql` em contentores Postgres/TimescaleDB descartáveis, testes SQL de RLS e estrutura, teste de desvio, lint das migrações |
 | `ci-ok` | Agregador: **o único check obrigatório** no ruleset (falha se qualquer job falhar ou for cancelado) |
 
 `vulncheck.yml` corre o `govulncheck` todas as segundas-feiras: vulnerabilidades novas aparecem sem mudar código.
@@ -56,7 +57,7 @@ Decisões:
 
 Plano **GitHub Pro** (os rulesets funcionam em repositórios privados). *Settings → Actions → General* já está feito (permissões só de leitura, SHA completo obrigatório nas ações). Ordem a seguir:
 
-1. **PR verde:** abrir o PR do CI e esperar que os 5 jobs corram; o check `ci-ok` só aparece no ruleset depois de existir.
+1. **PR verde:** abrir o PR do CI e esperar que os 6 jobs corram; o check `ci-ok` só aparece no ruleset depois de existir.
 2. **Merge** desse PR.
 3. **Ruleset da `main`** (*Settings → Rules → Rulesets*): exigir PR, exigir o check **`ci-ok`**, bloquear force-push e apagar o branch.
 4. **Push direto recusado:** tentar `git push origin main` e confirmar que o GitHub o recusa.

@@ -1,0 +1,8 @@
+# Configuração do gitleaks (F0-05). Estende as regras por omissão; não as substitui.
+title = "PitBox gitleaks"
+
+[extend]
+useDefault = true
+
+# Só acrescentar exceções com justificação e o mínimo de âmbito (fingerprint ou caminho exato).
+# Nada de allowlists por padrão genérico: escondem segredos reais.

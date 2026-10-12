@@ -1,0 +1,177 @@
+name: ci
+
+# CI do PitBox (F0-05). Os jobs chamam os mesmos `make` que corres localmente
+# (`make ci`), com as ferramentas fixadas em mise.toml / mise.lock.
+# Sem filtros `paths:` de propósito: um check obrigatório que não corre por causa
+# de um filtro fica "pendente" e bloqueia o PR. Ver README ("CI").
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Nenhuma permissão por omissão; cada job pede só o que precisa.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Cancela execuções antigas só em PRs, nunca no main.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash # -eo pipefail: um erro a meio de um pipe não passa despercebido
+
+jobs:
+  contracts:
+    name: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # buf breaking compara com o main
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.7 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      - name: Cache buf modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/buf
+          key: buf-${{ runner.os }}-${{ hashFiles('buf.lock') }}
+
+      - name: Cache pnpm store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('app/pnpm-lock.yaml') }}
+
+      - name: Lint contracts
+        run: make lint-proto
+
+      # O checkout de um PR só tem origin/main; o Makefile compara com o branch local main.
+      - name: Check for breaking changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git branch --force main origin/main
+          make breaking
+
+      - name: Generated code is up to date
+        run: make gen-check
+
+      - name: Type-check generated TypeScript
+        run: make app-typecheck
+
+  backend:
+    name: backend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.7 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      - name: Cache Go modules and build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
+
+      - name: golangci-lint
+        run: make lint-go
+
+      - name: Tests (race detector)
+        run: make test
+
+      - name: govulncheck
+        run: make vuln
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks percorre o histórico completo
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.7 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      # Deteta, não previne: se falhar, o segredo já está no GitHub e tem de ser rodado.
+      - name: gitleaks
+        run: make secrets
+
+  workflows:
+    name: workflows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.7 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      - name: actionlint and zizmor
+        env:
+          GH_TOKEN: ${{ github.token }} # só leitura; ativa as auditorias online do zizmor
+        run: make workflows
+
+  # Único check obrigatório no ruleset: quando entrarem jobs da app e do firmware
+  # basta acrescentá-los a `needs`, sem mexer nas regras do GitHub.
+  ci-ok:
+    name: ci-ok
+    # always(): sem isto, se um job falhar o ci-ok fica "skipped" e um check
+    # obrigatório "skipped" conta como passado.
+    if: always()
+    needs: [contracts, backend, secrets, workflows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "job result: $r"; exit 1 ;;
+            esac
+          done
+          echo "all jobs ok"

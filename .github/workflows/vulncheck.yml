@@ -1,0 +1,41 @@
+name: vulncheck
+
+# Vulnerabilidades novas aparecem sem mudar código: correr o govulncheck todas as semanas.
+# Não faz parte do ci-ok (não corre em PRs); se falhar, o GitHub avisa por email.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # segundas-feiras, 05:17 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: vulncheck
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.7 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      - name: govulncheck
+        run: make vuln

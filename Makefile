@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen lint breaking test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -75,13 +75,40 @@ gen: ## Regenera o código dos contratos (backend/gen, app/src/gen). O sqlc entr
 	@find backend/gen app/src/gen -type f \( -name '*.pb.go' -o -name '*.connect.go' -o -name '*_pb.ts' \) -delete
 	buf generate
 
-lint: ## buf lint + buf format + golangci-lint (eslint e clippy entram com a app e o firmware)
+gen-check: gen ## Falha se o código gerado não estiver commitado (apanha também ficheiros novos)
+	@test -z "$$(git status --porcelain -- backend/gen app/src/gen)" || \
+	  { git status --porcelain -- backend/gen app/src/gen; echo "generated code is stale: run make gen and commit"; exit 1; }
+
+lint: lint-proto lint-go ## buf lint + buf format + golangci-lint (eslint e clippy entram com a app e o firmware)
+
+lint-proto:
 	buf lint
 	buf format --diff --exit-code
+
+lint-go:
 	cd backend && golangci-lint run ./...
 
-breaking: ## buf breaking contra a main (falha no 1.º PR do F0-04: a main ainda não tem proto/)
+breaking: ## buf breaking contra o branch local main (no CI cria-se com git branch --force main origin/main)
 	buf breaking --against '.git#branch=main'
 
 test: ## Testes do backend com -race (app e firmware entram mais tarde)
 	cd backend && go test -race ./...
+
+app-typecheck: ## tsc --noEmit ao TypeScript gerado
+	@test -x app/node_modules/.bin/tsc || (cd app && pnpm install --frozen-lockfile)
+	cd app && pnpm exec tsc --noEmit
+
+secrets: ## gitleaks sobre o histórico completo do Git
+	gitleaks git --config .gitleaks.toml --redact --no-banner
+
+vuln: ## govulncheck ao backend (novas vulnerabilidades aparecem sem mudar código)
+	cd backend && govulncheck ./...
+
+workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKEN, senão offline)
+	actionlint
+	zizmor $(if $(GH_TOKEN),,--offline) .github/workflows
+
+ci: lint test gen-check app-typecheck secrets vuln workflows ## Corre localmente o mesmo que o CI
+
+hooks: ## Ativa os hooks de .githooks (pre-push: gitleaks antes de cada push)
+	git config core.hooksPath .githooks

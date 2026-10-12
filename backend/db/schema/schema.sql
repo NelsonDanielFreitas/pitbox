@@ -1,6 +1,6 @@
 -- =============================================================================
 -- PitBox — Esquema da base de dados
--- PostgreSQL 16 (+ TimescaleDB opcional para telemetria)
+-- PostgreSQL 16 + TimescaleDB (telemetria)
 --
 -- Organização: um esquema por módulo de domínio (ver Arquitetura Técnica §4 e §7)
 --   app          funções e tipos partilhados
@@ -27,35 +27,16 @@
 --   * Tempos sempre em timestamptz (UTC).
 --
 -- Papéis
---   pitbox_owner     dono dos objetos; corre migrações (não usado pela aplicação)
+--   pitbox_owner     dono dos objetos e das políticas do TimescaleDB; LOGIN sem palavra-passe (ADR 0011);
+--                    as migrações correm ligadas como pitbox_migrator, que o assume (não usado pela aplicação)
 --   pitbox_app       usado pela API/worker/ingest; sem BYPASSRLS
 --   pitbox_readonly  análise e suporte de leitura; sujeito a RLS
 -- =============================================================================
 
-BEGIN;
-
--- -----------------------------------------------------------------------------
--- Extensões
--- -----------------------------------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS citext;
-CREATE EXTENSION IF NOT EXISTS btree_gist;
-
--- -----------------------------------------------------------------------------
--- Papéis (idempotente)
--- -----------------------------------------------------------------------------
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pitbox_owner') THEN
-    CREATE ROLE pitbox_owner NOLOGIN;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pitbox_app') THEN
-    CREATE ROLE pitbox_app NOLOGIN NOBYPASSRLS;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pitbox_readonly') THEN
-    CREATE ROLE pitbox_readonly NOLOGIN NOBYPASSRLS;
-  END IF;
-END
-$$;
+-- Pré-requisitos (bootstrap, fora das migrações): papéis pitbox_owner/pitbox_app/pitbox_readonly,
+-- extensões citext, btree_gist e timescaledb, e a ligação como pitbox_migrator (que assume
+-- pitbox_owner em cada sessão). Ver deploy/compose/postgres/init/ e ADR 0010.
+-- Sem BEGIN/COMMIT: o Atlas já corre cada migração numa transação.
 
 -- -----------------------------------------------------------------------------
 -- Esquemas
@@ -183,8 +164,8 @@ CREATE UNIQUE INDEX user_account_email_uq ON identity.user_account (email) WHERE
 CREATE TABLE identity.team (
   id              uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
   name            text        NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
-  category        text        NOT NULL DEFAULT '1/8 TT nitro',
-  club            text,
+  category        text        NOT NULL DEFAULT '1/8 TT nitro' CHECK (length(category) BETWEEN 1 AND 40),
+  club            text CHECK (club IS NULL OR length(club) BETWEEN 1 AND 80),
   country_code    char(2)     NOT NULL DEFAULT 'PT',
   created_by      uuid        NOT NULL REFERENCES identity.user_account (id),
   created_at      timestamptz NOT NULL DEFAULT now(),
@@ -1166,14 +1147,15 @@ $$;
 -- =============================================================================
 
 CREATE TABLE platform.idempotency_key (
-  request_id          uuid        PRIMARY KEY,
+  request_id          uuid        NOT NULL,
   user_id             uuid        NOT NULL REFERENCES identity.user_account (id) ON DELETE CASCADE,
   method              text        NOT NULL,                   -- "/pitbox.setup.v1.SetupService/CreateSetup"
   request_hash        bytea       NOT NULL,
   response            bytea,                                  -- resposta serializada (Protobuf)
   status_code         text,
   created_at          timestamptz NOT NULL DEFAULT now(),
-  expires_at          timestamptz NOT NULL DEFAULT now() + interval '7 days'
+  expires_at          timestamptz NOT NULL DEFAULT now() + interval '7 days',
+  PRIMARY KEY (user_id, request_id)                       -- o request_id só é único por utilizador
 );
 CREATE INDEX idempotency_key_expiry_idx ON platform.idempotency_key (expires_at);
 
@@ -1463,32 +1445,34 @@ BEGIN
 END
 $$;
 
+-- Objetos criados por migrações futuras (como pitbox_owner) herdam os mesmos privilégios.
+-- O que for sensível a pitbox_readonly leva REVOKE explícito na migração; o teste de
+-- privilégios falha se a lista de tabelas legíveis mudar sem ser decidido.
+DO $$
+DECLARE s text;
+BEGIN
+  FOREACH s IN ARRAY ARRAY['app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit']
+  LOOP
+    EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE pitbox_owner IN SCHEMA %I GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO pitbox_app', s);
+    EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE pitbox_owner IN SCHEMA %I GRANT SELECT ON TABLES TO pitbox_readonly', s);
+    EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE pitbox_owner IN SCHEMA %I GRANT USAGE ON SEQUENCES TO pitbox_app', s);
+  END LOOP;
+END
+$$;
+
 -- Restrições adicionais além dos triggers.
 REVOKE UPDATE, DELETE ON audit.audit_log            FROM pitbox_app;
 REVOKE UPDATE, DELETE ON setup.setup_version        FROM pitbox_app;
 REVOKE UPDATE, DELETE ON garage.stock_movement      FROM pitbox_app;
 REVOKE INSERT, UPDATE, DELETE ON telemetry.firmware_release FROM pitbox_app;
 REVOKE SELECT ON platform.idempotency_key           FROM pitbox_readonly;
+REVOKE SELECT ON platform.push_subscription         FROM pitbox_readonly;   -- endpoints e chaves de push
+REVOKE SELECT ON platform.outbox                    FROM pitbox_readonly;   -- eventos de todas as equipas, sem RLS
 
 -- =============================================================================
--- TimescaleDB (opcional): hypertable, compressão e retenção da telemetria
+-- TimescaleDB: hypertable e retenção da telemetria
 -- =============================================================================
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'timescaledb') THEN
-    CREATE EXTENSION IF NOT EXISTS timescaledb;
-    PERFORM create_hypertable('telemetry.sample', 'ts',
-                              chunk_time_interval => interval '1 day', if_not_exists => true);
-    ALTER TABLE telemetry.sample SET (
-      timescaledb.compress,
-      timescaledb.compress_segmentby = 'device_id',
-      timescaledb.compress_orderby   = 'ts');
-    PERFORM add_compression_policy('telemetry.sample', interval '7 days');
-    PERFORM add_retention_policy('telemetry.sample', interval '24 months');
-  ELSE
-    RAISE NOTICE 'TimescaleDB não disponível: telemetry.sample fica como tabela normal.';
-  END IF;
-END
-$$;
-
-COMMIT;
+-- Sem compressão (ADR 0011): o TimescaleDB não suporta RLS em chunks comprimidos e
+-- telemetry.sample tem de ter RLS. A extensão faz parte do bootstrap e é obrigatória.
+SELECT create_hypertable('telemetry.sample', 'ts', chunk_time_interval => interval '1 day');
+SELECT add_retention_policy('telemetry.sample', interval '24 months');

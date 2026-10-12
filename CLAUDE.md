@@ -66,6 +66,8 @@ Módulos do backend: `identity`, `garage`, `setup`, `maintenance`, `events`, `ti
 ```bash
 make up            # levanta Postgres, Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger (deploy/compose)
 make down | reset  # para | apaga volumes e recria
+make run-api       # pitbox-api local (127.0.0.1:8081), traces para o Jaeger
+make smoke-api     # prova ponta a ponta do pitbox-api (precisa de make up)
 make gen           # buf generate + sqlc generate
 make lint          # buf lint, golangci-lint, eslint, cargo clippy
 make test          # testes de todo o repositório

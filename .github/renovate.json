@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices"
+  ],
+  "timezone": "Europe/Lisbon",
+  "dependencyDashboard": true,
+  "automerge": false,
+  "mise": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Dar tempo a que uma versão comprometida seja retirada antes de chegar ao CI (config:best-practices só faz isto para npm)",
+      "matchManagers": [
+        "github-actions",
+        "mise",
+        "custom.regex"
+      ],
+      "minimumReleaseAge": "3 days",
+      "internalChecksFilter": "strict"
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Versão do próprio mise nos workflows: version: X.Y.Z # renovate: datasource=... depName=...",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "version: (?<currentValue>\\S+) # renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)"
+      ],
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    }
+  ]
+}

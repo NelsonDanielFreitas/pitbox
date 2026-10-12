@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen lint breaking test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -69,3 +69,19 @@ health: ## Estado dos serviços e sonda ao Jaeger (sem health check no contentor
 
 s3-smoke: ## Cria bucket, faz upload e descarrega por URL pré-assinado (SeaweedFS)
 	@set -a; . ./$(ENV_FILE); set +a; python3 -I scripts/s3-smoke.py
+
+gen: ## Regenera o código dos contratos (backend/gen, app/src/gen). O sqlc entra com o F1
+	@test -x app/node_modules/.bin/protoc-gen-es || (cd app && pnpm install --frozen-lockfile)
+	@find backend/gen app/src/gen -type f \( -name '*.pb.go' -o -name '*.connect.go' -o -name '*_pb.ts' \) -delete
+	buf generate
+
+lint: ## buf lint + buf format + golangci-lint (eslint e clippy entram com a app e o firmware)
+	buf lint
+	buf format --diff --exit-code
+	cd backend && golangci-lint run ./...
+
+breaking: ## buf breaking contra a main (falha no 1.º PR do F0-04: a main ainda não tem proto/)
+	buf breaking --against '.git#branch=main'
+
+test: ## Testes do backend com -race (app e firmware entram mais tarde)
+	cd backend && go test -race ./...

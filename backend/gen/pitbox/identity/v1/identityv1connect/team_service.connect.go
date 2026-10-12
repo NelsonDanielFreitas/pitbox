@@ -5,140 +5,137 @@
 package identityv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// TeamServiceName is the fully-qualified name of the TeamService service.
 	TeamServiceName = "pitbox.identity.v1.TeamService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// TeamServiceCreateTeamProcedure is the fully-qualified name of the TeamService's CreateTeam RPC.
+	// TeamServiceCreateTeamProcedure is the procedure name of the TeamService's CreateTeam RPC.
 	TeamServiceCreateTeamProcedure = "/pitbox.identity.v1.TeamService/CreateTeam"
-	// TeamServiceListMyTeamsProcedure is the fully-qualified name of the TeamService's ListMyTeams RPC.
+	// TeamServiceListMyTeamsProcedure is the procedure name of the TeamService's ListMyTeams RPC.
 	TeamServiceListMyTeamsProcedure = "/pitbox.identity.v1.TeamService/ListMyTeams"
+)
+
+var (
+	teamServiceCreateTeamSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_identity_v1_team_service_proto.Services().ByName("TeamService").Methods().ByName("CreateTeam"),
+			Procedure:  TeamServiceCreateTeamProcedure,
+		}
+	})
+	teamServiceListMyTeamsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_identity_v1_team_service_proto.Services().ByName("TeamService").Methods().ByName("ListMyTeams"),
+			Procedure:  TeamServiceListMyTeamsProcedure,
+		}
+	})
 )
 
 // TeamServiceClient is a client for the pitbox.identity.v1.TeamService service.
 type TeamServiceClient interface {
 	// CreateTeam creates a team and makes the caller its owner.
 	// Idempotent per request_id.
-	CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error)
+	CreateTeam(context.Context, *v1.CreateTeamRequest) (*v1.CreateTeamResponse, error)
 	// ListMyTeams lists the teams the caller belongs to, with the caller's role
 	// in each one, ordered by a stable cursor.
-	ListMyTeams(context.Context, *connect.Request[v1.ListMyTeamsRequest]) (*connect.Response[v1.ListMyTeamsResponse], error)
+	ListMyTeams(context.Context, *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error)
 }
 
-// NewTeamServiceClient constructs a client for the pitbox.identity.v1.TeamService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewTeamServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TeamServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	teamServiceMethods := v1.File_pitbox_identity_v1_team_service_proto.Services().ByName("TeamService").Methods()
-	return &teamServiceClient{
-		createTeam: connect.NewClient[v1.CreateTeamRequest, v1.CreateTeamResponse](
-			httpClient,
-			baseURL+TeamServiceCreateTeamProcedure,
-			connect.WithSchema(teamServiceMethods.ByName("CreateTeam")),
-			connect.WithClientOptions(opts...),
-		),
-		listMyTeams: connect.NewClient[v1.ListMyTeamsRequest, v1.ListMyTeamsResponse](
-			httpClient,
-			baseURL+TeamServiceListMyTeamsProcedure,
-			connect.WithSchema(teamServiceMethods.ByName("ListMyTeams")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// teamServiceClient implements TeamServiceClient.
-type teamServiceClient struct {
-	createTeam  *connect.Client[v1.CreateTeamRequest, v1.CreateTeamResponse]
-	listMyTeams *connect.Client[v1.ListMyTeamsRequest, v1.ListMyTeamsResponse]
-}
-
-// CreateTeam calls pitbox.identity.v1.TeamService.CreateTeam.
-func (c *teamServiceClient) CreateTeam(ctx context.Context, req *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error) {
-	return c.createTeam.CallUnary(ctx, req)
-}
-
-// ListMyTeams calls pitbox.identity.v1.TeamService.ListMyTeams.
-func (c *teamServiceClient) ListMyTeams(ctx context.Context, req *connect.Request[v1.ListMyTeamsRequest]) (*connect.Response[v1.ListMyTeamsResponse], error) {
-	return c.listMyTeams.CallUnary(ctx, req)
+// NewTeamServiceClient constructs a client for the pitbox.identity.v1.TeamService service. Multiple
+// service clients may share a single connect.Client.
+func NewTeamServiceClient(client *connect.Client) TeamServiceClient {
+	return &teamServiceClient{client: client}
 }
 
 // TeamServiceHandler is an implementation of the pitbox.identity.v1.TeamService service.
 type TeamServiceHandler interface {
 	// CreateTeam creates a team and makes the caller its owner.
 	// Idempotent per request_id.
-	CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error)
+	CreateTeam(context.Context, *v1.CreateTeamRequest) (*v1.CreateTeamResponse, error)
 	// ListMyTeams lists the teams the caller belongs to, with the caller's role
 	// in each one, ordered by a stable cursor.
-	ListMyTeams(context.Context, *connect.Request[v1.ListMyTeamsRequest]) (*connect.Response[v1.ListMyTeamsResponse], error)
+	ListMyTeams(context.Context, *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error)
 }
 
-// NewTeamServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewTeamServiceHandler(svc TeamServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	teamServiceMethods := v1.File_pitbox_identity_v1_team_service_proto.Services().ByName("TeamService").Methods()
-	teamServiceCreateTeamHandler := connect.NewUnaryHandler(
-		TeamServiceCreateTeamProcedure,
-		svc.CreateTeam,
-		connect.WithSchema(teamServiceMethods.ByName("CreateTeam")),
-		connect.WithHandlerOptions(opts...),
+// RegisterTeamServiceHandler registers svc as the pitbox.identity.v1.TeamService implementation on
+// server.
+func RegisterTeamServiceHandler(server *connect.Server, svc TeamServiceHandler) {
+	adapter := teamServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: teamServiceCreateTeamSpec(), Handler: adapter.createTeam},
+		connect.Method{Spec: teamServiceListMyTeamsSpec(), Handler: adapter.listMyTeams},
 	)
-	teamServiceListMyTeamsHandler := connect.NewUnaryHandler(
-		TeamServiceListMyTeamsProcedure,
-		svc.ListMyTeams,
-		connect.WithSchema(teamServiceMethods.ByName("ListMyTeams")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/pitbox.identity.v1.TeamService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case TeamServiceCreateTeamProcedure:
-			teamServiceCreateTeamHandler.ServeHTTP(w, r)
-		case TeamServiceListMyTeamsProcedure:
-			teamServiceListMyTeamsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedTeamServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedTeamServiceHandler struct{}
 
-func (UnimplementedTeamServiceHandler) CreateTeam(context.Context, *connect.Request[v1.CreateTeamRequest]) (*connect.Response[v1.CreateTeamResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("pitbox.identity.v1.TeamService.CreateTeam is not implemented"))
+func (UnimplementedTeamServiceHandler) CreateTeam(context.Context, *v1.CreateTeamRequest) (*v1.CreateTeamResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.identity.v1.TeamService.CreateTeam is not implemented")
 }
 
-func (UnimplementedTeamServiceHandler) ListMyTeams(context.Context, *connect.Request[v1.ListMyTeamsRequest]) (*connect.Response[v1.ListMyTeamsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("pitbox.identity.v1.TeamService.ListMyTeams is not implemented"))
+func (UnimplementedTeamServiceHandler) ListMyTeams(context.Context, *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.identity.v1.TeamService.ListMyTeams is not implemented")
+}
+
+type teamServiceClient struct {
+	client *connect.Client
+}
+
+func (c *teamServiceClient) CreateTeam(ctx context.Context, req *v1.CreateTeamRequest) (*v1.CreateTeamResponse, error) {
+	var res v1.CreateTeamResponse
+	if err := c.client.CallUnary(ctx, teamServiceCreateTeamSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *teamServiceClient) ListMyTeams(ctx context.Context, req *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error) {
+	var res v1.ListMyTeamsResponse
+	if err := c.client.CallUnary(ctx, teamServiceListMyTeamsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type teamServiceHandler struct{ svc TeamServiceHandler }
+
+func (h teamServiceHandler) createTeam(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateTeamRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateTeam(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h teamServiceHandler) listMyTeams(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyTeamsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyTeams(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

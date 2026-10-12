@@ -62,6 +62,11 @@ specifiers = ["1.27.2"]
 checksum = "sha256:ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5"
 url = "https://dl.google.com/go/go1.27.2.linux-amd64.tar.gz"
 
+[[tools."go:connectrpc.com/connect/v2/cmd/protoc-gen-connect-go"]]
+version = "2.0.0"
+backend = "go:connectrpc.com/connect/v2/cmd/protoc-gen-connect-go"
+specifiers = ["2.0.0"]
+
 [[tools."go:golang.org/x/vuln/cmd/govulncheck"]]
 version = "1.9.0"
 backend = "go:golang.org/x/vuln/cmd/govulncheck"
@@ -97,11 +102,6 @@ checksum = "sha256:358f30541b42371360c0d48a8daddc0c0850a90c36fcbea598032a9850e2c
 url = "https://github.com/pnpm/pnpm/releases/download/v12.11.2/pnpm-linux-x64.tar.gz"
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/625613177"
 provenance = "github-attestations"
-
-[[tools.protoc-gen-connect-go]]
-version = "1.21.0"
-backend = "go:connectrpc.com/connect/cmd/protoc-gen-connect-go"
-specifiers = ["1.21.0"]
 
 [[tools.protoc-gen-go]]
 version = "1.36.12"

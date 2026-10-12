@@ -1,0 +1,13 @@
+{
+  // Mínimo para validar o código gerado (F0-04/F0-05). O F2-01 estende-o para a app.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "types": []
+  },
+  "include": ["src/gen"]
+}

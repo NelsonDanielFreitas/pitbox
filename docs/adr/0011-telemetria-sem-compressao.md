@@ -12,7 +12,7 @@ A arquitetura (§7.1) previa compressão de `telemetry.sample` aos 7 dias. Com a
 
 - Manter o **RLS** em `telemetry.sample`; **retirar a compressão**. Mantêm-se a hypertable (chunks de 1 dia) e a retenção de **24 meses**.
 - A TimescaleDB passa a ser **obrigatória** (extensão do bootstrap; sem o `IF EXISTS` do schema): a mesma migração não pode produzir bases diferentes consoante a imagem.
-- `pitbox_owner` tem `LOGIN` **sem palavra-passe**: a TimescaleDB só corre as políticas (retenção) se o dono da hypertable o tiver ("permission denied to start background process"). Sem palavra-passe nenhuma ligação por TCP o autentica; `default_privileges_test.sql` falha se alguém lhe puser uma.
+- `pitbox_owner` tem `LOGIN` **sem palavra-passe**. **Fonte: observação, não documentação.** Com `NOLOGIN`, `add_retention_policy` falhou com "permission denied to start background process as role \"pitbox_owner\"" (TimescaleDB 2.30.2); com `LOGIN` passou, na mesma imagem e na mesma migração. Não encontrei esta regra na documentação do TimescaleDB (a causa mais provável é o dono do job ter de poder iniciar um processo em segundo plano, o que o Postgres só permite a papéis com LOGIN); a confirmar com o código-fonte ou com a equipa do TimescaleDB se vier a importar. Sem palavra-passe, nenhuma ligação por TCP o autentica (testado: a ligação pede palavra-passe e falha); `default_privileges_test.sql` falha se alguém lhe puser uma. O `trust` do `pg_hba` da imagem só vale dentro do contentor.
 
 ## Consequências
 

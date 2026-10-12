@@ -122,6 +122,49 @@ DO $$ BEGIN
   ASSERT (SELECT count(*) FROM identity.team) = 1, 'A só vê a sua equipa';
 END $$;
 
+-- Idempotência: a chave é (user_id, request_id). Outro utilizador pode usar o mesmo request_id
+-- sem colidir e nunca vê a linha alheia.
+INSERT INTO platform.idempotency_key (request_id, user_id, method, request_hash)
+VALUES ('01900000-0000-7000-8000-0000000000aa', app.current_user_id(), '/pitbox.identity.v1.TeamService/CreateTeam', '\x00');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO platform.idempotency_key (request_id, user_id, method, request_hash)
+    VALUES ('01900000-0000-7000-8000-0000000000aa', app.current_user_id(), 'x', '\x00');
+    RAISE EXCEPTION 'FALHOU: request_id repetido pelo mesmo utilizador';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000b';
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000b9';
+INSERT INTO platform.idempotency_key (request_id, user_id, method, request_hash)
+VALUES ('01900000-0000-7000-8000-0000000000aa', app.current_user_id(), '/pitbox.identity.v1.TeamService/CreateTeam', '\x01');
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM platform.idempotency_key) = 1, 'RLS: B só vê a sua chave de idempotência';
+  BEGIN
+    INSERT INTO platform.idempotency_key (request_id, user_id, method, request_hash)
+    VALUES ('01900000-0000-7000-8000-0000000000ab', '01900000-0000-7000-8000-00000000000a', 'x', '\x00');
+    RAISE EXCEPTION 'FALHOU: B escreveu chave em nome de A';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000a';
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
+DO $$ BEGIN ASSERT (SELECT count(*) FROM platform.idempotency_key) = 1, 'RLS: A só vê a sua chave'; END $$;
+
+-- Equipa: category e club têm limites de tamanho (alinhados com o protovalidate)
+DO $$ DECLARE v text; BEGIN
+  FOREACH v IN ARRAY ARRAY['', repeat('x', 41)] LOOP
+    BEGIN
+      INSERT INTO identity.team (id, name, category, created_by) VALUES (app.current_team_id(), 'T', v, app.current_user_id());
+      RAISE EXCEPTION 'FALHOU: category inválida aceite';
+    EXCEPTION WHEN check_violation THEN NULL; END;
+  END LOOP;
+  FOREACH v IN ARRAY ARRAY['', repeat('x', 81)] LOOP
+    BEGIN
+      INSERT INTO identity.team (id, name, club, created_by) VALUES (app.current_team_id(), 'T', v, app.current_user_id());
+      RAISE EXCEPTION 'FALHOU: club inválido aceite';
+    EXCEPTION WHEN check_violation THEN NULL; END;
+  END LOOP;
+END $$;
+
 -- Sem contexto de equipa: nada visível
 RESET app.team_id;
 SET LOCAL app.team_id = '';

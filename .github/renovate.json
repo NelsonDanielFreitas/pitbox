@@ -19,6 +19,17 @@
       ],
       "minimumReleaseAge": "3 days",
       "internalChecksFilter": "strict"
+    },
+    {
+      "description": "Valkey fica no 8.0 (a versão que o Memorystore suporta; 8.1 não existe lá): só patches e digests",
+      "matchPackageNames": [
+        "valkey/valkey"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "major"
+      ],
+      "enabled": false
     }
   ],
   "customManagers": [

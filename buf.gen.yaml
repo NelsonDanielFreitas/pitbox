@@ -1,0 +1,28 @@
+# Geração de código (F0-04). O código gerado vai para o Git, nunca se edita à mão:
+# `make gen` apaga e recria backend/gen e app/src/gen.
+version: v2
+managed:
+  enabled: true
+  disable:
+    # O código gerado importa o go_package do validate.proto; reescrevê-lo apontaria
+    # para um pacote que não existe dentro de backend/gen.
+    - file_option: go_package
+      module: buf.build/bufbuild/protovalidate
+  override:
+    - file_option: go_package_prefix
+      value: github.com/NelsonDanielFreitas/pitbox/backend/gen
+plugins:
+  # Plugins locais e fixados (mise.toml, app/pnpm-lock.yaml): nada de plugins remotos.
+  - local: protoc-gen-go
+    out: backend/gen
+    opt: paths=source_relative
+  - local: protoc-gen-connect-go
+    out: backend/gen
+    opt: paths=source_relative
+  - local: app/node_modules/.bin/protoc-gen-es
+    out: app/src/gen
+    opt: target=ts
+    # Gera também buf/validate/validate_pb, que o código TypeScript importa.
+    include_imports: true
+inputs:
+  - directory: proto

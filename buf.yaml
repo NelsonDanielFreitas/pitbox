@@ -1,0 +1,14 @@
+# Contratos Protobuf do PitBox (F0-04). Regras em .claude/rules/database-and-contracts.md.
+version: v2
+modules:
+  - path: proto
+deps:
+  # Anotações de validação (protovalidate). Fixada por commit e digest em buf.lock.
+  - buf.build/bufbuild/protovalidate
+lint:
+  use:
+    - STANDARD
+breaking:
+  # FILE também protege os nomes JSON, que contam porque o Connect fala HTTP/JSON.
+  use:
+    - FILE

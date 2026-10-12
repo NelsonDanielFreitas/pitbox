@@ -152,6 +152,36 @@ jobs:
           GH_TOKEN: ${{ github.token }} # só leitura; ativa as auditorias online do zizmor
         run: make workflows
 
+  database:
+    name: database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # db-lint compara com o main
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.7 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      # O checkout de um PR só tem origin/main; o db-lint compara com o branch local main.
+      - name: Make main available locally
+        if: github.event_name == 'pull_request'
+        run: git branch --force main origin/main
+
+      # Contentores Postgres/TimescaleDB descartáveis (mesmo digest do compose), sem segredos.
+      # Falha se: migração adulterada (atlas.sum), migração destrutiva sem `-- lint:allow`,
+      # teste de RLS/estrutura falhado ou desvio entre migrações e schema.sql.
+      - name: Database tests
+        run: make db-test
+
   # Único check obrigatório no ruleset: quando entrarem jobs da app e do firmware
   # basta acrescentá-los a `needs`, sem mexer nas regras do GitHub.
   ci-ok:
@@ -159,7 +189,7 @@ jobs:
     # always(): sem isto, se um job falhar o ci-ok fica "skipped" e um check
     # obrigatório "skipped" conta como passado.
     if: always()
-    needs: [contracts, backend, secrets, workflows]
+    needs: [contracts, backend, secrets, workflows, database]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions: {}

@@ -39,7 +39,7 @@ Objetivo: ter um repositório onde `make up` levanta todo o ambiente local e o C
 | F0-03 | Ambiente local com Docker Compose | Serviços: Postgres 16 (imagem TimescaleDB), Valkey, Zitadel, OpenFGA, SeaweedFS (S3), Jaeger; `Makefile` com `init`, `up`, `down`, `reset` | `make up` levanta tudo e os health checks passam | Por fazer |
 | F0-04 | Primeiros contratos Protobuf | `buf.yaml`, `buf.gen.yaml`, pacote `pitbox.identity.v1` com um `TeamService` mínimo; geração para Go e TypeScript | `buf lint` e `buf generate` sem erros | Por fazer |
 | F0-05 | CI inicial | GitHub Actions: `buf lint` + `buf breaking`, `golangci-lint`, `go test -race`, gitleaks; ações fixadas por SHA, permissões mínimas | PR de teste fica verde; PR com um segredo falso fica vermelho | Por fazer |
-| F0-06 | Base de dados no repositório | `schema.sql` em `backend/db/schema`, Atlas configurado para gerar migrações, testes SQL a correr no CI contra Postgres em contentor | `atlas migrate diff` gera a migração inicial; testes de RLS passam no CI | Por fazer |
+| F0-06 | Base de dados no repositório | `schema.sql` em `backend/db/schema`, Atlas Community com migrações escritas à mão (ADR 0010), testes SQL a correr no CI contra Postgres em contentor | A `0001_initial` é validada e aplicada pelo Atlas; o teste de desvio entre migrações e `schema.sql` passa; os testes de RLS passam no CI | Por fazer |
 | F0-07 | ADRs e threat model inicial | `docs/adr` com as 8 decisões da arquitetura (§16.2); `docs/threat-model` com a tabela STRIDE | Ficheiros no `main` | Por fazer |
 | F0-08 | Quadro do projeto | Passar estes cartões para GitHub Projects (ou Trello) com etiquetas por fase | Todos os cartões da Fase 0 e 1 no quadro | Por fazer |
 

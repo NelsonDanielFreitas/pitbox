@@ -42,8 +42,13 @@ type Options struct {
 	Drain time.Duration
 	// ShutdownTimeout bounds http.Server.Shutdown.
 	ShutdownTimeout time.Duration
-	// Routes registers the application handlers on the mux (nil in F1-01).
-	Routes func(mux *http.ServeMux)
+	// Routes registers the application handlers on the mux.
+	Routes func(mux *http.ServeMux) error
+	// SkipTracing excludes requests from the HTTP trace middleware (nil: only the health
+	// probes). RPC routes are excluded because otelconnect traces them: with both, every
+	// RPC would have two server spans, and otelconnect would not apply its rule of not
+	// trusting the caller's traceparent (it only does when there is no span yet).
+	SkipTracing func(*http.Request) bool
 }
 
 // Server wraps http.Server with readiness state and graceful shutdown.
@@ -69,7 +74,9 @@ func New(o Options) (*Server, error) {
 	mux.HandleFunc("GET "+healthPath, handleHealth)
 	mux.HandleFunc("GET "+readyPath, s.handleReady)
 	if o.Routes != nil {
-		o.Routes(mux)
+		if err := o.Routes(mux); err != nil {
+			return nil, fmt.Errorf("register routes: %w", err)
+		}
 	}
 
 	handler := otelhttp.NewHandler(mux, "http.server",
@@ -81,7 +88,10 @@ func New(o Options) (*Server, error) {
 		otelhttp.WithPublicEndpointFn(func(*http.Request) bool { return true }),
 		// Platform probes hit these every few seconds: thousands of useless traces.
 		otelhttp.WithFilter(func(r *http.Request) bool {
-			return r.URL.Path != healthPath && r.URL.Path != readyPath
+			if r.URL.Path == healthPath || r.URL.Path == readyPath {
+				return false
+			}
+			return o.SkipTracing == nil || !o.SkipTracing(r)
 		}),
 		// Method only: a span name with the raw path would have unbounded cardinality
 		// (any scanner invents paths).

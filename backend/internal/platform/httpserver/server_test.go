@@ -232,12 +232,13 @@ func TestGracefulShutdownLetsInFlightRequestsFinish(t *testing.T) {
 	r := start(t, Options{
 		Drain:           300 * time.Millisecond,
 		ShutdownTimeout: 3 * time.Second,
-		Routes: func(mux *http.ServeMux) {
+		Routes: func(mux *http.ServeMux) error {
 			mux.HandleFunc("GET /slow", func(w http.ResponseWriter, _ *http.Request) {
 				close(started)
 				<-release
 				w.WriteHeader(http.StatusOK)
 			})
+			return nil
 		},
 	})
 
@@ -290,7 +291,7 @@ func TestShutdownTimeoutCancelsStreams(t *testing.T) {
 	cancelled := make(chan struct{})
 	r := start(t, Options{
 		ShutdownTimeout: 150 * time.Millisecond,
-		Routes: func(mux *http.ServeMux) {
+		Routes: func(mux *http.ServeMux) error {
 			mux.HandleFunc("GET /stream", func(w http.ResponseWriter, req *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				w.(http.Flusher).Flush()
@@ -298,6 +299,7 @@ func TestShutdownTimeoutCancelsStreams(t *testing.T) {
 				<-req.Context().Done() // a stream that never ends by itself
 				close(cancelled)
 			})
+			return nil
 		},
 	})
 

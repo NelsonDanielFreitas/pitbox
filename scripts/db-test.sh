@@ -75,14 +75,14 @@ echo "== 3. schema.sql (como pitbox_migrator)"
 psql_as "$SCH" pitbox_migrator --single-transaction < backend/db/schema/schema.sql
 
 echo "== 4. Testes SQL (base migrada, como pitbox_api)"
-for t in rls_and_constraints_test structure_test; do
+for t in rls_and_constraints_test structure_test login_test; do
   echo "-- $t"
   psql_as "$MIG" pitbox_api < "backend/db/tests/$t.sql"
 done
 echo "-- default_privileges_test"
 psql_as "$MIG" postgres < backend/db/tests/default_privileges_test.sql
 echo "-- os mesmos testes sobre schema.sql"
-for t in rls_and_constraints_test structure_test; do psql_as "$SCH" pitbox_api < "backend/db/tests/$t.sql"; done
+for t in rls_and_constraints_test structure_test login_test; do psql_as "$SCH" pitbox_api < "backend/db/tests/$t.sql"; done
 
 echo "== 5. Desvio entre migrações e schema.sql"
 snapshot() {

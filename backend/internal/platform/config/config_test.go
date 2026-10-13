@@ -19,6 +19,9 @@ func TestLoadFromDefaults(t *testing.T) {
 	if c.Env != EnvLocal || c.HTTPAddr != "127.0.0.1:8081" || c.LogLevel != "info" {
 		t.Errorf("unexpected defaults: %+v", c)
 	}
+	if c.RPCMaxTimeout != 30*time.Second || c.RPCStreamMaxDuration != 55*time.Minute || c.ClientIPMode != "peer" || c.ClientIPHeader() != "" {
+		t.Errorf("unexpected rpc defaults: %+v", c)
+	}
 	if c.ShutdownDrain != 0 || c.ShutdownTimeout != 6*time.Second {
 		t.Errorf("unexpected shutdown defaults: drain=%s timeout=%s", c.ShutdownDrain, c.ShutdownTimeout)
 	}
@@ -61,6 +64,25 @@ func TestLoadFrom(t *testing.T) {
 		{name: "shutdown budget exactly at the limit", env: map[string]string{
 			"PITBOX_SHUTDOWN_DRAIN": "2s", "PITBOX_SHUTDOWN_TIMEOUT": "6s",
 		}},
+		{name: "rpc timeout lowered", env: map[string]string{"PITBOX_RPC_MAX_TIMEOUT": "10s"}},
+		{name: "rpc timeout above the architecture ceiling", env: map[string]string{"PITBOX_RPC_MAX_TIMEOUT": "31s"}, wantErr: "PITBOX_RPC_MAX_TIMEOUT"},
+		{name: "rpc timeout below one second", env: map[string]string{"PITBOX_RPC_MAX_TIMEOUT": "500ms"}, wantErr: "PITBOX_RPC_MAX_TIMEOUT"},
+		{name: "stream duration at the platform ceiling", env: map[string]string{"PITBOX_RPC_STREAM_MAX_DURATION": "60m"}},
+		{name: "stream duration above the platform ceiling", env: map[string]string{"PITBOX_RPC_STREAM_MAX_DURATION": "2h"}, wantErr: "PITBOX_RPC_STREAM_MAX_DURATION"},
+		{name: "stream duration zero", env: map[string]string{"PITBOX_RPC_STREAM_MAX_DURATION": "0s"}, wantErr: "PITBOX_RPC_STREAM_MAX_DURATION"},
+		{name: "client ip from a header behind cloudflare", env: map[string]string{
+			"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+		}},
+		{name: "client ip header refused without the origin guarantee", env: map[string]string{
+			"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP",
+		}, wantErr: "PITBOX_CLIENT_IP_MODE"},
+		{name: "client ip header refused locally even if declared", env: map[string]string{
+			"PITBOX_CLIENT_IP_MODE": "header:X-Forwarded-For", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+		}, wantErr: "PITBOX_CLIENT_IP_MODE"},
+		{name: "client ip mode unknown", env: map[string]string{"PITBOX_CLIENT_IP_MODE": "forwarded"}, wantErr: "PITBOX_CLIENT_IP_MODE"},
+		{name: "client ip header name with illegal characters", env: map[string]string{
+			"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:X Real\nIP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+		}, wantErr: "PITBOX_CLIENT_IP_MODE"},
 		{name: "plain http endpoint refused in production", env: map[string]string{
 			"PITBOX_ENV": "production", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otlp.example.eu",
 		}, wantErr: "plain http"},
@@ -122,5 +144,19 @@ func TestLogValueIsAnAllowList(t *testing.T) {
 	}
 	if !strings.Contains(out, `"tracing_enabled":true`) {
 		t.Errorf("log output should say tracing is enabled: %s", out)
+	}
+}
+
+func TestClientIPHeader(t *testing.T) {
+	t.Parallel()
+
+	c, err := LoadFrom(map[string]string{
+		"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+	})
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if got := c.ClientIPHeader(); got != "CF-Connecting-IP" {
+		t.Errorf("ClientIPHeader = %q", got)
 	}
 }

@@ -23,11 +23,20 @@ type UserDirectory interface {
 	ResolveLogin(ctx context.Context, subject, email, displayName string) (userID string, err error)
 }
 
+// ActorKind mirrors the actor_kind column of audit.audit_log.
+type ActorKind string
+
+const (
+	ActorUser   ActorKind = "user"   // a known account; ActorID is the user id
+	ActorSystem ActorKind = "system" // not (yet) a known account; ActorID is "anonymous" or "sub:<subject>"
+)
+
 // AuditEvent is one entry for audit.audit_log with team_id NULL (platform event). It never
 // carries tokens, codes, state, emails or claims: the actor is the user id or, before it
 // is known, "anonymous"; Reason is a fixed code.
 type AuditEvent struct {
 	Action     string // auth.login, auth.login_failed, auth.logout, auth.session_revoked
+	ActorKind  ActorKind
 	ActorID    string
 	SessionRef string // hash of the cookie value; "" when there is no session
 	Reason     string // fixed code, e.g. "email_in_use"

@@ -168,7 +168,7 @@ func (a *Authenticator) revoked(ctx context.Context, sess Session, reason string
 		meta.TraceID = sc.TraceID().String()
 	}
 	if err := a.Audit.Record(ctx, AuditEvent{
-		Action: "auth.session_revoked", ActorID: sess.UserID, SessionRef: sess.Ref(), Reason: reason, Meta: meta,
+		Action: "auth.session_revoked", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(), Reason: reason, Meta: meta,
 	}); err != nil {
 		a.Log.ErrorContext(ctx, "audit session revoked", slog.String("reason", "audit"))
 	}

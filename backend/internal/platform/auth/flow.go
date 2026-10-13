@@ -181,7 +181,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	// The trail first: a login that cannot be audited does not happen (fail closed).
 	if err := h.Audit.Record(ctx, AuditEvent{
-		Action: "auth.login", ActorID: userID, SessionRef: hashHex(token),
+		Action: "auth.login", ActorKind: ActorUser, ActorID: userID, SessionRef: hashHex(token),
 		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
 	}); err != nil {
 		h.Log.ErrorContext(ctx, "audit login", slog.String("reason", "audit"))
@@ -287,7 +287,7 @@ func (h *Handler) failLogin(ctx context.Context, r *http.Request, reason, subjec
 		actor = "sub:" + subject
 	}
 	if err := h.Audit.Record(ctx, AuditEvent{
-		Action: "auth.login_failed", ActorID: actor, Reason: reason,
+		Action: "auth.login_failed", ActorKind: ActorSystem, ActorID: actor, Reason: reason,
 		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
 	}); err != nil {
 		h.Log.ErrorContext(ctx, "audit login failure", slog.String("reason", "audit"))
@@ -318,7 +318,7 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 				h.Log.ErrorContext(ctx, "logout: delete session", slog.String("reason", "store"))
 			}
 			if err := h.Audit.Record(ctx, AuditEvent{
-				Action: "auth.logout", ActorID: sess.UserID, SessionRef: sess.Ref(), Reason: reason,
+				Action: "auth.logout", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(), Reason: reason,
 				Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
 			}); err != nil {
 				h.Log.ErrorContext(ctx, "audit logout", slog.String("reason", "audit"))

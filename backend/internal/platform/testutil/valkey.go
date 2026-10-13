@@ -37,12 +37,7 @@ type Valkey struct {
 // Docker is a failure: a skipped security test is not a passed one.
 func StartValkey(t testing.TB) Valkey {
 	t.Helper()
-	if _, err := exec.LookPath("docker"); err != nil || exec.Command("docker", "info").Run() != nil { //nolint:noctx,gosec // probe with fixed arguments
-		if os.Getenv("PITBOX_REQUIRE_DOCKER") == "1" {
-			t.Fatal("docker is required (PITBOX_REQUIRE_DOCKER=1) but not available")
-		}
-		t.Skip("docker not available: skipping the test that needs a real Valkey")
-	}
+	requireDocker(t)
 
 	image, args := composeValkey(t)
 	adminPw, appPw := randomHex(t), randomHex(t)

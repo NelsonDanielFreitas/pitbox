@@ -1,36 +1,16 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
 )
-
-// syncBuffer lets the test read the log while the server goroutine writes it.
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
 
 // The whole assembly: config → logger → telemetry (off) → server → clean shutdown.
 func TestRunAPIStartsServesAndShutsDownCleanly(t *testing.T) {

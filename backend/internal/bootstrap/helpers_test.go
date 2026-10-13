@@ -56,6 +56,6 @@ func hostedAuthEnv() map[string]string {
 		"PITBOX_AUTH_KEYS":          "k1:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
 		"PITBOX_VALKEY_PASSWORD":    "valkey-password",
 		"PITBOX_VALKEY_TLS":         "true",
-		"PITBOX_DATABASE_URL":       "postgres://pitbox_api:db-password@db.example.eu/pitbox?sslmode=require",
+		"PITBOX_DATABASE_URL":       "postgres://pitbox_api:db-password@db.example.eu/pitbox?sslmode=verify-full",
 	}
 }

@@ -34,7 +34,7 @@ make smoke-api     # prova ponta a ponta: /healthz, trace no Jaeger e paragem li
 | `PITBOX_VALKEY_USERNAME` | `pitbox_api` | Utilizador ACL limitado a `pitbox:sess:*`, `pitbox:lock:*` e `pitbox:rl:*`; nunca o `default` |
 | `PITBOX_VALKEY_PASSWORD` | (vazio) | **Segredo** |
 | `PITBOX_VALKEY_TLS` | `false` | Obrigatório fora de `local` |
-| `PITBOX_DATABASE_URL` | (vazio) | `postgres://pitbox_api:<palavra-passe>@host:5432/pitbox`; o papel da aplicação (nunca o dono nem o migrador). Fora de `local`, `sslmode=require`, `verify-ca` ou `verify-full`. **Segredo** |
+| `PITBOX_DATABASE_URL` | (vazio) | `postgres://pitbox_api:<palavra-passe>@host:5432/pitbox`; o papel da aplicação (nunca o dono nem o migrador). Fora de `local`, só `sslmode=verify-full` (`require` cifra mas aceita qualquer certificado). **Segredo** |
 | `PITBOX_AUTH_KEYS` | (vazio) | Chaves mestras para cifrar cookies e refresh tokens: `kid:base64[,kid:base64]`, pelo menos 32 bytes cada (`openssl rand -base64 32`). A primeira cifra; as outras só decifram (rotação). **Segredo** |
 | `PITBOX_SESSION_IDLE_TIMEOUT` | `168h` | Inatividade máxima de uma sessão web (mínimo 1 min) |
 | `PITBOX_SESSION_ABSOLUTE_TIMEOUT` | `720h` | Duração máxima; não pode passar o limite do refresh token no Zitadel (720 h) |

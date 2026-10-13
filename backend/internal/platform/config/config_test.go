@@ -156,9 +156,13 @@ func TestLoadFrom(t *testing.T) {
 		{name: "key without kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": testKey}), wantErr: "<kid>:<base64>"},
 		{name: "key with an upper case kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "K1:" + testKey}), wantErr: "<kid>:<base64>"},
 		{name: "repeated kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k1:" + testKey + ",k1:" + testKey}), wantErr: "repeats the kid"},
-		{name: "database url without ssl outside local", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox"}), wantErr: "sslmode"}, //nolint:gosec // fake credentials
-		{name: "database url with sslmode disable outside local", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=disable"}), wantErr: "sslmode"},
-		{name: "database url with sslmode require", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=require"})},
+		{name: "database url without ssl outside local", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox"}), wantErr: "verify-full"}, //nolint:gosec // fake credentials
+		{name: "database url with sslmode disable outside local", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=disable"}), wantErr: "verify-full"},
+		{name: "database url with sslmode require does not verify the certificate", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=require"}), wantErr: "verify-full"},
+		{name: "database url with sslmode verify-ca does not check the host name", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=verify-ca"}), wantErr: "verify-full"},
+		{name: "database url with sslmode prefer", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=prefer"}), wantErr: "verify-full"},
+		{name: "database url with sslmode verify-full", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=verify-full"})},
+		{name: "staging is as strict as production", env: hosted("staging", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=require"}), wantErr: "verify-full"},
 		{name: "database url not a url", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "host=db user=u password=secret"}), wantErr: "PITBOX_DATABASE_URL"},
 		{name: "database url with another scheme", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "mysql://u:p@db.example.eu/x"}), wantErr: "PITBOX_DATABASE_URL"},
 		{name: "database url without a user", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://db.example.eu/x?sslmode=require"}), wantErr: "PITBOX_DATABASE_URL"},
@@ -290,7 +294,7 @@ func TestSecretsNeverLeak(t *testing.T) {
 	)
 	c, err := LoadFrom(hosted("production", map[string]string{
 		"PITBOX_OIDC_CLIENT_SECRET": clientSecret, "PITBOX_VALKEY_PASSWORD": valkeyPass,
-		"PITBOX_DATABASE_URL": "postgres://pitbox_api:" + dbPassword + "@db.example.eu/pitbox?sslmode=require",
+		"PITBOX_DATABASE_URL": "postgres://pitbox_api:" + dbPassword + "@db.example.eu/pitbox?sslmode=verify-full",
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)

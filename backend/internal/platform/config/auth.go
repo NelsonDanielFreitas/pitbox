@@ -187,10 +187,10 @@ func (c Config) validateDatabaseURL() error {
 		return errors.New("PITBOX_DATABASE_URL: not a postgres://user:password@host:port/database URL")
 	}
 	if c.Env != EnvLocal {
-		switch u.Query().Get("sslmode") {
-		case "require", "verify-ca", "verify-full":
-		default:
-			return errors.New("PITBOX_DATABASE_URL: outside local, sslmode must be require, verify-ca or verify-full")
+		// verify-full, not require: "require" encrypts but accepts any certificate, so a machine in
+		// the middle can read and change everything; "verify-ca" does not check the host name.
+		if u.Query().Get("sslmode") != "verify-full" {
+			return errors.New("PITBOX_DATABASE_URL: outside local, sslmode must be verify-full (require does not check the certificate)")
 		}
 	}
 	return nil

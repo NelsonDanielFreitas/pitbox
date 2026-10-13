@@ -22,6 +22,10 @@ make smoke-api     # prova ponta a ponta: /healthz, trace no Jaeger e paragem li
 | `PITBOX_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `PITBOX_SHUTDOWN_DRAIN` | `0s` | Serve "não pronto" antes de fechar (alguns segundos em Kubernetes) |
 | `PITBOX_SHUTDOWN_TIMEOUT` | `6s` | `drain + timeout + 2 s` de flush de telemetria ≤ 10 s (prazo do Cloud Run) |
+| `PITBOX_RPC_MAX_TIMEOUT` | `30s` | Deadline por omissão e teto dos RPCs unários (1 s a 30 s) |
+| `PITBOX_RPC_STREAM_MAX_DURATION` | `55m` | Teto dos streams; abaixo do timeout de pedido da plataforma (Cloud Run: até 60 min) |
+| `PITBOX_CLIENT_IP_MODE` | `peer` | `peer` ou `header:<Nome>`; o modo `header` exige `PITBOX_ORIGIN_CLOUDFLARE_ONLY=true` e um ambiente que não seja `local` |
+| `PITBOX_ORIGIN_CLOUDFLARE_ONLY` | `false` | Declara que a origem só aceita tráfego da Cloudflare (F5-05) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (vazio) | Sem endpoint, os traces ficam desligados. `http://` só com `PITBOX_ENV=local` |
 | `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLER`, ... | | Variáveis padrão do OpenTelemetry, lidas pelo SDK |
 
@@ -32,4 +36,6 @@ A configuração inválida faz o processo sair com erro no arranque (fail closed
 - `GET /healthz`: liveness (200 `ok`), sem detalhes internos.
 - `GET /readyz`: readiness; passa a 503 quando a paragem começa.
 
-Nenhum dos dois cria traces. Os handlers Connect entram a partir do F1-02.
+Nenhum dos dois cria traces.
+
+O servidor Connect (F1-02) monta os serviços com a cadeia de `internal/platform/interceptors`; ainda não há nenhum registado (os módulos trazem o seu a partir do F1-06). Com `PITBOX_ENV=local` monta-se também a reflection gRPC (`grpcurl`/`grpcui`), nunca noutros ambientes.

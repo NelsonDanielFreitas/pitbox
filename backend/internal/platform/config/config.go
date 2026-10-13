@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +34,12 @@ const (
 	// telemetry flush) may take. Cloud Run sends SIGKILL 10 s after SIGTERM, so the
 	// budget has to fit inside that window.
 	MaxShutdownBudget = 10 * time.Second
+
+	// MaxRPCTimeout is the architecture's ceiling for a unary RPC (§4.4).
+	MaxRPCTimeout = 30 * time.Second
+	// MaxRPCStreamDuration is the longest a streaming RPC may be configured to run: the
+	// Cloud Run request timeout is at most 60 min (to confirm in F5-04).
+	MaxRPCStreamDuration = 60 * time.Minute
 )
 
 // Config is the configuration of pitbox-api.
@@ -51,6 +58,24 @@ type Config struct {
 	ShutdownDrain time.Duration `env:"PITBOX_SHUTDOWN_DRAIN" envDefault:"0s"`
 	// ShutdownTimeout bounds http.Server.Shutdown.
 	ShutdownTimeout time.Duration `env:"PITBOX_SHUTDOWN_TIMEOUT" envDefault:"6s"`
+
+	// RPCMaxTimeout is both the default deadline of a unary RPC (when the client sends
+	// none) and its ceiling (a longer client deadline is cut to it). Arquitetura §4.4.
+	RPCMaxTimeout time.Duration `env:"PITBOX_RPC_MAX_TIMEOUT" envDefault:"30s"`
+	// RPCStreamMaxDuration is the ceiling for streaming RPCs. It must stay below the
+	// platform's request timeout (Cloud Run: at most 60 min), so that this limit, not
+	// the platform, is the one that acts first.
+	RPCStreamMaxDuration time.Duration `env:"PITBOX_RPC_STREAM_MAX_DURATION" envDefault:"55m"`
+
+	// ClientIPMode says where the client address recorded in the audit metadata comes
+	// from: "peer" (the TCP peer; the default) or "header:<Name>" (for example
+	// "header:CF-Connecting-IP"). A header is client-controlled data unless every
+	// request comes through a proxy that sets it, so header mode needs
+	// OriginCloudflareOnly (see Validate).
+	ClientIPMode string `env:"PITBOX_CLIENT_IP_MODE" envDefault:"peer"`
+	// OriginCloudflareOnly declares that the origin only accepts traffic from the
+	// Cloudflare edge (F5-05). It must stay false until that is true.
+	OriginCloudflareOnly bool `env:"PITBOX_ORIGIN_CLOUDFLARE_ONLY" envDefault:"false"`
 
 	// The standard OpenTelemetry variables are read here only to validate them:
 	// the SDK reads them again itself. Tracing is off when neither is set.
@@ -116,6 +141,16 @@ func (c Config) Validate() error {
 			total, TelemetryFlushTimeout, MaxShutdownBudget))
 	}
 
+	if c.RPCMaxTimeout < time.Second || c.RPCMaxTimeout > MaxRPCTimeout {
+		errs = append(errs, fmt.Errorf("PITBOX_RPC_MAX_TIMEOUT: %s is outside 1s..%s", c.RPCMaxTimeout, MaxRPCTimeout))
+	}
+	if c.RPCStreamMaxDuration <= 0 || c.RPCStreamMaxDuration > MaxRPCStreamDuration {
+		errs = append(errs, fmt.Errorf("PITBOX_RPC_STREAM_MAX_DURATION: %s is outside (0, %s]", c.RPCStreamMaxDuration, MaxRPCStreamDuration))
+	}
+	if err := c.validateClientIPMode(); err != nil {
+		errs = append(errs, err)
+	}
+
 	// Telemetry must not travel in clear text outside local development.
 	if c.Env != EnvLocal {
 		for _, e := range []struct{ name, value string }{
@@ -129,6 +164,32 @@ func (c Config) Validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+var headerName = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
+
+// ClientIPHeader returns the header the client address is read from, or "" when
+// the TCP peer is used.
+func (c Config) ClientIPHeader() string {
+	name, _ := strings.CutPrefix(c.ClientIPMode, "header:")
+	if name == c.ClientIPMode { // not in header mode
+		return ""
+	}
+	return name
+}
+
+func (c Config) validateClientIPMode() error {
+	if c.ClientIPMode == "peer" {
+		return nil
+	}
+	name, ok := strings.CutPrefix(c.ClientIPMode, "header:")
+	if !ok || !headerName.MatchString(name) {
+		return fmt.Errorf("PITBOX_CLIENT_IP_MODE: %q is neither \"peer\" nor \"header:<Name>\"", c.ClientIPMode)
+	}
+	if c.Env == EnvLocal || !c.OriginCloudflareOnly {
+		return errors.New("PITBOX_CLIENT_IP_MODE: header mode needs PITBOX_ORIGIN_CLOUDFLARE_ONLY=true outside local (a client-controlled header must not be trusted otherwise)")
+	}
+	return nil
 }
 
 func validateAddr(addr string) error {
@@ -155,6 +216,9 @@ func (c Config) LogValue() slog.Value {
 		slog.String("log_level", c.LogLevel),
 		slog.Duration("shutdown_drain", c.ShutdownDrain),
 		slog.Duration("shutdown_timeout", c.ShutdownTimeout),
+		slog.Duration("rpc_max_timeout", c.RPCMaxTimeout),
+		slog.Duration("rpc_stream_max_duration", c.RPCStreamMaxDuration),
+		slog.String("client_ip_mode", c.ClientIPMode),
 		slog.Bool("tracing_enabled", c.TracingEnabled()),
 	)
 }

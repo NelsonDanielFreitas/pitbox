@@ -332,15 +332,17 @@
         "security"
       ],
       "gate": false,
-      "status": "Por fazer",
-      "todo": "Recuperação de panics, limites de tamanho e deadline, protovalidate, registo de auditoria (§4.4)",
+      "status": "Em curso",
+      "todo": "Cadeia de interceptors da §4.4: OpenTelemetry, recuperação de panics, erros e log por RPC, deadline (30 s unários, 55 min streams), validação protovalidate com validador compilado no arranque e contexto de auditoria; limites de tamanho (4 MiB, também após descompressão) no transporte; reflection só em `local`",
       "done_when": [
-        "Testes unitários de cada interceptor",
-        "um handler que devolve um erro interno (`fmt.Errorf(\"pg: ...\")`) faz o cliente receber só o código, sem a mensagem",
-        "um corpo acima de 4 MiB é recusado (`CodeResourceExhausted`)",
-        "regra de lint contra `connect.NewError(code, err.Error())` e `WithReadMaxBytes(0)` (ADR 0012)"
+        "Testes de cada interceptor",
+        "um erro interno (`fmt.Errorf(\"pg: ...\")`) chega ao cliente só como código, sem a mensagem",
+        "um corpo acima de 4 MiB e uma bomba de compressão são recusados (`CodeResourceExhausted`)",
+        "um corpo enviado devagar é cortado no teto",
+        "o valor inválido não volta na resposta",
+        "teste de arquitetura (`internal/archtest`) que só admite mensagens fixas em `connect.NewError` e os limites em `httpserver/rpc.go` (ADR 0012)"
       ],
-      "done_when_raw": "Testes unitários de cada interceptor; um handler que devolve um erro interno (`fmt.Errorf(\"pg: ...\")`) faz o cliente receber só o código, sem a mensagem; um corpo acima de 4 MiB é recusado (`CodeResourceExhausted`); regra de lint contra `connect.NewError(code, err.Error())` e `WithReadMaxBytes(0)` (ADR 0012)",
+      "done_when_raw": "Testes de cada interceptor; um erro interno (`fmt.Errorf(\"pg: ...\")`) chega ao cliente só como código, sem a mensagem; um corpo acima de 4 MiB e uma bomba de compressão são recusados (`CodeResourceExhausted`); um corpo enviado devagar é cortado no teto; o valor inválido não volta na resposta; teste de arquitetura (`internal/archtest`) que só admite mensagens fixas em `connect.NewError` e os limites em `httpserver/rpc.go` (ADR 0012)",
       "doc_references": [
         "§4.4"
       ],
@@ -410,6 +412,35 @@
         "fase-1",
         "area:backend",
         "area:db",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F1-04b",
+      "title": "Rate limiting na API",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Interceptor no lugar 6 da cadeia (§4.4): limites por utilizador e por equipa (GCRA ou token bucket no Valkey), mais apertados nas escritas do que nas leituras; `ResourceExhausted` sem detalhes internos; definir o comportamento quando o Valkey falha (fail open com alerta, ou fail closed)",
+      "done_when": [
+        "Esgotar a quota da equipa A não afeta a equipa B",
+        "teste com o Valkey em baixo que prova o comportamento escolhido"
+      ],
+      "done_when_raw": "Esgotar a quota da equipa A não afeta a equipa B; teste com o Valkey em baixo que prova o comportamento escolhido",
+      "doc_references": [],
+      "suggested_branch": "f1-04b-rate-limiting",
+      "issue_title": "F1-04b — Rate limiting na API",
+      "labels": [
+        "fase-1",
+        "area:backend",
         "area:security"
       ],
       "security_notes": "",
@@ -1134,7 +1165,7 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Implementar `TimingProvider` para o fornecedor aprovado em F3-01, no worker, com limite de pedidos",
+      "todo": "Implementar `TimingProvider` para o fornecedor aprovado em F3-01, no worker, com limite de pedidos; se houver streaming para a app: reconexão a partir de um cursor e heartbeat periódico (a borda corta streams sem dados; a confirmar no F5-05)",
       "done_when": [
         "Resultados chegam sem ação manual até 5 min após publicados"
       ],
@@ -1707,9 +1738,10 @@
       "status": "Por fazer",
       "todo": "OpenTofu: projetos de staging e produção, Cloud Run, base de dados gerida, Valkey, armazenamento, Secret Manager, KMS",
       "done_when": [
-        "`tofu apply` cria o ambiente de staging do zero"
+        "`tofu apply` cria o ambiente de staging do zero",
+        "o timeout de pedido do serviço Cloud Run da API é de 60 min (acima do teto de 55 min dos streams no código; confirmar o máximo da plataforma)"
       ],
-      "done_when_raw": "`tofu apply` cria o ambiente de staging do zero",
+      "done_when_raw": "`tofu apply` cria o ambiente de staging do zero; o timeout de pedido do serviço Cloud Run da API é de 60 min (acima do teto de 55 min dos streams no código; confirmar o máximo da plataforma)",
       "doc_references": [],
       "suggested_branch": "f5-04-infraestrutura-como-codigo",
       "issue_title": "F5-04 — Infraestrutura como código",

@@ -50,5 +50,6 @@ Migrar já para `connectrpc.com/connect/v2` v2.0.0, antes do F1-02:
 - O módulo `connectrpc.com/otelconnect` v0.12.0 e `validate` v0.9.0 trazem as duas versões do Connect no grafo de módulos (compatibilidade); só a v2 é usada.
 - O `authn` do ecossistema continua a ser middleware HTTP (v1, sem alterações); a autenticação do F1-03 decide entre middleware e interceptor.
 - Renovate: as dependências `connectrpc.com/**` sobem no mesmo grupo e as versões *major* exigem aprovação.
+- As duas regras de segurança têm teste (F1-02): erro interno só com código, corpo acima de 4 MiB recusado, e `internal/archtest`. O `forbidigo` não serve para a regra dos erros: só compara o nome qualificado da chamada, não os argumentos (verificado); a regra é uma lista de permitidos sobre a árvore sintática (literal ou constante), que também apanha `msg := err.Error()` e `fmt.Sprintf`.
 - Frontend: o cliente TypeScript (`@connectrpc/connect-web`, F1-09) é independente do `connect-go` e não é afetado.
 - Reavaliar se o ecossistema (validate, otelconnect) deixar de acompanhar a v2 ou se a v2 mostrar regressões nas primeiras correções.

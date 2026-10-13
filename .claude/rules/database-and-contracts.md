@@ -24,6 +24,7 @@ paths:
 - Pacote `pitbox.<módulo>.v1`; um serviço por agregado principal.
 - Campos nunca reutilizados; remoções com `reserved`. `buf breaking` contra `main` tem de passar.
 - Toda a mensagem de pedido tem regras protovalidate (obrigatório, intervalos, formatos, tamanhos máximos de strings e listas).
+- Leituras novas declaram `option idempotency_level = NO_SIDE_EFFECTS;` desde o primeiro dia (um RPC novo não quebra o `buf breaking`; mudar um existente quebra, e é por isso que `ListMyTeams` ainda não o tem). Sem essa marca, o RPC conta como escrita e leva o contexto de auditoria.
 - Escritas com `request_id`; listas com paginação por cursor (`page_size` máx. 200, `page_token`).
 - Comentários em cada serviço, RPC e campo não óbvio (geram documentação).
 

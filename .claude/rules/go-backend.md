@@ -11,7 +11,7 @@ paths:
 - `gofmt`/`goimports`; `golangci-lint run` sem avisos.
 - Erros com contexto: `fmt.Errorf("create car: %w", err)`; comparar com `errors.Is/As`; erros de domínio em `domain/errors.go` (ex.: `ErrNotFound`, `ErrConflict`, `ErrInvalid`).
 - `transport/` converte erros de domínio em códigos Connect: NotFound → `CodeNotFound`, sem permissão → `CodePermissionDenied`, validação → `CodeInvalidArgument`, conflito de versão → `CodeAborted`. Mensagens para o cliente nunca incluem detalhes internos; o detalhe vai para o log.
-- Connect v2 (ADR 0012): só um `*connect.Error` mostra a mensagem ao cliente (um `error` normal sai só com o código). Escreve `connect.NewError(code, "mensagem pública fixa").WithCause(err)`; **nunca** `connect.NewError(code, err.Error())` (é o que a ferramenta de migração gera e vazaria detalhes internos).
+- Connect v2 (ADR 0012): só um `*connect.Error` mostra a mensagem ao cliente (um `error` normal sai só com o código). Escreve `connect.NewError(code, "mensagem pública fixa").WithCause(err)`; **nunca** `connect.NewError(code, err.Error())` (é o que a ferramenta de migração gera e vazaria detalhes internos). O teste `internal/archtest` só admite um literal ou uma constante do pacote como mensagem, proíbe `connect.Errorf` e os limites de tamanho fora de `httpserver/rpc.go`; uma exceção revista é `//archtest:allow <motivo>`. Embrulha erros com o nome da operação, nunca com valores do pedido (a causa vai para o log).
 - Sem `panic` fora de `main` e de inicializações impossíveis de recuperar.
 
 ## Contexto e concorrência

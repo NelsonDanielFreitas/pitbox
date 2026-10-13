@@ -146,19 +146,24 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 - Versão no pacote (`v1`, `v2`); campos nunca reutilizados; remoções só com `reserved`
 - Paginação por cursor opaco em todas as listas; máximo de 200 itens por página
 - Idempotência: todas as escritas aceitam `request_id` (UUIDv7) guardado durante 7 dias
-- Erros: códigos Connect/gRPC padrão com detalhes estruturados (`google.rpc.BadRequest`); mensagens sem informação interna
+- Erros: códigos Connect/gRPC padrão; mensagens sem informação interna. Só um `*connect.Error` escrito de propósito chega ao cliente; qualquer outro erro vira `Internal` com a mensagem fixa "internal error" e a causa fica no log (ADR 0012)
+- Erros de validação: detalhe `buf.validate.Violations` (caminho do campo e `rule_id`, nunca o valor enviado), tal como o interceptor do protovalidate o devolve; a app traduz por `rule_id`. Não se converte para `google.rpc.BadRequest`
+- Leituras novas declaram `option idempotency_level = NO_SIDE_EFFECTS;`; sem essa marca, um RPC conta como escrita (auditoria)
 
 ### 4.4 Interceptors (ordem)
 
 Implementam-se como `connect.ServerInterceptor` (Connect v2, ADR 0012) e passam-se a `connect.NewServer` por esta ordem: o primeiro é o mais externo.
 
-1. Recuperação de panics
-2. OpenTelemetry (trace, métricas)
-3. Limites: tamanho máximo de mensagem (4 MiB; 32 MiB só na ingestão de telemetria), deadline máximo (30 s)
-4. Autenticação: validação do JWT e construção do principal
-5. Rate limiting por utilizador e por equipa
-6. Validação (protovalidate)
-7. Registo de auditoria nas escritas
+1. OpenTelemetry (trace, métricas): o mais externo, para o `trace_id` estar no contexto de todos os logs abaixo (o do panic incluído) e o span receber o erro final (decisão do F1-02; a recuperação vem logo a seguir)
+2. Recuperação de panics
+3. Erros: mensagem pública fixa para erros internos e uma linha de log por RPC (dentro da recuperação, fora de tudo o resto, para apanhar as recusas dos passos 5 a 7)
+4. Limites: deadline (30 s nos unários, 55 min nos streams, configuráveis para baixo; o limite de **tamanho** é do transporte: 4 MiB por mensagem nos dois sentidos, também depois de descomprimir; 32 MiB só na ingestão de telemetria, que é outro processo)
+5. Autenticação: validação do JWT e construção do principal (F1-03)
+6. Rate limiting por utilizador e por equipa (F1-04b)
+7. Validação (protovalidate), com o validador compilado no arranque
+8. Contexto de auditoria nas escritas (`AuditMeta`: trace id, IP do peer e user agent); a linha em `audit.audit_log` escreve-se na transação do caso de uso
+
+Os RPCs são traçados só pelo `otelconnect`, que não confia no `traceparent` do cliente; o middleware HTTP exclui as rotas dos serviços para não haver dois spans por RPC. A reflection (`grpcreflect`) só se monta com `PITBOX_ENV=local`.
 
 ### 4.5 Bibliotecas Go
 

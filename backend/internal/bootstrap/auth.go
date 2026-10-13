@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/valkey-io/valkey-go"
+	"go.opentelemetry.io/otel"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/audit"
@@ -83,9 +84,15 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		RedirectURL: origin + auth.CallbackPath, AllowedAlgs: cfg.OIDCAllowedAlgs, Now: now,
 	})
 	auditor := audit.NewWriter(pool)
+	refusals, err := auth.NewRefusalCounter(otel.GetMeterProvider().Meter("pitbox/auth"))
+	if err != nil {
+		pool.Close()
+		vk.Close()
+		return nil, fmt.Errorf("auth metrics: %w", err)
+	}
 	handler := &auth.Handler{
 		Provider: provider, Store: store, LoginCookies: auth.NewLoginCookies(loginSealer, now),
-		Users: identity.NewLoginDirectory(pool), Audit: auditor, Log: logger,
+		Users: identity.NewLoginDirectory(pool), Audit: auditor, Log: logger, Refusals: refusals,
 		PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
 	}
 	authenticator := &auth.Authenticator{Provider: provider, Store: store, Audit: auditor, Log: logger, Now: now}

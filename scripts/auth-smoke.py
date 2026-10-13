@@ -228,6 +228,13 @@ def main() -> int:
         info2 = json.loads(whoami(sc2, 200)[0][2])
         check(info2["user_id"] == user_id, "o mesmo utilizador PitBox (não duplica)")
 
+        # Um login que o browser começou (state certo) mas com um código que o Zitadel nunca emitiu.
+        r_start = http_call("GET", API + "/auth/login")
+        st_ok = urllib.parse.parse_qs(urllib.parse.urlparse(r_start[1]["Location"]).query)["state"][0]
+        bogus = http_call("GET", API + "/auth/callback?code=not-a-real-code&state=" + urllib.parse.quote(st_ok),
+                          {"Cookie": cookie_header(**{"__Host-pitbox_login": cookies_of(r_start[1])["__Host-pitbox_login"][0]})})
+        check(bogus[0] == 400, "state certo com um código que o Zitadel não emitiu -> 400")
+
         print("== 6. Refresh real (access token de 5 s) e utilizador desativado")
         short = dict(provision.OIDC_SETTINGS, accessTokenLifetime=5)
         admin.call("/admin/v1/settings/oidc", {k: f"{v}s" for k, v in short.items()}, method="PUT")
@@ -266,7 +273,9 @@ def main() -> int:
         got = rows.splitlines()
         check(got.count("auth.login:") == 3 and got.count("auth.logout:") == 1, "auditoria: 3 logins e 1 logout do utilizador")
         check("auth.session_revoked:user_not_active" in got, "auditoria: sessão revogada porque o utilizador foi desativado")
-        check("auth.login_failed:no_login_state" in got and "auth.login_failed:state_mismatch" in got, "auditoria: as duas falhas com o motivo")
+        check(not any(g.startswith("auth.login_failed:") and g.split(":", 1)[1] in ("no_login_state", "state_mismatch") for g in got),
+              "callbacks sem cookie ou com state errado NÃO foram para a auditoria (só log e contador)")
+        check("auth.login_failed:code_exchange" in got, "auditoria: falha depois de o state bater certo (código inválido), com o motivo")
         check(sql(f"SELECT count(*) FROM identity.user_account WHERE id='{user_id}'") == "1", "uma só linha identity.user_account")
         log_text = Path(logpath).read_text()
         leaked = [i for i, sct in enumerate(secrets_seen) if sct and sct in log_text]

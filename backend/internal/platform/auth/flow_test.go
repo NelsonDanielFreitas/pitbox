@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/valkey-io/valkey-go"
+	metricnoop "go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
 )
@@ -69,17 +70,38 @@ func (a *fakeAudit) actions() []string {
 	return out
 }
 
+type fakeRefusals struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (f *fakeRefusals) Count(_ context.Context, reason string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.counts == nil {
+		f.counts = map[string]int{}
+	}
+	f.counts[reason]++
+}
+
+func (f *fakeRefusals) get(reason string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.counts[reason]
+}
+
 type flowHarness struct {
-	t     *testing.T
-	idp   *fakeIdP
-	h     *Handler
-	mux   *http.ServeMux
-	store *Store
-	dir   *fakeDirectory
-	audit *fakeAudit
-	admin valkey.Client
-	now   *time.Time
-	logs  *syncLog
+	t        *testing.T
+	idp      *fakeIdP
+	h        *Handler
+	mux      *http.ServeMux
+	store    *Store
+	dir      *fakeDirectory
+	audit    *fakeAudit
+	admin    valkey.Client
+	refusals *fakeRefusals
+	now      *time.Time
+	logs     *syncLog
 }
 
 type syncLog struct {
@@ -110,7 +132,7 @@ func newFlowHarness(t *testing.T) *flowHarness {
 	logs := &syncLog{}
 	f := &flowHarness{
 		t: t, idp: idp, store: store, dir: &fakeDirectory{}, audit: &fakeAudit{}, now: &now, logs: logs, mux: http.NewServeMux(),
-		admin: newClient(t, v.Addr, "default", v.AdminPassword),
+		admin: newClient(t, v.Addr, "default", v.AdminPassword), refusals: &fakeRefusals{},
 	}
 	f.h = &Handler{
 		Provider: NewProvider(ProviderConfig{
@@ -120,7 +142,7 @@ func newFlowHarness(t *testing.T) *flowHarness {
 		Store:        store,
 		LoginCookies: NewLoginCookies(sealer(t, PurposeLoginCookie, key("k1", 1)), clock),
 		Users:        f.dir, Audit: f.audit,
-		Log:       slog.New(slog.NewJSONHandler(logs, nil)),
+		Log: slog.New(slog.NewJSONHandler(logs, nil)), Refusals: f.refusals,
 		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock,
 	}
 	f.h.Authn = &Authenticator{Provider: f.h.Provider, Store: store, Audit: f.audit, Log: f.h.Log, Now: clock}
@@ -737,4 +759,47 @@ func TestSessionInfo(t *testing.T) {
 	if w := f.do(http.MethodGet, SessionPath, []*http.Cookie{sc}, nil); w.Code != http.StatusServiceUnavailable {
 		t.Errorf("store outage: status %d, want 503 (not 401: the user is not signed out)", w.Code)
 	}
+}
+
+// The audit trail starts once the state has matched. What anybody can send without a valid
+// login state costs a log line and a counter, not a database write.
+func TestCallbacksWithoutAValidStateAreCountedNotAudited(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	a := f.startLogin("")
+
+	for range 100 {
+		if w := f.do(http.MethodGet, CallbackPath+"?state=x&code=y", nil, nil); w.Code != http.StatusBadRequest {
+			t.Fatalf("status %d", w.Code)
+		}
+	}
+	for range 20 {
+		if w := f.doCallback(a, a.state+"x", "code"); w.Code != http.StatusBadRequest {
+			t.Fatalf("status %d", w.Code)
+		}
+	}
+	if got := f.audit.actions(); len(got) != 0 {
+		t.Fatalf("%d audit entries for unauthenticated callbacks, want 0: %v", len(got), got)
+	}
+	if f.refusals.get("no_login_state") != 100 || f.refusals.get("state_mismatch") != 20 {
+		t.Errorf("counts = %v", f.refusals.counts)
+	}
+
+	// With the state matched, a failure is audited (the browser did start this login).
+	b := f.startLogin("")
+	if w := f.callback(b, "a-code-the-provider-never-issued"); w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d", w.Code)
+	}
+	if got := f.audit.actions(); len(got) != 1 || got[0] != "auth.login_failed:code_exchange" {
+		t.Errorf("audit = %v", got)
+	}
+}
+
+func TestRefusalCounterBuildsOnAnyMeter(t *testing.T) {
+	t.Parallel()
+	c, err := NewRefusalCounter(metricnoop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("NewRefusalCounter: %v", err)
+	}
+	c.Count(context.Background(), "no_login_state") // must not panic
 }

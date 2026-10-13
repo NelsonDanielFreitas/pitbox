@@ -38,13 +38,15 @@ const (
 
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
-	Provider       *Provider
-	Authn          *Authenticator // for /auth/session
-	Store          *Store
-	LoginCookies   *LoginCookies
-	Users          UserDirectory
-	Audit          Auditor
-	Log            *slog.Logger
+	Provider     *Provider
+	Authn        *Authenticator // for /auth/session
+	Store        *Store
+	LoginCookies *LoginCookies
+	Users        UserDirectory
+	Audit        Auditor
+	Log          *slog.Logger
+	// Refusals counts callbacks refused before their state was validated (nil: not counted).
+	Refusals       RefusalCounter
 	PublicURL      string // origin the browser sees, without a trailing slash
 	ClientIPHeader string // "" = TCP peer
 	SessionMaxAge  time.Duration
@@ -105,13 +107,13 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	st, err := h.LoginCookies.Read(r)
 	h.LoginCookies.Clear(w) // always: a login attempt is single-use
 	if err != nil {
-		h.failLogin(ctx, r, "no_login_state", "")
+		h.refuseUnauthenticated(ctx, "no_login_state")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}
 	q := r.URL.Query()
 	if !st.MatchesState(q.Get("state")) {
-		h.failLogin(ctx, r, "state_mismatch", "")
+		h.refuseUnauthenticated(ctx, "state_mismatch")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}
@@ -283,6 +285,17 @@ func accessExpiry(now time.Time, tok *oauth2.Token) time.Time {
 }
 
 func (c idClaims) authTime() time.Time { return time.Unix(c.AuthTime, 0).UTC() }
+
+// refuseUnauthenticated records a callback that came without a valid login state: no cookie,
+// a tampered one, or a wrong state. Anyone on the Internet can send these, at any rate, so
+// they cost a log line and a counter, never a database write: the audit trail starts once the
+// state has matched, which is proof that the browser started this login.
+func (h *Handler) refuseUnauthenticated(ctx context.Context, reason string) {
+	h.Log.WarnContext(ctx, "login refused", slog.String("reason", reason))
+	if h.Refusals != nil {
+		h.Refusals.Count(ctx, reason)
+	}
+}
 
 func (h *Handler) failLogin(ctx context.Context, r *http.Request, reason, subject string) {
 	h.Log.WarnContext(ctx, "login refused", slog.String("reason", reason))

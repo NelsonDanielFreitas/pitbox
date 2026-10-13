@@ -25,6 +25,9 @@ type Options struct {
 	MaxStreamDuration time.Duration
 	// ClientIPHeader is "" for the TCP peer (see Audit).
 	ClientIPHeader string
+	// Auth authenticates the call (internal/platform/auth). Required: a chain without it
+	// would serve everything to everyone, so building one is an error.
+	Auth connect.ServerInterceptor
 }
 
 type step struct {
@@ -55,7 +58,8 @@ func Server(o Options) ([]connect.ServerInterceptor, error) {
 //  3. errors: inside recovery but outside everything else, so the per-RPC log line
 //     also covers the refusals of authentication, rate limiting and validation.
 //  4. limits: the deadline.
-//  5. (F1-03) authentication: before any payload work. Not here yet.
+//  5. authentication: before any payload work, and before rate limiting (which needs the
+//     user). Default deny: only procedures listed as public pass without a session.
 //  6. (F1-04b) rate limiting. Not here yet.
 //  7. validation: before the service implementation runs.
 //  8. audit: metadata for the use cases that write.
@@ -63,8 +67,8 @@ func Server(o Options) ([]connect.ServerInterceptor, error) {
 // The message size limit is not an interceptor: it belongs to the transport
 // (httpserver.MountRPC), which enforces it before and after decompression.
 func build(o Options) ([]step, error) {
-	if o.Logger == nil || o.TracerProvider == nil || o.Validator == nil {
-		return nil, errors.New("interceptors: Logger, TracerProvider and Validator are required")
+	if o.Logger == nil || o.TracerProvider == nil || o.Validator == nil || o.Auth == nil {
+		return nil, errors.New("interceptors: Logger, TracerProvider, Validator and Auth are required")
 	}
 	tracing, err := Tracing(o.TracerProvider)
 	if err != nil {
@@ -79,6 +83,7 @@ func build(o Options) ([]step, error) {
 		{"recovery", Recovery(o.Logger)},
 		{"errors", Errors(o.Logger)},
 		{"limits", limits},
+		{"authentication", o.Auth},
 		{"validation", Validation(o.Validator)},
 		{"audit", Audit(o.ClientIPHeader)},
 	}, nil

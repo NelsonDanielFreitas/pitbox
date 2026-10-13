@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
@@ -43,7 +44,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("setup telemetry: %w", err)
 	}
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider)
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, auth.DenyAll())
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

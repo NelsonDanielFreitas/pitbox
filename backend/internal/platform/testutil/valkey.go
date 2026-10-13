@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,29 +58,19 @@ func StartValkey(t testing.TB) Valkey {
 		})
 	}
 
-	name := "pitbox-test-valkey-" + randomHex(t)[:12]
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	run := append([]string{"run", "-d", "--rm", "--name", name, "--security-opt", "no-new-privileges",
-		"-p", "127.0.0.1::6379", image}, args...)
-	if out, err := exec.CommandContext(ctx, "docker", run...).CombinedOutput(); err != nil { //nolint:gosec // arguments come from the repository's compose file
-		t.Fatalf("docker run: %v: %s", err, redact(out, adminPw, appPw))
-	}
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() }) //nolint:noctx,gosec // cleanup of the container this test started
-
-	out, err := exec.CommandContext(ctx, "docker", "port", name, "6379/tcp").Output() //nolint:gosec // see above
-	if err != nil {
-		t.Fatalf("docker port: %v", err)
-	}
-	addr := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
-
-	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(200 * time.Millisecond) {
-		cmd := exec.CommandContext(ctx, "docker", "exec", "-e", "REDISCLI_AUTH="+adminPw, name, "valkey-cli", "ping") //nolint:gosec // see above
-		if o, err := cmd.Output(); err == nil && bytes.Contains(o, []byte("PONG")) {
+	// Docker Desktop (WSL) sometimes loses the host port forward when many containers start at
+	// once. Starts are limited to a few at a time and one that cannot be reached is replaced.
+	startSlots <- struct{}{}
+	defer func() { <-startSlots }()
+	var name, addr string
+	for attempt := 1; ; attempt++ {
+		name, addr = startContainer(t, image, args, adminPw, appPw)
+		if waitReachable(addr, 10*time.Second) {
 			break
 		}
-		if time.Now().After(deadline) {
-			t.Fatal("valkey did not become ready")
+		_ = exec.Command("docker", "rm", "-f", name).Run() //nolint:noctx,gosec // cleanup of the container this test started
+		if attempt == 3 {
+			t.Fatalf("valkey is not reachable from the host after %d attempts", attempt)
 		}
 	}
 	return Valkey{Addr: addr, Username: "pitbox_api", Password: appPw, AdminPassword: adminPw, container: name}
@@ -139,4 +130,49 @@ func redact(out []byte, secrets ...string) string {
 		s = strings.ReplaceAll(s, sec, "<redacted>")
 	}
 	return s
+}
+
+// startSlots bounds how many containers are being started at the same time.
+var startSlots = make(chan struct{}, 4)
+
+// startContainer runs the container, waits until the server answers inside it and returns its
+// name and host address. The container is removed when the test ends.
+func startContainer(t testing.TB, image string, args []string, adminPw, appPw string) (name, addr string) {
+	t.Helper()
+	name = "pitbox-test-valkey-" + randomHex(t)[:12]
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	run := append([]string{"run", "-d", "--rm", "--name", name, "--security-opt", "no-new-privileges",
+		"-p", "127.0.0.1::6379", image}, args...)
+	if out, err := exec.CommandContext(ctx, "docker", run...).CombinedOutput(); err != nil { //nolint:gosec // arguments come from the repository's compose file
+		t.Fatalf("docker run: %v: %s", err, redact(out, adminPw, appPw))
+	}
+	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", name).Run() }) //nolint:noctx,gosec // cleanup of the container this test started
+
+	out, err := exec.CommandContext(ctx, "docker", "port", name, "6379/tcp").Output() //nolint:gosec // see above
+	if err != nil {
+		t.Fatalf("docker port: %v", err)
+	}
+	addr = strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		cmd := exec.CommandContext(ctx, "docker", "exec", "-e", "REDISCLI_AUTH="+adminPw, name, "valkey-cli", "ping") //nolint:gosec // see above
+		if o, err := cmd.Output(); err == nil && bytes.Contains(o, []byte("PONG")) {
+			return name, addr
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("valkey did not become ready")
+		}
+	}
+}
+
+// waitReachable reports whether a TCP connection to addr works within the timeout.
+func waitReachable(addr string, timeout time.Duration) bool {
+	for deadline := time.Now().Add(timeout); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if conn, err := (&net.Dialer{Timeout: time.Second}).DialContext(context.Background(), "tcp", addr); err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
 }

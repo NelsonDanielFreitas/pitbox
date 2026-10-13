@@ -31,7 +31,7 @@ func requestMessages() []proto.Message {
 // newRPCServer builds the Connect server with the interceptor chain and lets the caller
 // register the services. No service is registered in production yet: the modules bring
 // theirs (F1-06 onwards).
-func newRPCServer(cfg config.Config, logger *slog.Logger, tp trace.TracerProvider, register ...func(*connect.Server)) (*connect.Server, error) {
+func newRPCServer(cfg config.Config, logger *slog.Logger, tp trace.TracerProvider, authn connect.ServerInterceptor, register ...func(*connect.Server)) (*connect.Server, error) {
 	validator, err := interceptors.NewValidator(requestMessages()...)
 	if err != nil {
 		return nil, err
@@ -43,6 +43,7 @@ func newRPCServer(cfg config.Config, logger *slog.Logger, tp trace.TracerProvide
 		MaxUnaryTimeout:   cfg.RPCMaxTimeout,
 		MaxStreamDuration: cfg.RPCStreamMaxDuration,
 		ClientIPHeader:    cfg.ClientIPHeader(),
+		Auth:              authn,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build interceptor chain: %w", err)

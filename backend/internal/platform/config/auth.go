@@ -32,7 +32,7 @@ var allowedAlgs = []string{"ES256", "ES384", "ES512", "RS256", "EdDSA"}
 // possible in local development), /auth/* answers 503 and every RPC is refused:
 // the service fails closed, it never serves unauthenticated.
 func (c Config) AuthConfigured() bool {
-	return c.OIDCClientID != "" && c.OIDCClientSecret != "" && c.AuthKeys != "" && c.ValkeyPassword != ""
+	return len(missingAuthSettings(c)) == 0
 }
 
 // AuthKeyring parses AuthKeys. The first key seals; all of them open.
@@ -101,6 +101,9 @@ func (c Config) validateAuth() []error {
 	if _, err := parseAuthKeys(c.AuthKeys); err != nil {
 		errs = append(errs, err)
 	}
+	if err := c.validateDatabaseURL(); err != nil {
+		errs = append(errs, err)
+	}
 
 	if c.SessionIdleTimeout < time.Minute {
 		errs = append(errs, errors.New("PITBOX_SESSION_IDLE_TIMEOUT: must be at least 1m"))
@@ -117,11 +120,14 @@ func (c Config) validateAuth() []error {
 	missing := missingAuthSettings(c)
 	if c.Env != EnvLocal && len(missing) > 0 {
 		errs = append(errs, fmt.Errorf("authentication is mandatory outside local; missing: %s", strings.Join(missing, ", ")))
-	} else if c.Env == EnvLocal && len(missing) > 0 && len(missing) < 4 {
+	} else if c.Env == EnvLocal && len(missing) > 0 && len(missing) < authSettingCount {
 		errs = append(errs, fmt.Errorf("authentication is partly configured; missing: %s", strings.Join(missing, ", ")))
 	}
 	return errs
 }
+
+// authSettingCount is how many settings missingAuthSettings checks.
+const authSettingCount = 5
 
 func missingAuthSettings(c Config) []string {
 	var missing []string
@@ -130,6 +136,7 @@ func missingAuthSettings(c Config) []string {
 		{"PITBOX_OIDC_CLIENT_SECRET", c.OIDCClientSecret},
 		{"PITBOX_AUTH_KEYS", c.AuthKeys},
 		{"PITBOX_VALKEY_PASSWORD", c.ValkeyPassword},
+		{"PITBOX_DATABASE_URL", c.DatabaseURL},
 	} {
 		if s.value == "" {
 			missing = append(missing, s.name)
@@ -165,6 +172,26 @@ func (c Config) validateOrigin(name, raw string, allowPath bool) error {
 		}
 	default:
 		return fmt.Errorf("%s: scheme must be https (or http for localhost)", name)
+	}
+	return nil
+}
+
+// validateDatabaseURL checks the shape of PITBOX_DATABASE_URL without ever echoing it: it
+// holds the password, and url.Parse puts the whole input in its error.
+func (c Config) validateDatabaseURL() error {
+	if c.DatabaseURL == "" {
+		return nil // "missing" is reported by the all-or-nothing rule
+	}
+	u, err := url.Parse(c.DatabaseURL)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" || u.User == nil || u.User.Username() == "" {
+		return errors.New("PITBOX_DATABASE_URL: not a postgres://user:password@host:port/database URL")
+	}
+	if c.Env != EnvLocal {
+		switch u.Query().Get("sslmode") {
+		case "require", "verify-ca", "verify-full":
+		default:
+			return errors.New("PITBOX_DATABASE_URL: outside local, sslmode must be require, verify-ca or verify-full")
+		}
 	}
 	return nil
 }

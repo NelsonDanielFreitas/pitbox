@@ -16,7 +16,7 @@ const testKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
 // hosted returns the settings every environment other than local needs: authentication is
 // mandatory there. The extras override or add to them.
 func hosted(env string, extra map[string]string) map[string]string {
-	m := map[string]string{
+	m := map[string]string{ //nolint:gosec // fake credentials
 		"PITBOX_ENV":                env,
 		"PITBOX_PUBLIC_URL":         "https://api.example.eu",
 		"PITBOX_OIDC_ISSUER":        "https://auth.example.eu",
@@ -25,6 +25,7 @@ func hosted(env string, extra map[string]string) map[string]string {
 		"PITBOX_AUTH_KEYS":          "k1:" + testKey,
 		"PITBOX_VALKEY_PASSWORD":    "valkey-password", //nolint:gosec // fake value
 		"PITBOX_VALKEY_TLS":         "true",
+		"PITBOX_DATABASE_URL":       "postgres://pitbox_api:db-password@db.example.eu:5432/pitbox?sslmode=verify-full", //nolint:gosec // fake value
 	}
 	for k, v := range extra {
 		m[k] = v
@@ -33,11 +34,12 @@ func hosted(env string, extra map[string]string) map[string]string {
 }
 
 func localAuth(extra map[string]string) map[string]string {
-	m := map[string]string{
+	m := map[string]string{ //nolint:gosec // fake credentials
 		"PITBOX_OIDC_CLIENT_ID":     "client-id",
 		"PITBOX_OIDC_CLIENT_SECRET": "client-secret", //nolint:gosec // fake value
 		"PITBOX_AUTH_KEYS":          "k1:" + testKey,
-		"PITBOX_VALKEY_PASSWORD":    "valkey-password", //nolint:gosec // fake value
+		"PITBOX_VALKEY_PASSWORD":    "valkey-password",                                         //nolint:gosec // fake value
+		"PITBOX_DATABASE_URL":       "postgres://pitbox_api:db-password@127.0.0.1:5432/pitbox", //nolint:gosec // fake value
 	}
 	for k, v := range extra {
 		m[k] = v
@@ -71,6 +73,8 @@ func TestLoadFromDefaults(t *testing.T) {
 
 // Go note: a table-driven test keeps one slice of cases and runs each as a
 // subtest, so a failure names the exact case and the others still run.
+//
+//nolint:gosec // the table has fake credentials in URLs: the test proves they are accepted or refused, never used
 func TestLoadFrom(t *testing.T) {
 	t.Parallel()
 
@@ -131,7 +135,7 @@ func TestLoadFrom(t *testing.T) {
 		{name: "local half configured", env: map[string]string{"PITBOX_OIDC_CLIENT_ID": "x"}, wantErr: "partly configured"},
 		{name: "production without authentication", env: map[string]string{
 			"PITBOX_ENV": "production", "PITBOX_PUBLIC_URL": "https://api.example.eu", "PITBOX_OIDC_ISSUER": "https://auth.example.eu", "PITBOX_VALKEY_TLS": "true",
-		}, wantErr: "mandatory outside local"},
+		}, wantErr: "PITBOX_DATABASE_URL"},
 		{name: "production without valkey tls", env: hosted("production", map[string]string{"PITBOX_VALKEY_TLS": "false"}), wantErr: "PITBOX_VALKEY_TLS"},
 		{name: "production with the default http public url", env: hosted("production", map[string]string{"PITBOX_PUBLIC_URL": "http://localhost:8081"}), wantErr: "PITBOX_PUBLIC_URL"},
 		{name: "production with an http issuer", env: hosted("production", map[string]string{"PITBOX_OIDC_ISSUER": "http://auth.example.eu"}), wantErr: "PITBOX_OIDC_ISSUER"},
@@ -152,6 +156,13 @@ func TestLoadFrom(t *testing.T) {
 		{name: "key without kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": testKey}), wantErr: "<kid>:<base64>"},
 		{name: "key with an upper case kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "K1:" + testKey}), wantErr: "<kid>:<base64>"},
 		{name: "repeated kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k1:" + testKey + ",k1:" + testKey}), wantErr: "repeats the kid"},
+		{name: "database url without ssl outside local", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox"}), wantErr: "sslmode"}, //nolint:gosec // fake credentials
+		{name: "database url with sslmode disable outside local", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=disable"}), wantErr: "sslmode"},
+		{name: "database url with sslmode require", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://u:p@db.example.eu/pitbox?sslmode=require"})},
+		{name: "database url not a url", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "host=db user=u password=secret"}), wantErr: "PITBOX_DATABASE_URL"},
+		{name: "database url with another scheme", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "mysql://u:p@db.example.eu/x"}), wantErr: "PITBOX_DATABASE_URL"},
+		{name: "database url without a user", env: hosted("production", map[string]string{"PITBOX_DATABASE_URL": "postgres://db.example.eu/x?sslmode=require"}), wantErr: "PITBOX_DATABASE_URL"},
+		{name: "local database url may use plain connections", env: localAuth(map[string]string{"PITBOX_DATABASE_URL": "postgres://pitbox_api:p@127.0.0.1:5432/pitbox?sslmode=disable"})},
 		{name: "session idle below a minute", env: hosted("production", map[string]string{"PITBOX_SESSION_IDLE_TIMEOUT": "30s"}), wantErr: "PITBOX_SESSION_IDLE_TIMEOUT"},
 		{name: "session idle above absolute", env: hosted("production", map[string]string{"PITBOX_SESSION_IDLE_TIMEOUT": "100h", "PITBOX_SESSION_ABSOLUTE_TIMEOUT": "50h"}), wantErr: "must not exceed"},
 		{name: "session absolute above the zitadel limit", env: hosted("production", map[string]string{"PITBOX_SESSION_ABSOLUTE_TIMEOUT": "721h"}), wantErr: "PITBOX_SESSION_ABSOLUTE_TIMEOUT"},
@@ -267,15 +278,19 @@ func TestAuthKeyring(t *testing.T) {
 // The secrets must stay out of every way a Config can be printed, and out of the errors
 // about them. This test fails if a new secret field is logged or formatted on purpose or
 // by accident.
+//
+//nolint:gosec // fake credentials in URLs: the test proves they never leak
 func TestSecretsNeverLeak(t *testing.T) {
 	t.Parallel()
 
 	const (
-		clientSecret = "very-secret-client-value" //nolint:gosec // fake value
-		valkeyPass   = "very-secret-valkey-value" //nolint:gosec // fake value
+		dbPassword   = "very-secret-database-value" //nolint:gosec // fake value
+		clientSecret = "very-secret-client-value"   //nolint:gosec // fake value
+		valkeyPass   = "very-secret-valkey-value"   //nolint:gosec // fake value
 	)
 	c, err := LoadFrom(hosted("production", map[string]string{
 		"PITBOX_OIDC_CLIENT_SECRET": clientSecret, "PITBOX_VALKEY_PASSWORD": valkeyPass,
+		"PITBOX_DATABASE_URL": "postgres://pitbox_api:" + dbPassword + "@db.example.eu/pitbox?sslmode=require",
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
@@ -286,11 +301,17 @@ func TestSecretsNeverLeak(t *testing.T) {
 		buf.String(), fmt.Sprintf("%v", c), fmt.Sprintf("%+v", c), fmt.Sprintf("%#v", c), fmt.Sprint(c), c.String(),
 	}
 	for _, out := range outputs {
-		for _, secret := range []string{clientSecret, valkeyPass, testKey, "client-id"} {
+		for _, secret := range []string{clientSecret, valkeyPass, dbPassword, testKey, "client-id"} {
 			if strings.Contains(out, secret) {
 				t.Errorf("output leaks %q: %s", secret, out)
 			}
 		}
+	}
+
+	// The error for a bad database URL must not echo it (it holds the password).
+	_, err = LoadFrom(hosted("production", map[string]string{"PITBOX_DATABASE_URL": "mysql://u:very-secret-looking-pw@db/x"}))
+	if err == nil || strings.Contains(err.Error(), "very-secret-looking-pw") {
+		t.Errorf("error for a bad database URL: %v", err)
 	}
 
 	// The error for a bad key must not echo the key.

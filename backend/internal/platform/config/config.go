@@ -101,6 +101,10 @@ type Config struct {
 	ValkeyPassword string `env:"PITBOX_VALKEY_PASSWORD"`
 	ValkeyTLS      bool   `env:"PITBOX_VALKEY_TLS" envDefault:"false"`
 
+	// DatabaseURL is the PostgreSQL connection string of the application role (pitbox_api,
+	// never the owner or the migrator). It carries the password: a secret.
+	DatabaseURL string `env:"PITBOX_DATABASE_URL"`
+
 	// AuthKeys are the master keys for sealing cookies and refresh tokens, as
 	// "kid:base64,kid:base64". The first one seals; the others only open (rotation).
 	// Read them with AuthKeyring.

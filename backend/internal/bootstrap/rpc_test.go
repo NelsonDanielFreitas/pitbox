@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -546,14 +547,7 @@ func TestReflectionIsLocalOnly(t *testing.T) {
 			env := map[string]string{"PITBOX_ENV": tc.env}
 			if tc.env != "local" {
 				// Authentication is mandatory outside local: a complete (fake) setup.
-				for k, v := range map[string]string{
-					"PITBOX_PUBLIC_URL": "https://api.example.eu", "PITBOX_OIDC_ISSUER": "https://auth.example.eu",
-					"PITBOX_OIDC_CLIENT_ID": "client-id", "PITBOX_OIDC_CLIENT_SECRET": "client-secret", //nolint:gosec // fake value
-					"PITBOX_AUTH_KEYS":       "k1:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
-					"PITBOX_VALKEY_PASSWORD": "valkey-password", "PITBOX_VALKEY_TLS": "true", //nolint:gosec // fake value
-				} {
-					env[k] = v
-				}
+				maps.Copy(env, hostedAuthEnv())
 			}
 			h := newHarness(t, env, &fakeTeams{})
 

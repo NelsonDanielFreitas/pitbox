@@ -42,3 +42,20 @@ func (b *syncBuffer) records(t *testing.T) []map[string]any {
 	}
 	return out
 }
+
+// hostedAuthEnv is the authentication configuration every environment other than local
+// needs, with fake values.
+//
+//nolint:gosec // fake credentials
+func hostedAuthEnv() map[string]string {
+	return map[string]string{
+		"PITBOX_PUBLIC_URL":         "https://api.example.eu",
+		"PITBOX_OIDC_ISSUER":        "https://auth.example.eu",
+		"PITBOX_OIDC_CLIENT_ID":     "client-id",
+		"PITBOX_OIDC_CLIENT_SECRET": "client-secret",
+		"PITBOX_AUTH_KEYS":          "k1:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+		"PITBOX_VALKEY_PASSWORD":    "valkey-password",
+		"PITBOX_VALKEY_TLS":         "true",
+		"PITBOX_DATABASE_URL":       "postgres://pitbox_api:db-password@db.example.eu/pitbox?sslmode=require",
+	}
+}

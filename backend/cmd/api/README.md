@@ -34,13 +34,14 @@ make smoke-api     # prova ponta a ponta: /healthz, trace no Jaeger e paragem li
 | `PITBOX_VALKEY_USERNAME` | `pitbox_api` | Utilizador ACL limitado a `pitbox:sess:*`, `pitbox:lock:*` e `pitbox:rl:*`; nunca o `default` |
 | `PITBOX_VALKEY_PASSWORD` | (vazio) | **Segredo** |
 | `PITBOX_VALKEY_TLS` | `false` | Obrigatório fora de `local` |
+| `PITBOX_DATABASE_URL` | (vazio) | `postgres://pitbox_api:<palavra-passe>@host:5432/pitbox`; o papel da aplicação (nunca o dono nem o migrador). Fora de `local`, `sslmode=require`, `verify-ca` ou `verify-full`. **Segredo** |
 | `PITBOX_AUTH_KEYS` | (vazio) | Chaves mestras para cifrar cookies e refresh tokens: `kid:base64[,kid:base64]`, pelo menos 32 bytes cada (`openssl rand -base64 32`). A primeira cifra; as outras só decifram (rotação). **Segredo** |
 | `PITBOX_SESSION_IDLE_TIMEOUT` | `168h` | Inatividade máxima de uma sessão web (mínimo 1 min) |
 | `PITBOX_SESSION_ABSOLUTE_TIMEOUT` | `720h` | Duração máxima; não pode passar o limite do refresh token no Zitadel (720 h) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (vazio) | Sem endpoint, os traces ficam desligados. `http://` só com `PITBOX_ENV=local` |
 | `OTEL_SERVICE_NAME`, `OTEL_TRACES_SAMPLER`, ... | | Variáveis padrão do OpenTelemetry, lidas pelo SDK |
 
-Fora de `local` a autenticação é obrigatória (`PITBOX_OIDC_CLIENT_ID`, `PITBOX_OIDC_CLIENT_SECRET`, `PITBOX_AUTH_KEYS` e `PITBOX_VALKEY_PASSWORD`); em `local` pode faltar toda, mas não só parte. Sem ela o serviço recusa tudo (nunca serve sem autenticar). A configuração inválida faz o processo sair com erro no arranque (fail closed); os erros sobre segredos nunca incluem o valor. No log só aparecem os campos de uma lista permitida (`config.Config.LogValue`).
+Fora de `local` a autenticação é obrigatória (`PITBOX_OIDC_CLIENT_ID`, `PITBOX_OIDC_CLIENT_SECRET`, `PITBOX_AUTH_KEYS`, `PITBOX_VALKEY_PASSWORD` e `PITBOX_DATABASE_URL`); em `local` pode faltar toda, mas não só parte. Sem ela o serviço recusa tudo (nunca serve sem autenticar). A configuração inválida faz o processo sair com erro no arranque (fail closed); os erros sobre segredos nunca incluem o valor. No log só aparecem os campos de uma lista permitida (`config.Config.LogValue`).
 
 ## Endpoints
 

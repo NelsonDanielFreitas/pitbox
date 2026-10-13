@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -27,6 +28,7 @@ type fakeIdP struct {
 	mu       sync.Mutex
 	codes    map[string]codeGrant // code -> what it was issued for
 	refresh  map[string]string    // refresh token -> subject
+	access   map[string]string    // access token -> subject
 	revoked  []string
 	refreshN atomic.Int32 // refresh grants served
 	tokenN   atomic.Int32 // token endpoint calls (any grant)
@@ -41,6 +43,9 @@ type fakeIdP struct {
 	down                   atomic.Bool   // discovery answers 503
 	revokeStatus           int           // when set, /revoke answers with it
 	mutateClaims           func(map[string]any)
+	mutateUserinfo         func(map[string]any) // changes the userinfo response
+	userinfoStatus         int                  // when set, /userinfo answers with it
+	userinfoCalls          atomic.Int32
 	signWith               func(header map[string]any, payload map[string]any) string // override the signer
 	idTokenAlg             string
 }
@@ -56,7 +61,7 @@ func newFakeIdP(t *testing.T, now func() time.Time) *fakeIdP {
 		t.Fatalf("key: %v", err)
 	}
 	f := &fakeIdP{
-		t: t, key: key, kid: "kid-1", now: now, codes: map[string]codeGrant{}, refresh: map[string]string{},
+		t: t, key: key, kid: "kid-1", now: now, codes: map[string]codeGrant{}, refresh: map[string]string{}, access: map[string]string{},
 		clientID: "pitbox-client", clientSecret: "pitbox-secret", idTokenAlg: "ES256",
 	}
 	mux := http.NewServeMux()
@@ -64,6 +69,7 @@ func newFakeIdP(t *testing.T, now func() time.Time) *fakeIdP {
 	mux.HandleFunc("/keys", f.keys)
 	mux.HandleFunc("/token", f.token)
 	mux.HandleFunc("/revoke", f.revoke)
+	mux.HandleFunc("/userinfo", f.userinfo)
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
@@ -76,7 +82,7 @@ func (f *fakeIdP) discovery(w http.ResponseWriter, _ *http.Request) {
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"issuer": f.srv.URL, "authorization_endpoint": f.srv.URL + "/authorize", "token_endpoint": f.srv.URL + "/token",
-		"jwks_uri": f.srv.URL + "/keys", "revocation_endpoint": f.srv.URL + "/revoke", "end_session_endpoint": f.srv.URL + "/end_session",
+		"jwks_uri": f.srv.URL + "/keys", "userinfo_endpoint": f.srv.URL + "/userinfo", "revocation_endpoint": f.srv.URL + "/revoke", "end_session_endpoint": f.srv.URL + "/end_session",
 		"id_token_signing_alg_values_supported": []string{"ES256"},
 	})
 }
@@ -159,15 +165,40 @@ func writeErr(w http.ResponseWriter, code int, e string) {
 }
 
 func (f *fakeIdP) respond(w http.ResponseWriter, subject, nonce string) {
-	rt := "rt-" + randomHexT(f.t)
+	rt, at := "rt-"+randomHexT(f.t), "at-"+randomHexT(f.t)
 	f.mu.Lock()
 	f.refresh[rt] = subject
+	f.access[at] = subject
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"access_token": "at-" + randomHexT(f.t), "token_type": "Bearer", "expires_in": 600,
+		"access_token": at, "token_type": "Bearer", "expires_in": 600,
 		"refresh_token": rt, "id_token": f.idToken(subject, nonce),
 	})
+}
+
+// userinfo answers for the subject the access token was issued to, and only with a token it issued.
+func (f *fakeIdP) userinfo(w http.ResponseWriter, r *http.Request) {
+	f.userinfoCalls.Add(1)
+	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	f.mu.Lock()
+	sub, ok := f.access[tok]
+	f.mu.Unlock()
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if f.userinfoStatus != 0 {
+		w.WriteHeader(f.userinfoStatus)
+		_, _ = w.Write([]byte("internal detail that must never be logged"))
+		return
+	}
+	c := map[string]any{"sub": sub, "email": sub + "@example.eu", "email_verified": true, "name": "Name " + sub}
+	if f.mutateUserinfo != nil {
+		f.mutateUserinfo(c)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(c)
 }
 
 func (f *fakeIdP) revoke(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +225,7 @@ func (f *fakeIdP) claims(subject, nonce string) map[string]any {
 		"iss": f.srv.URL, "sub": subject, "aud": []string{f.clientID}, "iat": now.Unix(),
 		"exp": now.Add(5 * time.Minute).Unix(), "auth_time": now.Add(-time.Minute).Unix(),
 		"amr": []string{"pwd", "mfa"}, "sid": "sid-" + subject,
-		"email": subject + "@example.eu", "email_verified": true, "name": "Name " + subject,
+		// No email or name: they come from the userinfo endpoint (ADR 0013).
 	}
 	if nonce != "" {
 		c["nonce"] = nonce

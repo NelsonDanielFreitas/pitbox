@@ -25,6 +25,7 @@ O `pitbox-api` é um cliente OIDC confidencial (Authorization Code + PKCE S256, 
 
 - Algoritmo **ES256** (web keys ECDSA P-256 configuradas no primeiro arranque, ver o runbook); lista aceite em `PITBOX_OIDC_ALLOWED_ALGS`, por omissão `ES256` (agilidade criptográfica).
 - Tempos da instância: access token 10 min, ID token 5 min, refresh token 168 h de inatividade e 720 h absolutas. As quatro são definidas em conjunto, senão o arranque do Zitadel falha.
+- **O ID token não leva dados pessoais.** Vai no `id_token_hint` do redirect de logout (histórico do browser, logs de proxy), por isso a app é registada sem `idTokenUserinfoAssertion`. O email, o `email_verified` e o nome obtêm-se no callback pelo endpoint `userinfo` (`go-oidc` `Provider.UserInfo`), do lado do servidor, com o access token recebido na troca do código. O `sub` do `userinfo` tem de ser igual ao do ID token (OIDC Core 5.3.2); se não for, o login é recusado. Uma falha do `userinfo` é 503 (o IdP está com problemas), não 403.
 - ID token validado com `oidc.IDTokenVerifier` (`SupportedSigningAlgs` da configuração, `ClientID`, issuer) e `nonce` verificado à mão. Tolerâncias reais do `go-oidc`: `exp` sem tolerância, `nbf` com 5 min fixos.
 - Descoberta do provider **preguiçosa** com novas tentativas: o arranque do `pitbox-api` não depende do Zitadel; `/auth/login` responde 503 até haver provider; `/healthz` não é afetado.
 - Utilizador novo só entra com `email_verified = true`.

@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -506,15 +507,6 @@ func TestIDTokenValidation(t *testing.T) {
 		{"unknown kid", func(f *flowHarness, _ string) {
 			f.idp.signWith = func(h, p map[string]any) string { h["kid"] = "other"; return f.idp.sign(h, p) }
 		}, "id_token_invalid"},
-		{"email not verified", func(f *flowHarness, _ string) {
-			f.idp.mutateClaims = func(c map[string]any) { c["email_verified"] = false }
-		}, "email_not_verified"},
-		{"email_verified missing", func(f *flowHarness, _ string) {
-			f.idp.mutateClaims = func(c map[string]any) { delete(c, "email_verified") }
-		}, "email_not_verified"},
-		{"no email", func(f *flowHarness, _ string) {
-			f.idp.mutateClaims = func(c map[string]any) { delete(c, "email") }
-		}, "no_email"},
 		{"no subject", func(f *flowHarness, _ string) {
 			f.idp.mutateClaims = func(c map[string]any) { c["sub"] = "" }
 		}, "claims_invalid"},
@@ -537,6 +529,75 @@ func TestIDTokenValidation(t *testing.T) {
 				t.Errorf("audit = %v, want auth.login_failed:%s", got, tc.reason)
 			}
 		})
+	}
+}
+
+// Email and name come from the userinfo endpoint, with the access token, and the "sub" there must
+// be the ID token's.
+func TestUserInfoValidation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		setup  func(f *flowHarness)
+		status int
+		reason string
+	}{
+		{"email not verified", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { c["email_verified"] = false } }, 403, "email_not_verified"},
+		{"email_verified missing", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { delete(c, "email_verified") } }, 403, "email_not_verified"},
+		{"no email", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { delete(c, "email") } }, 403, "no_email"},
+		{"a different subject (OIDC Core 5.3.2)", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { c["sub"] = "someone-else" } }, 403, "userinfo_sub_mismatch"},
+		{"no subject", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { delete(c, "sub") } }, 403, "userinfo_sub_mismatch"},
+		{"the endpoint fails", func(f *flowHarness) { f.idp.userinfoStatus = http.StatusInternalServerError }, 503, "userinfo_failed"},
+		{"the endpoint refuses the token", func(f *flowHarness) { f.idp.userinfoStatus = http.StatusUnauthorized }, 503, "userinfo_failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFlowHarness(t)
+			a := f.startLogin("")
+			tc.setup(f)
+			w := f.callback(a, f.idp.issueCode("ana", a.nonce, a.challenge))
+
+			want := msgNotAllowed
+			if tc.status == 503 {
+				want = msgUnavailable
+			}
+			if w.Code != tc.status || w.Body.String() != want+"\n" {
+				t.Fatalf("status %d body %q", w.Code, w.Body.String())
+			}
+			if cookieNamed(w, SessionCookieName) != nil || f.sessions() != 0 || f.dir.calls != 0 {
+				t.Error("a refused profile must not reach the directory or create a session")
+			}
+			if got := f.audit.actions(); len(got) != 1 || got[0] != "auth.login_failed:"+tc.reason {
+				t.Errorf("audit = %v, want auth.login_failed:%s", got, tc.reason)
+			}
+			if strings.Contains(f.logs.String(), "internal detail") {
+				t.Error("the userinfo response body reached the log")
+			}
+		})
+	}
+}
+
+func TestTheProfileComesFromUserInfoAndTheIDTokenCarriesNone(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	a := f.startLogin("")
+	w := f.callback(a, f.idp.issueCode("ana", a.nonce, a.challenge))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	if f.idp.userinfoCalls.Load() != 1 {
+		t.Errorf("userinfo calls = %d, want 1", f.idp.userinfoCalls.Load())
+	}
+	if f.dir.last.email != "ana@example.eu" || f.dir.last.name != "Name ana" {
+		t.Errorf("directory got %+v", f.dir.last)
+	}
+	sess, _ := f.store.Get(context.Background(), cookieNamed(w, SessionCookieName).Value)
+	payload, _ := base64.RawURLEncoding.DecodeString(strings.Split(sess.IDToken, ".")[1])
+	for _, personal := range []string{"email", "ana@example.eu", `"name"`, "Name ana"} {
+		if strings.Contains(string(payload), personal) {
+			t.Errorf("the stored ID token (the id_token_hint) contains %q", personal)
+		}
 	}
 }
 

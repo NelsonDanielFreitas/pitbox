@@ -213,6 +213,9 @@ class PureTest(unittest.TestCase):
         want = {"applicationType": "OIDC_APP_TYPE_WEB", "accessTokenType": "OIDC_TOKEN_TYPE_JWT"}
         self.assertEqual(prov.config_drift({}, want), ["accessTokenType"])
 
+    def test_the_id_token_carries_no_personal_data(self):
+        self.assertIs(prov.desired_oidc_config("http://localhost:8081")["idTokenUserinfoAssertion"], False)
+
     def test_http_redirects_need_development_mode(self):
         self.assertTrue(prov.desired_oidc_config("http://localhost:8081")["developmentMode"])
         self.assertFalse(prov.desired_oidc_config("https://api.example.com")["developmentMode"])

@@ -145,6 +145,21 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
 	}
+	// Email and name come from the userinfo endpoint, called from here with the access token,
+	// not from the ID token: the ID token is the one that goes to the browser as id_token_hint
+	// at logout (history, logs), so it carries no personal data (ADR 0013).
+	profile, err := h.userInfo(exCtx, prov, tok, claims.Subject)
+	if err != nil {
+		reason := err.Error()
+		h.failLogin(ctx, r, reason, claims.Subject)
+		if reason == "userinfo_failed" {
+			fail(w, http.StatusServiceUnavailable, msgUnavailable)
+			return
+		}
+		fail(w, http.StatusForbidden, msgNotAllowed)
+		return
+	}
+	claims.Email, claims.Name = profile.Email, profile.Name
 	if tok.RefreshToken == "" {
 		h.failLogin(ctx, r, "no_refresh_token", "")
 		fail(w, http.StatusBadGateway, msgUnavailable)
@@ -221,16 +236,20 @@ func (h *Handler) landing(w http.ResponseWriter, returnTo string) {
 		html.EscapeString(target), html.EscapeString(target))
 }
 
+// idClaims is what the login keeps of the ID token and of the userinfo response. The
+// ID token has no email or name: Email and Name are filled from userinfo.
 type idClaims struct {
-	Subject       string   `json:"sub"`
-	Email         string   `json:"email"`
-	EmailVerified bool     `json:"email_verified"`
-	Name          string   `json:"name"`
-	SessionID     string   `json:"sid"`
-	AuthTime      int64    `json:"auth_time"`
-	AMR           []string `json:"amr"`
-	Raw           string   `json:"-"`
+	Subject   string   `json:"sub"`
+	SessionID string   `json:"sid"`
+	AuthTime  int64    `json:"auth_time"`
+	AMR       []string `json:"amr"`
+	Raw       string   `json:"-"`
+	Email     string   `json:"-"`
+	Name      string   `json:"-"`
 }
+
+// userProfile is the part of the userinfo response the login uses.
+type userProfile struct{ Email, Name string }
 
 // verifyIDToken checks the ID token (signature, issuer, audience, expiry and the algorithm
 // list are go-oidc's job), then the nonce, the at_hash if present, and what a login needs.
@@ -257,12 +276,6 @@ func (h *Handler) verifyIDToken(ctx context.Context, prov *ready, tok *oauth2.To
 		return idClaims{}, errors.New("claims_invalid")
 	}
 	c.Subject, c.Raw = idt.Subject, raw
-	if c.Email == "" {
-		return idClaims{}, errors.New("no_email")
-	}
-	if !c.EmailVerified {
-		return idClaims{}, errors.New("email_not_verified")
-	}
 	if c.AuthTime == 0 {
 		// Zitadel always sends it; without it the best honest value is "now", never older.
 		c.AuthTime = h.Now().Unix()
@@ -282,6 +295,33 @@ func accessExpiry(now time.Time, tok *oauth2.Token) time.Time {
 	default:
 		return now // unknown: refresh at the next request
 	}
+}
+
+// userInfo asks the provider for the user's email and name with the access token we received
+// in the code exchange. The "sub" must be the ID token's (OIDC Core 5.3.2): otherwise the
+// response belongs to someone else and the login is refused. The error text is a fixed reason
+// code; the library's own errors can carry the response body, so they are never passed on.
+func (h *Handler) userInfo(ctx context.Context, prov *ready, tok *oauth2.Token, idSubject string) (userProfile, error) {
+	ui, err := prov.provider.UserInfo(ctx, oauth2.StaticTokenSource(tok))
+	if err != nil {
+		return userProfile{}, errors.New("userinfo_failed")
+	}
+	if ui.Subject == "" || subtle.ConstantTimeCompare([]byte(ui.Subject), []byte(idSubject)) != 1 {
+		return userProfile{}, errors.New("userinfo_sub_mismatch")
+	}
+	if ui.Email == "" {
+		return userProfile{}, errors.New("no_email")
+	}
+	if !ui.EmailVerified {
+		return userProfile{}, errors.New("email_not_verified")
+	}
+	var extra struct {
+		Name string `json:"name"`
+	}
+	if err := ui.Claims(&extra); err != nil {
+		return userProfile{}, errors.New("userinfo_failed")
+	}
+	return userProfile{Email: ui.Email, Name: extra.Name}, nil
 }
 
 func (c idClaims) authTime() time.Time { return time.Unix(c.AuthTime, 0).UTC() }

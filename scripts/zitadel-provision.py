@@ -81,7 +81,9 @@ def desired_oidc_config(public_url: str) -> dict:
         "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
         "accessTokenRoleAssertion": False,
         "idTokenRoleAssertion": False,
-        "idTokenUserinfoAssertion": True,  # email, email_verified e nome no ID token
+        # O ID token não leva email nem nome: vai no id_token_hint do redirect de logout (histórico do
+        # browser, logs). O servidor obtém-nos do endpoint userinfo com o access token (ADR 0013).
+        "idTokenUserinfoAssertion": False,
         # http só é aceite em modo de desenvolvimento; um URL https não precisa dele.
         "developmentMode": base.startswith("http://"),
     }

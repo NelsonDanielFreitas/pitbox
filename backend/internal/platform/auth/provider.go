@@ -32,6 +32,7 @@ type ProviderConfig struct {
 
 // ready is the result of a successful discovery.
 type ready struct {
+	provider   *oidc.Provider // for the userinfo endpoint
 	oauth      oauth2.Config
 	verifier   *oidc.IDTokenVerifier
 	endSession string
@@ -116,6 +117,7 @@ func (p *Provider) discover(ctx context.Context) (*ready, error) {
 	endpoint := prov.Endpoint()
 	endpoint.AuthStyle = oauth2.AuthStyleInHeader // client_secret_basic
 	return &ready{
+		provider: prov,
 		oauth: oauth2.Config{
 			ClientID: p.cfg.ClientID, ClientSecret: p.cfg.ClientSecret, Endpoint: endpoint,
 			RedirectURL: p.cfg.RedirectURL, Scopes: []string{oidc.ScopeOpenID, "profile", "email", oidc.ScopeOfflineAccess},

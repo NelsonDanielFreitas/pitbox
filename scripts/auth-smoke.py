@@ -19,6 +19,7 @@ Faz o que o browser faria, passo a passo, e confirma cada passo:
 Usa o PAT do login-client (só sessões) para o login e o do provisionamento só para criar e apagar
 o utilizador de teste. Nenhum PAT nem palavra-passe é impresso. Só biblioteca padrão.
 """
+import base64
 import http.client
 import importlib.util
 import json
@@ -214,6 +215,11 @@ def main() -> int:
         check(lo[0] == 303 and lo[1]["Location"].startswith(zitadel + "/oidc/v1/end_session?"), "logout -> 303 para o end_session do Zitadel")
         lq = urllib.parse.parse_qs(urllib.parse.urlparse(lo[1]["Location"]).query)
         check("id_token_hint" in lq and lq["post_logout_redirect_uri"] == [API + "/auth/signed-out"], "id_token_hint e post_logout_redirect_uri")
+        hint = lq["id_token_hint"][0].split(".")
+        claims = json.loads(base64.urlsafe_b64decode(hint[1] + "=" * (-len(hint[1]) % 4)))
+        check(not {"email", "email_verified", "name", "given_name", "family_name", "preferred_username"} & set(claims),
+              "o id_token_hint (vai para o histórico do browser) não leva email nem nome")
+        check("sub" in claims and "amr" in claims and "auth_time" in claims, "mas leva sub, amr e auth_time (a sessão precisa deles)")
         es = http_call("GET", lo[1]["Location"])
         check(es[0] in (200, 302, 303), "o Zitadel aceita o end_session")
         check(whoami(session_cookie, 401)[0][0] == 401, "/auth/session -> 401 depois do logout")

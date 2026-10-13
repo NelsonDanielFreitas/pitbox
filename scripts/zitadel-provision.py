@@ -184,8 +184,8 @@ class Zitadel:
         return json.loads(raw) if raw else {}
 
 
-def read_pat_from_container() -> str:
-    """Lê o PAT do volume do zitadel-api para memória (docker cp para stdout, formato tar)."""
+def read_pat_from_container(path: str = PAT_IN_CONTAINER) -> str:
+    """Lê um PAT de um ficheiro do contentor zitadel-api para memória (docker cp para stdout, formato tar)."""
     ids = subprocess.run(
         ["docker", "ps", "-q", "--filter", "label=com.docker.compose.project=pitbox",
          "--filter", "label=com.docker.compose.service=zitadel-api"],
@@ -193,7 +193,7 @@ def read_pat_from_container() -> str:
     ).stdout.split()
     if len(ids) != 1:
         raise ProvisionError("contentor zitadel-api não encontrado (corre 'make up')")
-    cp = subprocess.run(["docker", "cp", f"{ids[0]}:{PAT_IN_CONTAINER}", "-"], capture_output=True, check=False)
+    cp = subprocess.run(["docker", "cp", f"{ids[0]}:{path}", "-"], capture_output=True, check=False)
     if cp.returncode != 0:
         raise ProvisionError(
             "não há PAT do utilizador de provisionamento: o Zitadel só o cria no primeiro arranque "

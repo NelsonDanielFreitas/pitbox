@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Corre o pitbox-api local (127.0.0.1:8081) com traces para o Jaeger.
+#
+# Se `make zitadel-provision` já correu, liga também o login: lê do deploy/compose/.env SÓ as
+# chaves de que a API precisa (nunca exporta o ficheiro inteiro: tem as palavras-passe do
+# Postgres, do Zitadel, ...), e dá-lhe a palavra-passe do utilizador ACL do Valkey e a da base
+# de dados como pitbox_api. Sem essas chaves, a API arranca sem autenticação (recusa tudo).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+ENV_FILE=deploy/compose/.env
+
+get() { grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true; }
+
+export PITBOX_ENV=local
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:${OTLP_HTTP_PORT:-4318}"
+
+if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PITBOX_OIDC_CLIENT_SECRET)" ]; then
+  export PITBOX_OIDC_CLIENT_ID="$(get PITBOX_OIDC_CLIENT_ID)"
+  export PITBOX_OIDC_CLIENT_SECRET="$(get PITBOX_OIDC_CLIENT_SECRET)"
+  export PITBOX_AUTH_KEYS="$(get PITBOX_AUTH_KEYS)"
+  export PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"; PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
+  export PITBOX_OIDC_ISSUER="http://localhost:$(get ZITADEL_PORT)"; PITBOX_OIDC_ISSUER="${PITBOX_OIDC_ISSUER%:}"
+  [ "$PITBOX_OIDC_ISSUER" = "http://localhost" ] && PITBOX_OIDC_ISSUER="http://localhost:8080"
+  export PITBOX_VALKEY_ADDR="127.0.0.1:$(get VALKEY_PORT)"; [ "$PITBOX_VALKEY_ADDR" = "127.0.0.1:" ] && PITBOX_VALKEY_ADDR="127.0.0.1:6379"
+  export PITBOX_VALKEY_PASSWORD="$(get VALKEY_API_PASSWORD)"
+  port="$(get POSTGRES_PORT)"; port="${port:-5432}"
+  export PITBOX_DATABASE_URL="postgres://pitbox_api:$(get PITBOX_API_PASSWORD)@127.0.0.1:${port}/pitbox?sslmode=disable"
+  echo "run-api: login ligado (issuer $PITBOX_OIDC_ISSUER)" >&2
+else
+  echo "run-api: sem login (corre 'make zitadel-provision' para o ligar); os RPC são todos recusados" >&2
+fi
+
+cd backend && exec go run ./cmd/api

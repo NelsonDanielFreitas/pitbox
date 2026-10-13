@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api zitadel-provision test-scripts
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api smoke-auth zitadel-provision test-scripts
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -40,6 +40,7 @@ init: ## Cria deploy/compose/.env com segredos aleatórios; acrescenta as chaves
 	add ZITADEL_ADMIN_PASSWORD "$$(openssl rand -hex 12)A1!"; \
 	add S3_ACCESS_KEY "$$(openssl rand -hex 10)"; \
 	add S3_SECRET_KEY "$$(openssl rand -hex 24)"; \
+	add PITBOX_AUTH_KEYS "k1:$$(openssl rand -base64 32)"; \
 	echo "$(ENV_FILE): permissões 600, fora do Git."
 
 up: ## Levanta todo o ambiente local e espera pelos health checks
@@ -115,11 +116,14 @@ workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKE
 	actionlint
 	zizmor $(if $(GH_TOKEN),,--offline) .github/workflows
 
-run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger local (make up); Ctrl+C para parar
-	cd backend && PITBOX_ENV=local OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:$${OTLP_HTTP_PORT:-4318} go run ./cmd/api
+run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger; com login se `make zitadel-provision` já correu (Ctrl+C para parar)
+	@bash scripts/run-api.sh
 
 zitadel-provision: ## Projeto, app OIDC, tempos dos tokens e política de login do Zitadel local (idempotente; precisa de make up)
 	python3 -I scripts/zitadel-provision.py $(ARGS)
+
+smoke-auth: ## Prova o login ponta a ponta contra o Zitadel local, sem browser (precisa de make up e make zitadel-provision)
+	python3 -I scripts/auth-smoke.py
 
 smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)
 	bash scripts/api-smoke.sh

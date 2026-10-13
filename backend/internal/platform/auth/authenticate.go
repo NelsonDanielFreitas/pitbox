@@ -29,6 +29,12 @@ const (
 	RefreshGrace = 2 * time.Minute
 
 	refreshTimeout = 5 * time.Second
+
+	// refreshWait is how long a request that lost the refresh lock, and is past the grace
+	// period, waits for the winner: the winner's own deadline plus a second for the store.
+	refreshWait = refreshTimeout + time.Second
+	// refreshPoll is how often the loser rereads the session while it waits.
+	refreshPoll = 100 * time.Millisecond
 )
 
 // Authenticator turns a session cookie into a Principal, refreshing the tokens when the
@@ -43,6 +49,8 @@ type Authenticator struct {
 	Audit    Auditor
 	Log      *slog.Logger
 	Now      func() time.Time
+	// WaitTimeout bounds how long a request waits for another one's refresh (zero: refreshWait).
+	WaitTimeout time.Duration
 }
 
 // Authenticate resolves the cookie value to the principal of the request.
@@ -73,10 +81,15 @@ func principalOf(s Session) Principal {
 }
 
 // refresh renews the tokens of a session whose access token has expired. Exactly one of
-// the concurrent requests does it (a lock in the store); the others carry on with the
-// session they have during the grace period, so a slow identity provider never blocks them
-// and, above all, they never present the same (rotated) refresh token twice, which would
-// make the provider reject it and sign the user out for nothing.
+// the concurrent requests does it (a lock in the store), so nobody presents the same
+// (rotated) refresh token twice, which would make the provider reject it and sign the user
+// out for nothing. The others:
+//
+//   - inside the grace period carry on with the session they have (the grace covers a slow
+//     identity provider, not the race);
+//   - past it wait for the winner, because a user who was away for longer than the grace
+//     period comes back with several requests at once, and refusing the losers would sign
+//     that user out.
 func (a *Authenticator) refresh(ctx context.Context, token string, sess Session) (Session, error) {
 	lock, err := a.Store.TryLockRefresh(ctx, sess)
 	if err != nil {
@@ -84,7 +97,11 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 		return a.graceOr(ctx, sess, ErrUnavailable)
 	}
 	if lock == nil {
-		return a.graceOr(ctx, sess, ErrUnauthenticated) // another request is refreshing
+		// Another request is refreshing.
+		if a.Now().Before(sess.AccessExpires.Add(RefreshGrace)) {
+			return sess, nil
+		}
+		return a.awaitRefresh(ctx, token, sess)
 	}
 	defer func() {
 		// Not the request's context: the lock must be freed even if the caller gave up.
@@ -160,6 +177,44 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 		return a.graceOr(ctx, fresh, ErrUnavailable)
 	}
 	return fresh, nil
+}
+
+// awaitRefresh waits for the request that holds the refresh lock, rereading the session until
+// its access token moves forward. It gives up after the wait timeout with ErrUnavailable,
+// never ErrUnauthenticated: not getting an answer in time says nothing about the user. A
+// session the winner ended (invalid_grant) is gone, and that one is ErrUnauthenticated.
+func (a *Authenticator) awaitRefresh(ctx context.Context, token string, stale Session) (Session, error) {
+	wait := a.WaitTimeout
+	if wait <= 0 {
+		wait = refreshWait
+	}
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+
+	timer := time.NewTimer(refreshPoll)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			a.Log.WarnContext(ctx, "refresh wait ended", slog.String("reason", "wait_timeout"))
+			return Session{}, ErrUnavailable
+		case <-timer.C:
+		}
+		fresh, err := a.Store.Get(ctx, token)
+		switch {
+		case errors.Is(err, ErrNoSession):
+			return Session{}, ErrUnauthenticated
+		case err != nil:
+			if ctx.Err() != nil {
+				continue // the next turn of the loop reports the timeout
+			}
+			a.Log.ErrorContext(ctx, "read session", slog.String("reason", "store"))
+			return Session{}, ErrUnavailable
+		case fresh.AccessExpires.After(stale.AccessExpires) && a.Now().Before(fresh.AccessExpires):
+			return fresh, nil
+		}
+		timer.Reset(refreshPoll)
+	}
 }
 
 // endsTheSession says whether a refusal from the token endpoint means the session is over, and

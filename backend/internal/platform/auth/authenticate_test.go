@@ -246,25 +246,116 @@ func TestProviderOutageGivesAGracePeriodThenUnavailable(t *testing.T) {
 	}
 }
 
-func TestAnotherRequestHoldingTheLockGivesGraceThenUnauthenticated(t *testing.T) {
+func TestAnotherRequestHoldingTheLockGivesGraceThenWaitsAndGivesUpAsUnavailable(t *testing.T) {
 	t.Parallel()
 	h := newAuthHarness(t)
+	h.a.WaitTimeout = 400 * time.Millisecond
 	token, sess := h.signedIn()
-	other, _ := h.store.TryLockRefresh(context.Background(), sess) // "another request" is refreshing
+	other, _ := h.store.TryLockRefresh(context.Background(), sess) // "another request" that never ends
 	if other == nil {
 		t.Fatal("could not take the lock")
 	}
 
+	// Inside the grace period: straight through, no waiting.
 	*h.now = sess.AccessExpires.Add(time.Minute)
+	start := time.Now()
 	if _, err := h.a.Authenticate(context.Background(), token); err != nil {
 		t.Fatalf("inside the grace period: %v", err)
 	}
+	if time.Since(start) > 200*time.Millisecond {
+		t.Error("inside the grace period the request must not wait")
+	}
+	// Past it: waits for the winner and, when nothing happens, gives up as unavailable,
+	// never as unauthenticated, without calling the provider.
 	*h.now = sess.AccessExpires.Add(RefreshGrace + time.Second)
-	if _, err := h.a.Authenticate(context.Background(), token); !errors.Is(err, ErrUnauthenticated) {
-		t.Fatalf("after the grace period: %v, want ErrUnauthenticated", err)
+	start = time.Now()
+	_, err := h.a.Authenticate(context.Background(), token)
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("after the grace period: %v, want ErrUnavailable", err)
+	}
+	if d := time.Since(start); d < 300*time.Millisecond || d > 2*time.Second {
+		t.Errorf("waited %s, want about the wait timeout", d)
 	}
 	if h.idp.refreshN.Load() != 0 {
 		t.Error("a request that lost the lock must not call the provider")
+	}
+	if _, err := h.store.Get(context.Background(), token); err != nil {
+		t.Errorf("giving up must not touch the session: %v", err)
+	}
+}
+
+// The reported bug: a user who was away for longer than the grace period comes back and the
+// app sends several requests at once. One refreshes, the others wait for it; nobody is refused.
+func TestFiftyRequestsAfterALongAbsenceMakeOneRefreshAndAreAllAccepted(t *testing.T) {
+	t.Parallel()
+	h := newAuthHarness(t)
+	token, _ := h.signedIn()
+	*h.now = h.now.Add(30 * time.Minute) // far past the access token and the grace period
+	h.idp.refreshDelay = 400 * time.Millisecond
+
+	var ok, refused atomic.Int32
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := h.a.Authenticate(context.Background(), token); err != nil {
+				refused.Add(1)
+				t.Errorf("Authenticate: %v", err)
+				return
+			}
+			ok.Add(1)
+		}()
+	}
+	wg.Wait()
+	if got := h.idp.refreshN.Load(); got != 1 {
+		t.Fatalf("refresh grants = %d, want exactly 1", got)
+	}
+	if ok.Load() != 50 || refused.Load() != 0 {
+		t.Fatalf("accepted %d, refused %d; want 50 and 0", ok.Load(), refused.Load())
+	}
+}
+
+// If the winner finds the session ended (the provider refused it), the ones waiting learn it
+// is gone: that is the one case where waiting ends in ErrUnauthenticated.
+func TestWaitersLearnThatTheWinnerEndedTheSession(t *testing.T) {
+	t.Parallel()
+	h := newAuthHarness(t)
+	token, _ := h.signedIn()
+	*h.now = h.now.Add(30 * time.Minute)
+	h.idp.refreshErr = "invalid_grant"
+	h.idp.refreshDelay = 300 * time.Millisecond
+
+	errs := make(chan error, 10)
+	for range 10 {
+		go func() { _, err := h.a.Authenticate(context.Background(), token); errs <- err }()
+	}
+	for range 10 {
+		if err := <-errs; !errors.Is(err, ErrUnauthenticated) {
+			t.Errorf("Authenticate = %v, want ErrUnauthenticated", err)
+		}
+	}
+	if got := h.idp.refreshN.Load(); got != 1 {
+		t.Errorf("refresh grants = %d, want 1", got)
+	}
+}
+
+func TestWaitingStopsWhenTheCallerGivesUp(t *testing.T) {
+	t.Parallel()
+	h := newAuthHarness(t)
+	token, sess := h.signedIn()
+	if l, _ := h.store.TryLockRefresh(context.Background(), sess); l == nil {
+		t.Fatal("could not take the lock")
+	}
+	*h.now = sess.AccessExpires.Add(time.Hour)
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := h.a.Authenticate(ctx, token); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Authenticate = %v, want ErrUnavailable", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Error("the wait ignored the caller's context")
 	}
 }
 

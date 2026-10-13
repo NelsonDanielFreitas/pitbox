@@ -64,8 +64,11 @@ O access token tem 10 min; é também a janela máxima de revogação (um utiliz
 
 1. Com `access_exp` ultrapassado: `SET pitbox:lock:refresh:<sid> <token> NX PX 10000`.
 2. Quem ganha faz o refresh (prazo de 5 s), grava com Lua *compare-and-set* por geração e liberta o lock com Lua (só apaga se o valor for o seu). Sem `singleflight` nem `valkeylock`.
-3. Quem perde segue com a sessão atual durante **2 min de graça** (não bloqueia).
-4. `invalid_grant` → sessão apagada e registo na auditoria. Erro de rede ou 5xx → graça e, passada, `UNAUTHENTICATED`.
+3. Quem perde o lock, **dentro dos 2 min de graça** (contados desde a expiração do access token), segue com a sessão atual sem esperar.
+4. Quem perde o lock **fora da graça** (um utilizador que esteve parado mais de 12 min e cuja app faz vários pedidos ao abrir) **espera pelo vencedor**: relê a sessão a cada ~100 ms até o `access_exp` avançar, no máximo ~6 s (o prazo do vencedor mais 1 s). Se esgotar, devolve `UNAVAILABLE`, nunca `UNAUTHENTICATED`: não obter resposta a tempo não diz nada sobre o utilizador. Se o vencedor terminou a sessão, quem espera vê-a apagada e recebe `UNAUTHENTICATED`.
+5. `invalid_grant` (e, no Zitadel, `invalid_request` com `Errors.User.*`) → sessão apagada e registo na auditoria. Erro de rede ou 5xx → graça e, passada, `UNAVAILABLE`.
+
+A graça cobre a **lentidão ou falha do IdP**, não a corrida entre pedidos: a corrida resolve-se esperando. (Defeito encontrado na revisão do PR: com o lock perdido fora da graça, 4 de 5 pedidos simultâneos eram recusados.)
 
 Sem este lock, dois pedidos em paralelo enviariam o mesmo refresh token rodado e o segundo deslogaria o utilizador sem motivo.
 

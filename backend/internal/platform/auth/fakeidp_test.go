@@ -35,6 +35,7 @@ type fakeIdP struct {
 	// Knobs.
 	clientID, clientSecret string
 	refreshErr             string        // e.g. "invalid_grant": the refresh grant fails with it
+	refreshErrDesc         string        // its error_description
 	refreshStatus          int           // e.g. 503
 	refreshDelay           time.Duration // slows the refresh grant down
 	down                   atomic.Bool   // discovery answers 503
@@ -132,7 +133,9 @@ func (f *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if f.refreshErr != "" {
-			writeErr(w, http.StatusBadRequest, f.refreshErr)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": f.refreshErr, "error_description": f.refreshErrDesc})
 			return
 		}
 		f.mu.Lock()

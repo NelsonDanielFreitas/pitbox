@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -116,13 +117,24 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 	tok, err := prov.oauth.TokenSource(rctx, &oauth2.Token{RefreshToken: fresh.RefreshToken}).Token()
 	if err != nil {
 		var re *oauth2.RetrieveError
-		if errors.As(err, &re) && re.ErrorCode == "invalid_grant" {
-			// The provider no longer honours this session: the user was disabled, signed out
-			// elsewhere, or the token expired. End ours.
-			a.revoked(ctx, fresh, "invalid_grant")
-			return Session{}, ErrUnauthenticated
+		if errors.As(err, &re) {
+			if reason := endsTheSession(re); reason != "" {
+				// The provider no longer honours this session: the user was disabled or locked,
+				// signed out elsewhere, or the token expired or was revoked. End ours.
+				a.revoked(ctx, fresh, reason)
+				return Session{}, ErrUnauthenticated
+			}
+			// The OAuth error code (a short fixed token) and the HTTP status are useful to
+			// operate and carry no secret. The description is not logged: it is the provider's text.
+			level := slog.LevelWarn
+			if re.ErrorCode == "invalid_client" {
+				level = slog.LevelError // our client credentials were refused: a misconfiguration, not the user
+			}
+			a.Log.LogAttrs(ctx, level, "refresh failed", slog.String("reason", "provider_error"),
+				slog.String("oauth_error", re.ErrorCode), slog.Int("status", re.Response.StatusCode))
+		} else {
+			a.Log.WarnContext(ctx, "refresh failed", slog.String("reason", "provider_unreachable"))
 		}
-		a.Log.WarnContext(ctx, "refresh failed", slog.String("reason", "provider_error"))
 		return a.graceOr(ctx, fresh, ErrUnavailable)
 	}
 
@@ -148,6 +160,24 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 		return a.graceOr(ctx, fresh, ErrUnavailable)
 	}
 	return fresh, nil
+}
+
+// endsTheSession says whether a refusal from the token endpoint means the session is over, and
+// why (a fixed reason for the audit trail). Only definitive answers end it: an outage, a
+// wrong client secret or a malformed request of ours must never sign everybody out.
+//
+//   - invalid_grant (RFC 6749 §5.2): the refresh token is invalid, expired or revoked.
+//   - Zitadel answers invalid_request with an "Errors.User.*" description (NotActive, Locked,
+//     NotFound...) when the user was deactivated, locked or deleted. Verified against v4.19.4
+//     by scripts/auth-smoke.py; a Zitadel upgrade that changes it makes that smoke test fail.
+func endsTheSession(re *oauth2.RetrieveError) string {
+	switch {
+	case re.ErrorCode == "invalid_grant":
+		return "invalid_grant"
+	case re.ErrorCode == "invalid_request" && strings.HasPrefix(re.ErrorDescription, "Errors.User."):
+		return "user_not_active"
+	}
+	return ""
 }
 
 // graceOr lets the request through on the current session while the access token expired

@@ -166,6 +166,60 @@ func TestAuthenticateEndsTheSessionWhenTheProviderRefusesIt(t *testing.T) {
 	}
 }
 
+// What the real Zitadel answers for a deactivated user (seen in scripts/auth-smoke.py) ends the
+// session; ambiguous or operational errors do not.
+func TestWhichRefusalsEndTheSession(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, code, desc string
+		status           int
+		wantEnded        string // audit reason; "" = the session survives
+	}{
+		{"invalid_grant", "invalid_grant", "", 400, "invalid_grant"},
+		{"user not active (Zitadel)", "invalid_request", "Errors.User.NotActive", 400, "user_not_active"},
+		{"user locked (Zitadel)", "invalid_request", "Errors.User.Locked", 400, "user_not_active"},
+		{"a malformed request of ours must not sign anybody out", "invalid_request", "missing parameter", 400, ""},
+		{"invalid_request without description", "invalid_request", "", 400, ""},
+		{"our client secret was refused", "invalid_client", "", 401, ""},
+		{"unsupported grant", "unsupported_grant_type", "", 400, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newAuthHarness(t)
+			token, _ := h.signedIn()
+			*h.now = h.now.Add(11 * time.Minute)
+			h.idp.refreshErr, h.idp.refreshErrDesc = tc.code, tc.desc
+
+			_, err := h.a.Authenticate(context.Background(), token)
+			_, getErr := h.store.Get(context.Background(), token)
+			if tc.wantEnded != "" {
+				if !errors.Is(err, ErrUnauthenticated) || !errors.Is(getErr, ErrNoSession) {
+					t.Fatalf("err %v, store %v: the session must end", err, getErr)
+				}
+				got := h.audit.actions()
+				if last := got[len(got)-1]; last != "auth.session_revoked:"+tc.wantEnded {
+					t.Errorf("audit = %v", got)
+				}
+				return
+			}
+			if getErr != nil {
+				t.Fatalf("the session must survive: %v", getErr)
+			}
+			// Inside the grace period the request still goes through; the log says why.
+			if err != nil {
+				t.Errorf("inside the grace period: %v", err)
+			}
+			if tc.code == "invalid_client" && !strings.Contains(h.logs.String(), `"level":"ERROR"`) {
+				t.Error("a refused client must be logged as an error")
+			}
+			if strings.Contains(h.logs.String(), tc.desc) && tc.desc != "" {
+				t.Error("the provider's description must not be logged")
+			}
+		})
+	}
+}
+
 func TestProviderOutageGivesAGracePeriodThenUnavailable(t *testing.T) {
 	t.Parallel()
 	h := newAuthHarness(t)

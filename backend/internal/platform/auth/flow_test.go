@@ -123,6 +123,7 @@ func newFlowHarness(t *testing.T) *flowHarness {
 		Log:       slog.New(slog.NewJSONHandler(logs, nil)),
 		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock,
 	}
+	f.h.Authn = &Authenticator{Provider: f.h.Provider, Store: store, Audit: f.audit, Log: f.h.Log, Now: clock}
 	f.h.Mount(f.mux)
 	return f
 }
@@ -695,5 +696,45 @@ func TestSignedOutPage(t *testing.T) {
 	w := f.do(http.MethodGet, SignedOutPath, nil, nil)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Sessão terminada") {
 		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSessionInfo(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+
+	if w := f.do(http.MethodGet, SessionPath, nil, nil); w.Code != http.StatusUnauthorized || strings.TrimSpace(w.Body.String()) != `{"authenticated":false}` {
+		t.Errorf("without a session: %d %s", w.Code, w.Body.String())
+	}
+	sc := f.signIn("ana")
+	w := f.do(http.MethodGet, SessionPath, []*http.Cookie{sc}, map[string]string{"Sec-Fetch-Site": "same-origin"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("body: %v", err)
+	}
+	if got["authenticated"] != true || got["user_id"] != "user-ana" || len(got) != 4 {
+		t.Errorf("body = %v: identifiers only, nothing else", got)
+	}
+	if w.Header().Get("Cache-Control") != "no-store" {
+		t.Error("the answer must not be cached")
+	}
+	for _, leak := range []string{sc.Value, "refresh", "ana@example.eu", "Name ana", "rt-"} {
+		if strings.Contains(w.Body.String(), leak) {
+			t.Errorf("the body leaks %q", leak)
+		}
+	}
+	for name, hdr := range map[string]map[string]string{
+		"foreign origin": {"Origin": "https://evil.example"}, "cross-site": {"Sec-Fetch-Site": "cross-site"},
+	} {
+		if w := f.do(http.MethodGet, SessionPath, []*http.Cookie{sc}, hdr); w.Code != http.StatusForbidden {
+			t.Errorf("%s: status %d, want 403", name, w.Code)
+		}
+	}
+	f.store.c.Close()
+	if w := f.do(http.MethodGet, SessionPath, []*http.Cookie{sc}, nil); w.Code != http.StatusServiceUnavailable {
+		t.Errorf("store outage: status %d, want 503 (not 401: the user is not signed out)", w.Code)
 	}
 }

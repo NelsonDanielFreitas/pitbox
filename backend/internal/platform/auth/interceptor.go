@@ -42,12 +42,7 @@ func Interceptor(a *Authenticator, origin string, public ...string) connect.Serv
 				return connect.NewError(connect.CodeUnauthenticated, msgUnauthenticated)
 			}
 			hdr := info.RequestHeader()
-			if o := hdr.Get("Origin"); o != "" && o != origin {
-				return connect.NewError(connect.CodePermissionDenied, msgCrossOrigin)
-			}
-			switch hdr.Get("Sec-Fetch-Site") {
-			case "", "same-origin", "none":
-			default:
+			if foreignRequest(origin, hdr.Get("Origin"), hdr.Get("Sec-Fetch-Site")) {
 				return connect.NewError(connect.CodePermissionDenied, msgCrossOrigin)
 			}
 
@@ -73,4 +68,19 @@ func DenyAll() connect.ServerInterceptor {
 			return connect.NewError(connect.CodeUnauthenticated, msgUnauthenticated)
 		}
 	}
+}
+
+// foreignRequest reports whether a browser request comes from somewhere other than our own
+// origin: an Origin header that is not ours, or Fetch Metadata saying anything but
+// same-origin (or none: a navigation typed by the user). Requests without these headers
+// (non-browser clients) are not foreign.
+func foreignRequest(origin, originHeader, fetchSite string) bool {
+	if originHeader != "" && originHeader != origin {
+		return true
+	}
+	switch fetchSite {
+	case "", "same-origin", "none":
+		return false
+	}
+	return true
 }

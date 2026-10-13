@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -24,6 +25,7 @@ const (
 	CallbackPath  = "/auth/callback"
 	LogoutPath    = "/auth/logout"
 	SignedOutPath = "/auth/signed-out"
+	SessionPath   = "/auth/session"
 )
 
 // Fixed, public messages. What went wrong goes to the log (a code) and the audit trail,
@@ -37,6 +39,7 @@ const (
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
 	Provider       *Provider
+	Authn          *Authenticator // for /auth/session
 	Store          *Store
 	LoginCookies   *LoginCookies
 	Users          UserDirectory
@@ -55,6 +58,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+CallbackPath, h.callback)
 	mux.HandleFunc("POST "+LogoutPath, h.logout)
 	mux.HandleFunc("GET "+SignedOutPath, h.signedOut)
+	mux.HandleFunc("GET "+SessionPath, h.sessionInfo)
 }
 
 func noStore(w http.ResponseWriter) {
@@ -374,4 +378,34 @@ func (h *Handler) signedOut(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
 	_, _ = w.Write([]byte(`<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>PitBox</title></head><body><p>Sessão terminada.</p><p><a href="/">Voltar</a></p></body></html>`))
+}
+
+// sessionInfo tells the app whether it is signed in and who it is, so it can decide between
+// the login and its screens. It answers with identifiers only: no tokens, no email, no name.
+// It goes through the Authenticator, so a session with an expired access token is refreshed.
+func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	w.Header().Set("Content-Type", "application/json")
+	if foreignRequest(h.PublicURL, r.Header.Get("Origin"), r.Header.Get("Sec-Fetch-Site")) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"cross-origin request refused"}`))
+		return
+	}
+	p, err := h.Authn.Authenticate(r.Context(), SessionTokenFromHeader(r.Header))
+	switch {
+	case errors.Is(err, ErrUnauthenticated):
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"authenticated":false}`))
+		return
+	case err != nil:
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+	_ = json.NewEncoder(w).Encode(struct {
+		Authenticated bool      `json:"authenticated"`
+		UserID        string    `json:"user_id"`
+		AMR           []string  `json:"amr"`
+		AuthTime      time.Time `json:"auth_time"`
+	}{true, p.UserID, p.AMR, p.AuthTime})
 }

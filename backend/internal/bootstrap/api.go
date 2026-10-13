@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"runtime"
 
-	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
@@ -44,7 +43,14 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("setup telemetry: %w", err)
 	}
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, auth.DenyAll())
+	authn, err := newAuthStack(ctx, cfg, logger)
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up authentication: %w", err)
+	}
+	defer authn.close()
+
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)
@@ -57,7 +63,10 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		Drain:           cfg.ShutdownDrain,
 		ShutdownTimeout: cfg.ShutdownTimeout,
 		SkipTracing:     rpcPaths(api, reflection),
-		Routes:          func(mux *http.ServeMux) error { return mountRPC(mux, cfg, api, reflection) },
+		Routes: func(mux *http.ServeMux) error {
+			authn.mount(mux)
+			return mountRPC(mux, cfg, api, reflection)
+		},
 	})
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)

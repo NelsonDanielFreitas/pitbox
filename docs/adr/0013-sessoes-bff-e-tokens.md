@@ -25,6 +25,7 @@ O `pitbox-api` é um cliente OIDC confidencial (Authorization Code + PKCE S256, 
 
 - Algoritmo **ES256** (web keys ECDSA P-256 configuradas no primeiro arranque, ver o runbook); lista aceite em `PITBOX_OIDC_ALLOWED_ALGS`, por omissão `ES256` (agilidade criptográfica).
 - Tempos da instância: access token 10 min, ID token 5 min, refresh token 168 h de inatividade e 720 h absolutas. As quatro são definidas em conjunto, senão o arranque do Zitadel falha.
+- **O access token é opaco** (`OIDC_TOKEN_TYPE_BEARER`): o BFF nunca o lê, só o apresenta ao `userinfo`. Um JWT convidaria a confundi-lo com o ID token (mesma chave, mesma `aud`). Quando houver Bearer (F2-06), decide-se se o access token passa a JWT (validação local) ou se fica opaco (introspeção).
 - **O ID token não leva dados pessoais.** Vai no `id_token_hint` do redirect de logout (histórico do browser, logs de proxy), por isso a app é registada sem `idTokenUserinfoAssertion`. O email, o `email_verified` e o nome obtêm-se no callback pelo endpoint `userinfo` (`go-oidc` `Provider.UserInfo`), do lado do servidor, com o access token recebido na troca do código. O `sub` do `userinfo` tem de ser igual ao do ID token (OIDC Core 5.3.2); se não for, o login é recusado. Uma falha do `userinfo` é 503 (o IdP está com problemas), não 403.
 - ID token validado com `oidc.IDTokenVerifier` (`SupportedSigningAlgs` da configuração, `ClientID`, issuer) e `nonce` verificado à mão. Tolerâncias reais do `go-oidc`: `exp` sem tolerância, `nbf` com 5 min fixos.
 - Descoberta do provider **preguiçosa** com novas tentativas: o arranque do `pitbox-api` não depende do Zitadel; `/auth/login` responde 503 até haver provider; `/healthz` não é afetado.
@@ -96,7 +97,7 @@ Script Python idempotente por estado desejado (`scripts/zitadel-provision.py`). 
 
 ### Para o F2-06 (Bearer, telemóvel)
 
-O Zitadel assina access e ID tokens com `typ` `JWT`, a mesma chave e a mesma `aud` (segundo a revisão do código). Quando o Bearer existir: exigir o *claim* `client_id` numa lista de permitidos, **rejeitar tokens com `nonce`, `at_hash` ou `auth_time`** (são ID tokens) e testar um ID token apresentado como Bearer. Aí é preciso também decidir o JWKS: o `RemoteKeySet` sem TTL e com pedido por assinatura inválida deixa de ser aceitável (ver o contexto).
+Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a mesma `aud` do ID token (segundo a revisão do código; hoje a app usa access tokens opacos). Quando o Bearer existir: exigir o *claim* `client_id` numa lista de permitidos, **rejeitar tokens com `nonce`, `at_hash` ou `auth_time`** (são ID tokens) e testar um ID token apresentado como Bearer. Aí é preciso também decidir o JWKS: o `RemoteKeySet` sem TTL e com pedido por assinatura inválida deixa de ser aceitável (ver o contexto).
 
 ## Alternativas consideradas
 
@@ -117,6 +118,8 @@ O Zitadel assina access e ID tokens com `typ` `JWT`, a mesma chave e a mesma `au
 - Novas variáveis: `PITBOX_OIDC_*`, Valkey, base de dados, chave mestra e durações da sessão.
 - **O fim de uma sessão por utilizador desativado depende da resposta do Zitadel.** Verificado na `v4.19.4` com `scripts/auth-smoke.py`: para um utilizador desativado o refresh falha com `invalid_request` e a descrição `Errors.User.NotActive` (não `invalid_grant`). A sessão acaba com `invalid_grant` e com `invalid_request` + `Errors.User.*`; qualquer outra recusa (cliente recusado, pedido mal formado, falha de rede) mantém a sessão (e `UNAVAILABLE` depois da graça). Uma versão do Zitadel que mude isto faz falhar o smoke.
 - `GET /auth/session` (identificadores apenas) existe para a app saber se está autenticada sem ler tokens; renova o access token se preciso.
+- **Trocar a chave de assinatura numa instância com clientes:** entre `CreateWebKey` e `ActivateWebKey` tem de passar mais do que o *max-age* do JWKS (5 min por omissão, `OIDC.JWKSCacheControlMaxAge`; a documentação do `ActivateWebKey` desaconselha ativar uma chave criada dentro dessa janela), senão clientes com o JWKS em cache rejeitam os tokens novos. O script ativa-a logo porque a instância local não tem clientes.
+- **Valkey sem cluster:** os scripts Lua (criar, atualizar e apagar sessão) tocam em várias chaves (sessão, índice por utilizador, índice por `sid`), por isso o Valkey é *standalone* ou primário com réplica, não *cluster*. Se um dia for preciso, as chaves de uma sessão passam a partilhar uma *hash tag* (`{<ref>}`).
 - A chave ES256 não se configura por variáveis de ambiente do Zitadel (o Viper só aplica variáveis a chaves presentes no `defaults.yaml`; verificado: o arranque falha com `Errors.WebKey.Config`): `make zitadel-provision` cria e ativa-a.
 - `/auth/*` fica sem rate limiting no servidor: risco aceite e ligado ao F5-05 (Cloudflare, por IP).
 - Em desenvolvimento só o Chrome e o Firefox funcionam com `__Host-` sobre `http://localhost`; o Safari espera pelo HTTPS local do F1-09.

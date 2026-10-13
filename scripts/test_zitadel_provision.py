@@ -147,7 +147,7 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(len(self.state.projects), 1)
         cfg = self.state.apps[0]["oidcConfiguration"]
         self.assertEqual(prov.config_drift(cfg, prov.desired_oidc_config("http://localhost:8081")), [])
-        self.assertEqual(cfg["accessTokenType"], "OIDC_TOKEN_TYPE_JWT")
+        self.assertEqual(cfg["accessTokenType"], "OIDC_TOKEN_TYPE_BEARER")  # opaco
         self.assertEqual(self.state.webkeys[-1]["state"], "STATE_ACTIVE")
         self.assertIn("ecdsa", self.state.webkeys[-1])
         env = prov.parse_env(self.env.read_text())

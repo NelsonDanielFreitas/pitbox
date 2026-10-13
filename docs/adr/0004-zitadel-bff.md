@@ -31,7 +31,7 @@ Zitadel como IdP (OIDC + PKCE, passkeys, MFA obrigatório para donos), na UE. We
 
 Verificada contra o Zitadel `v4.19.4` e o `go-oidc` v3.21.0. O resto do ADR mantém-se.
 
-- **ES256 não é o padrão do Zitadel.** O JWKS por omissão só tem RS256. O ES256 obtém-se configurando as *web keys* (ECDSA P-256) no primeiro arranque; o algoritmo aceite fica em `PITBOX_OIDC_ALLOWED_ALGS` (por omissão `ES256`). O tipo de access token por omissão é opaco e o tempo de vida 12 h: a app é registada com tokens JWT e os tempos são fixados na instância (access 10 min, ID token 5 min, refresh 168 h de inatividade e 720 h absolutas).
+- **ES256 não é o padrão do Zitadel.** O JWKS por omissão só tem RS256. O ES256 obtém-se configurando as *web keys* (ECDSA P-256) no primeiro arranque; o algoritmo aceite fica em `PITBOX_OIDC_ALLOWED_ALGS` (por omissão `ES256`). O tipo de access token por omissão é opaco e o tempo de vida 12 h: a app é registada com access tokens opacos (o BFF não os lê; ver ADR 0013) e os tempos são fixados na instância (access 10 min, ID token 5 min, refresh 168 h de inatividade e 720 h absolutas).
 - **`auth_time`, `amr` e `sid` só existem no ID token.** O principal e o *step-up* leem-nos da sessão do BFF, preenchida com o ID token validado no login (arquitetura §5.1).
 - **Sem revogação da família de refresh tokens.** O Zitadel rejeita o refresh token antigo mas, segundo a revisão do código, não revoga a família. A spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06**; no BFF o refresh token nunca sai do servidor.
 - **Tolerâncias do `go-oidc`:** `exp` sem tolerância e `nbf` com 5 min fixos (a §5.1 dizia 30 s).

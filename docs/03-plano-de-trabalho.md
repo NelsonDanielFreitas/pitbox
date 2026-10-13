@@ -53,7 +53,7 @@ Objetivo: o mecânico faz login, regista carros, motores e pneus, e grava setups
 | --- | --- | --- |
 | API (Go) | `connectrpc.com/connect`, `buf.build/go/protovalidate`, `connectrpc.com/grpcreflect` (só em desenvolvimento) | Serviços Connect/gRPC e validação das mensagens |
 | Base de dados (Go) | `jackc/pgx/v5`, sqlc, Atlas | Ligação ao Postgres, queries geradas, migrações |
-| Autenticação (Go) | `coreos/go-oidc/v3`, `golang.org/x/oauth2`, `lestrrat-go/jwx/v3`, `redis/go-redis/v9` | Fluxo OIDC + PKCE no BFF, validação de JWT, sessões no Valkey |
+| Autenticação (Go) | `coreos/go-oidc/v3`, `golang.org/x/oauth2`, `valkey-io/valkey-go` | Fluxo OIDC + PKCE no BFF, validação do ID token, sessões no Valkey (`lestrrat-go/jwx` só se o F2-06 o exigir) |
 | Autorização | OpenFGA, `openfga/go-sdk`, CLI `fga` (testes de asserções) | Permissões por recurso |
 | Plataforma (Go) | `log/slog`, `go.opentelemetry.io/otel`, `caarlos0/env`, `riverqueue/river` | Logs, traces, configuração, fila de tarefas e outbox |
 | Testes (Go) | `testing`, `stretchr/testify`, `testcontainers-go`, `google/go-cmp` | Testes unitários e de integração com Postgres real |

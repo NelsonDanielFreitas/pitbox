@@ -7,7 +7,7 @@ Leva a instância ao estado desejado, sempre pela mesma ordem:
   3. política de login sem segundo fator por SMS nem por email (ambos dão amr "mfa" e
      estragariam o step-up do F1-03c);
   4. projeto "pitbox";
-  5. aplicação OIDC web "pitbox-api" (cliente confidencial, code + PKCE, access token JWT).
+  5. aplicação OIDC web "pitbox-api" (cliente confidencial, code + PKCE, access token opaco).
 Escreve PITBOX_OIDC_CLIENT_ID e PITBOX_OIDC_CLIENT_SECRET em deploy/compose/.env (0600).
 O que escreve ali nunca vai para o stdout, e o PAT nunca é impresso nem escrito em disco.
 
@@ -78,7 +78,9 @@ def desired_oidc_config(public_url: str) -> dict:
         "applicationType": "OIDC_APP_TYPE_WEB",
         "authMethodType": "OIDC_AUTH_METHOD_TYPE_BASIC",  # cliente confidencial + PKCE
         "version": "OIDC_VERSION_1_0",
-        "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
+        # Opaco: o BFF nunca lê o access token (só o usa no userinfo). Um JWT convidaria a confundi-lo
+        # com o ID token (mesma chave, mesma aud); essa decisão é do F2-06, quando houver Bearer.
+        "accessTokenType": "OIDC_TOKEN_TYPE_BEARER",
         "accessTokenRoleAssertion": False,
         "idTokenRoleAssertion": False,
         # O ID token não leva email nem nome: vai no id_token_hint do redirect de logout (histórico do
@@ -228,6 +230,12 @@ def ensure_signing_key(z: Zitadel, log) -> None:
     if ecdsa is not None and ecdsa.get("curve", "ECDSA_CURVE_P256") == "ECDSA_CURVE_P256":
         log("chave de assinatura: ES256 já ativa")
         return
+    # Cuidado numa instância com clientes: o JWKS é servido com uma cache (max-age de 5 min por
+    # omissão, OIDC.JWKSCacheControlMaxAge nos defaults do Zitadel) e a documentação do
+    # ActivateWebKey desaconselha ativar uma chave criada dentro dessa janela, porque os clientes
+    # podem ainda não a ter no JWKS e rejeitariam os tokens novos. Entre CreateWebKey e
+    # ActivateWebKey tem de passar mais do que esse max-age. Aqui (instância local acabada de criar,
+    # sem clientes) ativa-se logo.
     created = z.call("/zitadel.webkey.v2.WebKeyService/CreateWebKey", {"ecdsa": {"curve": "ECDSA_CURVE_P256"}})
     z.call("/zitadel.webkey.v2.WebKeyService/ActivateWebKey", {"id": created["id"]})
     log("chave de assinatura: criada e ativada ES256 (o JWKS pode demorar até 5 min nas caches)")

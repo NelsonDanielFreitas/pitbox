@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api zitadel-provision test-scripts
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -95,8 +95,11 @@ lint-go:
 breaking: ## buf breaking contra o branch local main (no CI cria-se com git branch --force main origin/main)
 	buf breaking --against '.git#branch=main'
 
-test: ## Testes do backend com -race (app e firmware entram mais tarde)
+test: test-scripts ## Testes do backend com -race e dos scripts (app e firmware entram mais tarde)
 	cd backend && go test -race ./...
+
+test-scripts: ## Testes dos scripts Python (Zitadel falso, sem Docker)
+	python3 -I -m unittest discover -s scripts -p 'test_*.py'
 
 app-typecheck: ## tsc --noEmit ao TypeScript gerado
 	@test -x app/node_modules/.bin/tsc || (cd app && pnpm install --frozen-lockfile)
@@ -114,6 +117,9 @@ workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKE
 
 run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger local (make up); Ctrl+C para parar
 	cd backend && PITBOX_ENV=local OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:$${OTLP_HTTP_PORT:-4318} go run ./cmd/api
+
+zitadel-provision: ## Projeto, app OIDC, tempos dos tokens e política de login do Zitadel local (idempotente; precisa de make up)
+	python3 -I scripts/zitadel-provision.py $(ARGS)
 
 smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)
 	bash scripts/api-smoke.sh

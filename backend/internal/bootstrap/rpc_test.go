@@ -527,6 +527,17 @@ func TestReflectionIsLocalOnly(t *testing.T) {
 		t.Run(tc.env, func(t *testing.T) {
 			t.Parallel()
 			env := map[string]string{"PITBOX_ENV": tc.env}
+			if tc.env != "local" {
+				// Authentication is mandatory outside local: a complete (fake) setup.
+				for k, v := range map[string]string{
+					"PITBOX_PUBLIC_URL": "https://api.example.eu", "PITBOX_OIDC_ISSUER": "https://auth.example.eu",
+					"PITBOX_OIDC_CLIENT_ID": "client-id", "PITBOX_OIDC_CLIENT_SECRET": "client-secret", //nolint:gosec // fake value
+					"PITBOX_AUTH_KEYS":       "k1:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+					"PITBOX_VALKEY_PASSWORD": "valkey-password", "PITBOX_VALKEY_TLS": "true", //nolint:gosec // fake value
+				} {
+					env[k] = v
+				}
+			}
 			h := newHarness(t, env, &fakeTeams{})
 
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, h.url+path, strings.NewReader(""))

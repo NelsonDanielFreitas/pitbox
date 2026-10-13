@@ -3,11 +3,47 @@ package config
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
 	"time"
 )
+
+// A key long enough for the keyring (32 bytes of 0x01, base64). Fake: it protects nothing.
+const testKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+
+// hosted returns the settings every environment other than local needs: authentication is
+// mandatory there. The extras override or add to them.
+func hosted(env string, extra map[string]string) map[string]string {
+	m := map[string]string{
+		"PITBOX_ENV":                env,
+		"PITBOX_PUBLIC_URL":         "https://api.example.eu",
+		"PITBOX_OIDC_ISSUER":        "https://auth.example.eu",
+		"PITBOX_OIDC_CLIENT_ID":     "client-id",
+		"PITBOX_OIDC_CLIENT_SECRET": "client-secret", //nolint:gosec // fake value
+		"PITBOX_AUTH_KEYS":          "k1:" + testKey,
+		"PITBOX_VALKEY_PASSWORD":    "valkey-password", //nolint:gosec // fake value
+		"PITBOX_VALKEY_TLS":         "true",
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
+func localAuth(extra map[string]string) map[string]string {
+	m := map[string]string{
+		"PITBOX_OIDC_CLIENT_ID":     "client-id",
+		"PITBOX_OIDC_CLIENT_SECRET": "client-secret", //nolint:gosec // fake value
+		"PITBOX_AUTH_KEYS":          "k1:" + testKey,
+		"PITBOX_VALKEY_PASSWORD":    "valkey-password", //nolint:gosec // fake value
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
 
 func TestLoadFromDefaults(t *testing.T) {
 	t.Parallel()
@@ -43,9 +79,9 @@ func TestLoadFrom(t *testing.T) {
 		env     map[string]string
 		wantErr string // substring; empty = must load
 	}{
-		{name: "production over https", env: map[string]string{
-			"PITBOX_ENV": "production", "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp.example.eu",
-		}},
+		{name: "production over https", env: hosted("production", map[string]string{
+			"OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp.example.eu",
+		})},
 		{name: "local over plain http", env: map[string]string{
 			"OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4318",
 		}},
@@ -70,25 +106,55 @@ func TestLoadFrom(t *testing.T) {
 		{name: "stream duration at the platform ceiling", env: map[string]string{"PITBOX_RPC_STREAM_MAX_DURATION": "60m"}},
 		{name: "stream duration above the platform ceiling", env: map[string]string{"PITBOX_RPC_STREAM_MAX_DURATION": "2h"}, wantErr: "PITBOX_RPC_STREAM_MAX_DURATION"},
 		{name: "stream duration zero", env: map[string]string{"PITBOX_RPC_STREAM_MAX_DURATION": "0s"}, wantErr: "PITBOX_RPC_STREAM_MAX_DURATION"},
-		{name: "client ip from a header behind cloudflare", env: map[string]string{
-			"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
-		}},
-		{name: "client ip header refused without the origin guarantee", env: map[string]string{
-			"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP",
-		}, wantErr: "PITBOX_CLIENT_IP_MODE"},
+		{name: "client ip from a header behind cloudflare", env: hosted("production", map[string]string{
+			"PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+		})},
+		{name: "client ip header refused without the origin guarantee", env: hosted("production", map[string]string{
+			"PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP",
+		}), wantErr: "PITBOX_CLIENT_IP_MODE"},
 		{name: "client ip header refused locally even if declared", env: map[string]string{
 			"PITBOX_CLIENT_IP_MODE": "header:X-Forwarded-For", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
 		}, wantErr: "PITBOX_CLIENT_IP_MODE"},
 		{name: "client ip mode unknown", env: map[string]string{"PITBOX_CLIENT_IP_MODE": "forwarded"}, wantErr: "PITBOX_CLIENT_IP_MODE"},
-		{name: "client ip header name with illegal characters", env: map[string]string{
-			"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:X Real\nIP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
-		}, wantErr: "PITBOX_CLIENT_IP_MODE"},
-		{name: "plain http endpoint refused in production", env: map[string]string{
-			"PITBOX_ENV": "production", "OTEL_EXPORTER_OTLP_ENDPOINT": "http://otlp.example.eu",
-		}, wantErr: "plain http"},
-		{name: "plain http traces endpoint refused in staging", env: map[string]string{
-			"PITBOX_ENV": "staging", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "HTTP://otlp.example.eu",
-		}, wantErr: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"},
+		{name: "client ip header name with illegal characters", env: hosted("production", map[string]string{
+			"PITBOX_CLIENT_IP_MODE": "header:X Real\nIP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+		}), wantErr: "PITBOX_CLIENT_IP_MODE"},
+		{name: "plain http endpoint refused in production", env: hosted("production", map[string]string{
+			"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otlp.example.eu",
+		}), wantErr: "plain http"},
+		{name: "plain http traces endpoint refused in staging", env: hosted("staging", map[string]string{
+			"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": "HTTP://otlp.example.eu",
+		}), wantErr: "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"},
+		// --- Authentication (F1-03, ADR 0013) ---
+		{name: "local without authentication still loads (fails closed at runtime)", env: map[string]string{}},
+		{name: "local fully configured", env: localAuth(nil)},
+		{name: "local half configured", env: map[string]string{"PITBOX_OIDC_CLIENT_ID": "x"}, wantErr: "partly configured"},
+		{name: "production without authentication", env: map[string]string{
+			"PITBOX_ENV": "production", "PITBOX_PUBLIC_URL": "https://api.example.eu", "PITBOX_OIDC_ISSUER": "https://auth.example.eu", "PITBOX_VALKEY_TLS": "true",
+		}, wantErr: "mandatory outside local"},
+		{name: "production without valkey tls", env: hosted("production", map[string]string{"PITBOX_VALKEY_TLS": "false"}), wantErr: "PITBOX_VALKEY_TLS"},
+		{name: "production with the default http public url", env: hosted("production", map[string]string{"PITBOX_PUBLIC_URL": "http://localhost:8081"}), wantErr: "PITBOX_PUBLIC_URL"},
+		{name: "production with an http issuer", env: hosted("production", map[string]string{"PITBOX_OIDC_ISSUER": "http://auth.example.eu"}), wantErr: "PITBOX_OIDC_ISSUER"},
+		{name: "local issuer on a non-loopback host over http", env: map[string]string{"PITBOX_OIDC_ISSUER": "http://auth.example.eu"}, wantErr: "only allowed for localhost"},
+		{name: "public url with a path", env: hosted("production", map[string]string{"PITBOX_PUBLIC_URL": "https://api.example.eu/app"}), wantErr: "without a path"},
+		{name: "public url with credentials", env: hosted("production", map[string]string{"PITBOX_PUBLIC_URL": "https://user:pw@api.example.eu"}), wantErr: "credentials"}, //nolint:gosec // fake credentials: the test proves they are refused
+		{name: "public url with a query", env: hosted("production", map[string]string{"PITBOX_PUBLIC_URL": "https://api.example.eu/?a=b"}), wantErr: "query"},
+		{name: "public url that is not a url", env: hosted("production", map[string]string{"PITBOX_PUBLIC_URL": "api.example.eu"}), wantErr: "PITBOX_PUBLIC_URL"},
+		{name: "issuer with a path is fine", env: hosted("production", map[string]string{"PITBOX_OIDC_ISSUER": "https://auth.example.eu/tenant"})},
+		{name: "two allowed algorithms", env: hosted("production", map[string]string{"PITBOX_OIDC_ALLOWED_ALGS": "ES256,RS256"})},
+		{name: "algorithm none", env: hosted("production", map[string]string{"PITBOX_OIDC_ALLOWED_ALGS": "none"}), wantErr: "PITBOX_OIDC_ALLOWED_ALGS"},
+		{name: "algorithm HS256", env: hosted("production", map[string]string{"PITBOX_OIDC_ALLOWED_ALGS": "ES256,HS256"}), wantErr: "HS256"},
+		{name: "algorithm listed twice", env: hosted("production", map[string]string{"PITBOX_OIDC_ALLOWED_ALGS": "ES256,ES256"}), wantErr: "twice"},
+		{name: "valkey address without port", env: hosted("production", map[string]string{"PITBOX_VALKEY_ADDR": "valkey.example.eu"}), wantErr: "PITBOX_VALKEY_ADDR"},
+		{name: "two keys (rotation)", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k2:" + testKey + ",k1:" + testKey})},
+		{name: "key too short", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k1:AQEB"}), wantErr: "shorter than 32 bytes"},
+		{name: "key not base64", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k1:%%%"}), wantErr: "base64"},
+		{name: "key without kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": testKey}), wantErr: "<kid>:<base64>"},
+		{name: "key with an upper case kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "K1:" + testKey}), wantErr: "<kid>:<base64>"},
+		{name: "repeated kid", env: hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k1:" + testKey + ",k1:" + testKey}), wantErr: "repeats the kid"},
+		{name: "session idle below a minute", env: hosted("production", map[string]string{"PITBOX_SESSION_IDLE_TIMEOUT": "30s"}), wantErr: "PITBOX_SESSION_IDLE_TIMEOUT"},
+		{name: "session idle above absolute", env: hosted("production", map[string]string{"PITBOX_SESSION_IDLE_TIMEOUT": "100h", "PITBOX_SESSION_ABSOLUTE_TIMEOUT": "50h"}), wantErr: "must not exceed"},
+		{name: "session absolute above the zitadel limit", env: hosted("production", map[string]string{"PITBOX_SESSION_ABSOLUTE_TIMEOUT": "721h"}), wantErr: "PITBOX_SESSION_ABSOLUTE_TIMEOUT"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,13 +216,110 @@ func TestLogValueIsAnAllowList(t *testing.T) {
 func TestClientIPHeader(t *testing.T) {
 	t.Parallel()
 
-	c, err := LoadFrom(map[string]string{
-		"PITBOX_ENV": "production", "PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
-	})
+	c, err := LoadFrom(hosted("production", map[string]string{
+		"PITBOX_CLIENT_IP_MODE": "header:CF-Connecting-IP", "PITBOX_ORIGIN_CLOUDFLARE_ONLY": "true",
+	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 	if got := c.ClientIPHeader(); got != "CF-Connecting-IP" {
 		t.Errorf("ClientIPHeader = %q", got)
+	}
+}
+
+func TestAuthDefaults(t *testing.T) {
+	t.Parallel()
+
+	c, err := LoadFrom(map[string]string{})
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if c.AuthConfigured() {
+		t.Error("authentication must not count as configured without secrets")
+	}
+	if got := strings.Join(c.OIDCAllowedAlgs, ","); got != "ES256" {
+		t.Errorf("default algorithms = %q, want ES256", got)
+	}
+	if c.SessionIdleTimeout != 168*time.Hour || c.SessionAbsoluteTimeout != 720*time.Hour {
+		t.Errorf("session defaults: idle=%s absolute=%s", c.SessionIdleTimeout, c.SessionAbsoluteTimeout)
+	}
+	if c.ValkeyUsername != "pitbox_api" {
+		t.Errorf("valkey user = %q, the API must not default to the default user", c.ValkeyUsername)
+	}
+}
+
+func TestAuthKeyring(t *testing.T) {
+	t.Parallel()
+
+	c, err := LoadFrom(hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k2:" + testKey + ",k1:" + testKey}))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	keys, err := c.AuthKeyring()
+	if err != nil {
+		t.Fatalf("AuthKeyring: %v", err)
+	}
+	if len(keys) != 2 || keys[0].ID != "k2" || keys[1].ID != "k1" || len(keys[0].Secret) != 32 {
+		t.Errorf("unexpected keyring: %v", keys)
+	}
+}
+
+// The secrets must stay out of every way a Config can be printed, and out of the errors
+// about them. This test fails if a new secret field is logged or formatted on purpose or
+// by accident.
+func TestSecretsNeverLeak(t *testing.T) {
+	t.Parallel()
+
+	const (
+		clientSecret = "very-secret-client-value" //nolint:gosec // fake value
+		valkeyPass   = "very-secret-valkey-value" //nolint:gosec // fake value
+	)
+	c, err := LoadFrom(hosted("production", map[string]string{
+		"PITBOX_OIDC_CLIENT_SECRET": clientSecret, "PITBOX_VALKEY_PASSWORD": valkeyPass,
+	}))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	var buf bytes.Buffer
+	slog.New(slog.NewJSONHandler(&buf, nil)).LogAttrs(context.Background(), slog.LevelInfo, "config", slog.Any("config", c))
+	outputs := []string{
+		buf.String(), fmt.Sprintf("%v", c), fmt.Sprintf("%+v", c), fmt.Sprintf("%#v", c), fmt.Sprint(c), c.String(),
+	}
+	for _, out := range outputs {
+		for _, secret := range []string{clientSecret, valkeyPass, testKey, "client-id"} {
+			if strings.Contains(out, secret) {
+				t.Errorf("output leaks %q: %s", secret, out)
+			}
+		}
+	}
+
+	// The error for a bad key must not echo the key.
+	_, err = LoadFrom(hosted("production", map[string]string{"PITBOX_AUTH_KEYS": "k1:not-base64-but-secret-looking!!"}))
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.Contains(err.Error(), "secret-looking") {
+		t.Errorf("error echoes the key: %v", err)
+	}
+}
+
+// The env library turns an empty variable into the default, so these two rules are only
+// reachable through the struct: Validate still has to refuse them.
+func TestValidateRefusesEmptyAlgorithmsAndValkeyUser(t *testing.T) {
+	t.Parallel()
+
+	c, err := LoadFrom(hosted("production", nil))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	noAlgs := c
+	noAlgs.OIDCAllowedAlgs = nil
+	if err := noAlgs.Validate(); err == nil || !strings.Contains(err.Error(), "PITBOX_OIDC_ALLOWED_ALGS") {
+		t.Errorf("no algorithms: %v", err)
+	}
+	noUser := c
+	noUser.ValkeyUsername = ""
+	if err := noUser.Validate(); err == nil || !strings.Contains(err.Error(), "PITBOX_VALKEY_USERNAME") {
+		t.Errorf("no valkey user: %v", err)
 	}
 }

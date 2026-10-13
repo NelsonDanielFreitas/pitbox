@@ -3,6 +3,9 @@
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
+# Data de validade do PAT do utilizador de provisionamento do Zitadel (30 dias). Só conta no
+# primeiro arranque do volume; o compose exige-a, por isso passa sempre pelo make.
+export ZITADEL_PROVISIONER_PAT_EXPIRATION ?= $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
 COMPOSE     := docker compose --project-directory $(COMPOSE_DIR) --env-file $(ENV_FILE) -f $(COMPOSE_DIR)/docker-compose.yml
 
 help: ## Mostra os alvos disponíveis
@@ -20,26 +23,24 @@ tools-check: ## Verifica a toolchain declarada em mise.toml
 	@golangci-lint --version
 	@docker --version || { echo "Docker não disponível: ativa a integração WSL no Docker Desktop"; exit 1; }
 
-init: ## Gera deploy/compose/.env com segredos aleatórios (não sobrescreve)
-	@if [ -e $(ENV_FILE) ]; then echo "$(ENV_FILE) já existe: não sobrescrevo (apaga-o para regenerar)."; exit 0; fi; \
-	umask 077; \
-	{ \
-	  echo "POSTGRES_SUPERUSER_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "PITBOX_MIGRATOR_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "PITBOX_API_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "ZITADEL_DB_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "OPENFGA_DB_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "OPENFGA_PRESHARED_KEY=$$(openssl rand -hex 24)"; \
-	  echo "VALKEY_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "ZITADEL_MASTERKEY=$$(openssl rand -hex 16)"; \
-	  echo "ZITADEL_LOGIN_COOKIE_SECRET=$$(openssl rand -hex 32)"; \
-	  echo "ZITADEL_ADMIN_USERNAME=zitadel-admin"; \
-	  echo "ZITADEL_ADMIN_PASSWORD=$$(openssl rand -hex 12)A1!"; \
-	  echo "S3_ACCESS_KEY=$$(openssl rand -hex 10)"; \
-	  echo "S3_SECRET_KEY=$$(openssl rand -hex 24)"; \
-	} > $(ENV_FILE); \
-	chmod 600 $(ENV_FILE); \
-	echo "Criado $(ENV_FILE) (permissões 600, fora do Git)."
+init: ## Cria deploy/compose/.env com segredos aleatórios; acrescenta as chaves em falta (nunca altera as existentes)
+	@umask 077; touch $(ENV_FILE); chmod 600 $(ENV_FILE); \
+	add() { grep -q "^$$1=" $(ENV_FILE) || { echo "$$1=$$2" >> $(ENV_FILE); echo "  + $$1"; }; }; \
+	add POSTGRES_SUPERUSER_PASSWORD "$$(openssl rand -hex 24)"; \
+	add PITBOX_MIGRATOR_PASSWORD "$$(openssl rand -hex 24)"; \
+	add PITBOX_API_PASSWORD "$$(openssl rand -hex 24)"; \
+	add ZITADEL_DB_PASSWORD "$$(openssl rand -hex 24)"; \
+	add OPENFGA_DB_PASSWORD "$$(openssl rand -hex 24)"; \
+	add OPENFGA_PRESHARED_KEY "$$(openssl rand -hex 24)"; \
+	add VALKEY_PASSWORD "$$(openssl rand -hex 24)"; \
+	add VALKEY_API_PASSWORD "$$(openssl rand -hex 24)"; \
+	add ZITADEL_MASTERKEY "$$(openssl rand -hex 16)"; \
+	add ZITADEL_LOGIN_COOKIE_SECRET "$$(openssl rand -hex 32)"; \
+	add ZITADEL_ADMIN_USERNAME "zitadel-admin"; \
+	add ZITADEL_ADMIN_PASSWORD "$$(openssl rand -hex 12)A1!"; \
+	add S3_ACCESS_KEY "$$(openssl rand -hex 10)"; \
+	add S3_SECRET_KEY "$$(openssl rand -hex 24)"; \
+	echo "$(ENV_FILE): permissões 600, fora do Git."
 
 up: ## Levanta todo o ambiente local e espera pelos health checks
 	@test -f $(ENV_FILE) || { echo "Falta $(ENV_FILE): corre 'make init'."; exit 1; }

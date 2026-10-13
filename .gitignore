@@ -5,6 +5,7 @@
 *.pem
 *.key
 *.p12
+*.pat
 
 # Go
 /backend/bin/

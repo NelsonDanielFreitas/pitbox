@@ -47,7 +47,38 @@ services:
       VALKEY_PASSWORD: ${VALKEY_PASSWORD:?corre 'make init'}   # lido pelo health check
     # Forma exec com valkey-server como 1.º argumento: o entrypoint oficial só troca
     # para o utilizador "valkey" nesse caso (com "sh -c" ficaria a correr como root).
-    command: ["valkey-server", "--requirepass", "${VALKEY_PASSWORD:?corre 'make init'}", "--save", "", "--appendonly", "no"]
+    # Dois utilizadores (ADR 0013): "default" (palavra-passe VALKEY_PASSWORD) fica para
+    # administração e para o health check; a API usa "pitbox_api", que só toca nas chaves
+    # pitbox:sess:*, pitbox:lock:* e pitbox:rl:*, sem @dangerous (nada de FLUSHALL, KEYS,
+    # CONFIG, ...) e sem pub/sub. Comandos explícitos: Lua (EVAL/EVALSHA/SCRIPT LOAD) para
+    # o compare-and-set e o lock, e os de ligação que o cliente envia ao arrancar.
+    command:
+      - valkey-server
+      - --requirepass
+      - ${VALKEY_PASSWORD:?corre 'make init'}
+      - --user
+      - pitbox_api
+      - "on"
+      - ">${VALKEY_API_PASSWORD:?corre 'make init'}"
+      - "~pitbox:sess:*"
+      - "~pitbox:lock:*"
+      - "~pitbox:rl:*"
+      - -@all
+      - +@read
+      - +@write
+      - -@dangerous
+      - +eval
+      - +evalsha
+      - +script|load
+      - +hello
+      - +ping
+      - +client|setinfo
+      - +client|setname
+      - +client|id
+      - --save
+      - ""
+      - --appendonly
+      - "no"
     ports:
       - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
     healthcheck:
@@ -115,7 +146,10 @@ services:
       ZITADEL_EXTERNALSECURE: "false"
       ZITADEL_TLS_ENABLED: "false"
       ZITADEL_DATABASE_POSTGRES_DSN: postgresql://zitadel:${ZITADEL_DB_PASSWORD:?}@postgres:5432/zitadel?sslmode=disable
-      # Admin inicial (só se aplica no primeiro arranque). Sem projeto nem app OIDC: F1-03.
+      # Tudo o que segue (admin, chaves, tempos, utilizador do provisionamento) só se aplica
+      # no primeiro arranque do volume vazio: para mudar, `make reset`. O projeto e a app
+      # OIDC criam-se com `make zitadel-provision` (F1-03, ADR 0013).
+      # Admin inicial.
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME:-zitadel-admin}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:?}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
@@ -123,6 +157,22 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: Automatically Initialized IAM_LOGIN_CLIENT
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      # Sem variáveis WEBKEYS: a chave ECDSA não se configura por ambiente (o Viper só aplica
+      # variáveis a chaves que existam no defaults.yaml, e a Curve só lá está em comentário;
+      # verificado na v4.19.4: o arranque falha com Errors.WebKey.Config). A instância nasce
+      # com RS256 e o `make zitadel-provision` cria e ativa a chave ES256 (ADR 0004, emenda).
+      # Tempos de vida (ADR 0013). Se definires uma, tens de definir as quatro.
+      ZITADEL_DEFAULTINSTANCE_OIDCSETTINGS_ACCESSTOKENLIFETIME: 10m
+      ZITADEL_DEFAULTINSTANCE_OIDCSETTINGS_IDTOKENLIFETIME: 5m
+      ZITADEL_DEFAULTINSTANCE_OIDCSETTINGS_REFRESHTOKENIDLEEXPIRATION: 168h
+      ZITADEL_DEFAULTINSTANCE_OIDCSETTINGS_REFRESHTOKENEXPIRATION: 720h
+      # Utilizador de máquina IAM_OWNER só para `make zitadel-provision`. O PAT vive num
+      # volume que só este contentor monta (o zitadel-login monta o volume do PAT dele,
+      # com muito menos poder) e expira em 30 dias (o Makefile calcula a data).
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel/provisioner/provisioner.pat
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: provisioner
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: PitBox provisioner (local)
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: ${ZITADEL_PROVISIONER_PAT_EXPIRATION:?usa 'make up' ou 'make reset'}
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/
       ZITADEL_OIDC_DEFAULTLOGINURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/login?authRequest=
@@ -130,6 +180,7 @@ services:
       ZITADEL_SAML_DEFAULTLOGINURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/login?samlRequest=
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:rw
+      - zitadel-provisioner:/zitadel/provisioner:rw
     depends_on:
       postgres:
         condition: service_healthy
@@ -230,4 +281,5 @@ services:
 volumes:
   postgres-data:
   zitadel-bootstrap:
+  zitadel-provisioner:
   seaweedfs-data:

@@ -110,7 +110,10 @@ O Zitadel assina access e ID tokens com `typ` `JWT`, a mesma chave e a mesma `au
 - O Valkey guarda segredos (TM-AUTH-06): em produção exige TLS e autenticação; ACL restrita desde já.
 - O Zitadel não revoga a família de refresh tokens: a spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06**. No BFF o risco é menor (o refresh token nunca sai do servidor).
 - A arquitetura §5.1 (principal e *step-up*) passa a ler `auth_time` e `amr` da sessão e não do token.
-- Novas variáveis: `PITBOX_OIDC_*`, Valkey, chave mestra e durações da sessão.
+- Novas variáveis: `PITBOX_OIDC_*`, Valkey, base de dados, chave mestra e durações da sessão.
+- **O fim de uma sessão por utilizador desativado depende da resposta do Zitadel.** Verificado na `v4.19.4` com `scripts/auth-smoke.py`: para um utilizador desativado o refresh falha com `invalid_request` e a descrição `Errors.User.NotActive` (não `invalid_grant`). A sessão acaba com `invalid_grant` e com `invalid_request` + `Errors.User.*`; qualquer outra recusa (cliente recusado, pedido mal formado, falha de rede) mantém a sessão (e `UNAVAILABLE` depois da graça). Uma versão do Zitadel que mude isto faz falhar o smoke.
+- `GET /auth/session` (identificadores apenas) existe para a app saber se está autenticada sem ler tokens; renova o access token se preciso.
+- A chave ES256 não se configura por variáveis de ambiente do Zitadel (o Viper só aplica variáveis a chaves presentes no `defaults.yaml`; verificado: o arranque falha com `Errors.WebKey.Config`): `make zitadel-provision` cria e ativa-a.
 - `/auth/*` fica sem rate limiting no servidor: risco aceite e ligado ao F5-05 (Cloudflare, por IP).
 - Em desenvolvimento só o Chrome e o Firefox funcionam com `__Host-` sobre `http://localhost`; o Safari espera pelo HTTPS local do F1-09.
 - Revisitar se o Zitadel passar a revogar a família de refresh tokens, ou antes do F2-06.

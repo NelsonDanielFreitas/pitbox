@@ -18,6 +18,7 @@ paths:
 - Tabela nova de equipa: `team_id NOT NULL`, `UNIQUE (team_id, id)`, FKs compostas, RLS ativo com política `team_isolation`, colunas `created_at`, `updated_at`, `version`, `deleted_at` quando editável, trigger `touch` e trigger `change_log` se for sincronizada com a app.
 - Tabelas só de acrescento (auditoria, versões, movimentos): trigger `forbid_mutation` + `REVOKE UPDATE, DELETE`.
 - Segredos guardados apenas como hash (SHA-256, 32 bytes) com `CHECK (length(...) = 32)`.
+- Função `SECURITY DEFINER`: dona `pitbox_owner`, `SET search_path = pg_catalog, pg_temp`, nomes qualificados, `REVOKE ALL ... FROM PUBLIC` e `GRANT EXECUTE` só a quem precisa; em `schema.sql` vai **depois** do `GRANT EXECUTE ON ALL FUNCTIONS` em bloco. Nova função destas = entrada na lista fixa de `tests/structure_test.sql` (secção 9). Com esse `search_path` os operadores de `citext` não se veem: comparar com `lower()`.
 - Atualizar `backend/db/tests/` com testes para cada regra nova (RLS, restrições, triggers). `make db-test` tem de passar.
 
 ## Contratos Protobuf

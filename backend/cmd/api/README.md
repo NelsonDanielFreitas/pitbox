@@ -50,4 +50,12 @@ Fora de `local` a autenticação é obrigatória (`PITBOX_OIDC_CLIENT_ID`, `PITB
 
 Nenhum dos dois cria traces.
 
+Login (BFF, ADR 0013; só funcionam com a autenticação configurada, senão respondem 503):
+
+- `GET /auth/login?return_to=/caminho`: inicia o login (Authorization Code + PKCE) e redireciona para o Zitadel.
+- `GET /auth/callback`: conclui o login, cria a sessão e responde 200 com um *meta refresh* para o `return_to`.
+- `POST /auth/logout`: exige `Origin`; revoga o refresh token, apaga a sessão e redireciona (303) para o `end_session` do Zitadel.
+- `GET /auth/session`: `{authenticated, user_id, amr, auth_time}` (só identificadores) ou 401; 503 se o armazém falhar.
+- `GET /auth/signed-out`: página de destino depois do logout.
+
 O servidor Connect (F1-02) monta os serviços com a cadeia de `internal/platform/interceptors`; ainda não há nenhum registado (os módulos trazem o seu a partir do F1-06). Com `PITBOX_ENV=local` monta-se também a reflection gRPC (`grpcurl`/`grpcui`), nunca noutros ambientes.

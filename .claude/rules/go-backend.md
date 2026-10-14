@@ -21,13 +21,15 @@ paths:
 
 ## Camadas de cada módulo
 - `domain/`: tipos e regras puras. Sem pgx, proto, Connect, slog nem `time.Now()` direto (injetar um `Clock`).
-- `app/`: casos de uso. Ordem fixa: validar → `authz.Check` → `db.WithTeamTx` → chamar domínio e repositório → gravar eventos na outbox na mesma transação → auditoria.
+- `app/`: casos de uso. Ordem fixa: validar → `authz.Check` → `db.WithTeamTx` → chamar domínio e repositório → gravar eventos na outbox na mesma transação → auditoria (`audit.RecordTeam`, também dentro da transação).
 - `app/ports.go`: interfaces dos repositórios, definidas por quem as usa.
 - `store/`: implementação com sqlc; queries em `store/queries/*.sql`; código gerado em `store/sqlcgen/`.
 - `transport/`: handlers Connect finos; mapeamento proto ⇄ domínio em `mapping.go`.
 - `module.go`: `New(deps) (*Module, error)` regista handlers; `api.go` expõe a interface pública do módulo.
 
 ## Base de dados
+- Transações: `db.WithTeamTx(ctx, userID, teamID, fn)` para escritas, `WithTeamReadTx` para RPCs `NO_SIDE_EFFECTS` e `WithUserTx` para o que é do utilizador (listar as minhas equipas). Os ids são `db.UserID` e `db.TeamID` (`db.ParseUserID`/`ParseTeamID`; o `UserID` vem de `auth.PrincipalFrom(ctx).UserID`, o `TeamID` de um campo `team_id` do pedido, validado como UUID, e nunca deduzido da sessão: a fixar nos contratos do F1-06/F1-07). `fn` recebe `db.DBTX` (sem `Commit`) e o `Membership` (o papel); `db.ErrNotMember` sai como `NOT_FOUND` no interceptor de erros: não o converter nos handlers. Sem I/O de rede dentro de `fn`.
+- Só `platform/db` escreve o contexto de RLS e abre transações: nada de `set_config`, `SET LOCAL`, `SET ROLE`, `app.team_id`/`app.user_id`, `Begin`/`BeginTx` nem `pgxpool` noutro sítio, nem nos `.sql` do sqlc (o `internal/archtest` falha). `domain/`, `app/` e `transport/` não importam pgx.
 - Só SQL parametrizado via sqlc/pgx. Nunca concatenar SQL nem usar `fmt.Sprintf` para queries.
 - Toda a query de dados de equipa corre dentro de `WithTeamTx`; filtra também por `team_id` explicitamente (defesa em profundidade além do RLS).
 - Concorrência otimista: updates com `WHERE id = $1 AND version = $2`; 0 linhas → `ErrConflict`.

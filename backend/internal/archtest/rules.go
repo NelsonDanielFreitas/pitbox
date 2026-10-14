@@ -9,9 +9,23 @@
 //     the client. connect.Errorf is not allowed in production code. This is an
 //     allow-list, not a list of forbidden patterns: `msg := err.Error()` followed by
 //     connect.NewError(code, msg) is refused too.
+//
 //  2. Message size limits are never "unlimited" by mistake. connecthttp.WithReadMaxBytes
 //     and WithSendMaxBytes may only be called in internal/platform/httpserver/rpc.go,
 //     which uses a positive constant (0 means "no limit").
+//
+//  3. The row-level-security context has one writer. SQL that sets app.user_id or
+//     app.team_id (set_config, SET LOCAL, SET ROLE, RESET ...) may only be written in
+//     internal/platform/db, in Go strings or in the .sql files sqlc reads. The context is a
+//     plain session variable, so any SQL that runs as the application role could switch team
+//     with it: the protection is that nothing else is allowed to say it (ADR 0005).
+//
+//  4. Transactions are opened in one place. Begin and BeginTx only in internal/platform/db
+//     (a transaction opened elsewhere has no team context), and the pool package
+//     (pgxpool) only there and in the bootstrap.
+//
+//  5. The layers of a module do not import the database driver: domain, app and transport
+//     reach the database through ports and db.DBTX (CLAUDE.md, architecture rule 1).
 //
 // A reviewed exception is a comment on the line before (or on the same line):
 //
@@ -26,6 +40,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -36,7 +51,25 @@ const (
 
 	// limitsFile is the only file allowed to set message size limits.
 	limitsFile = "internal/platform/httpserver/rpc.go"
+
+	// dbDir is the only place that writes the RLS context and opens transactions.
+	dbDir = "internal/platform/db/"
+
+	pgxPrefix     = "github.com/jackc/pgx/"
+	pgxpoolImport = "github.com/jackc/pgx/v5/pgxpool"
 )
+
+// contextSQL matches SQL that writes the RLS context or changes the role or the session in a
+// way that could bypass it. app.current_team_id() and app.current_user_id() (reading it) are
+// not matched.
+var contextSQL = regexp.MustCompile(`(?is)\bapp\.(team_id|user_id)\b|\bset_config\s*\(|\bset\s+(local|session)\b|` +
+	`\bset\s+(session\s+authorization|role)\b|\breset\s+(role|all|session)\b|\bsession_replication_role\b`)
+
+// layerDir matches the directories of a module that must not import the database driver.
+var layerDir = regexp.MustCompile(`^internal/[^/]+/(domain|app|transport)/`)
+
+// poolDirs may import pgxpool.
+var poolDirs = []string{dbDir, "internal/bootstrap/"}
 
 // checkSource applies the rules to one source file. path is relative to the backend
 // module (slash separated); consts are the names of the constants declared in the
@@ -60,16 +93,34 @@ func checkSource(path, src string, consts map[string]bool) ([]string, error) {
 		problems = append(problems, fmt.Sprintf("%s:%d: %s", path, line, fmt.Sprintf(format, args...)))
 	}
 
+	slashPath := filepath.ToSlash(path)
+	inDB := strings.HasPrefix(slashPath, dbDir)
 	for _, imp := range f.Imports {
-		if imp.Name != nil && imp.Name.Name == "." && (importPath(imp) == connectImport || importPath(imp) == connecthttpImport) {
+		ip := importPath(imp)
+		if imp.Name != nil && imp.Name.Name == "." && (ip == connectImport || ip == connecthttpImport) {
 			report(imp.Pos(), "dot imports of connect are not allowed: the rules cannot follow them")
+		}
+		if (strings.HasPrefix(ip, pgxPrefix) || ip == "database/sql") && layerDir.MatchString(slashPath) {
+			report(imp.Pos(), "domain, app and transport do not import the database driver (%s): use ports and db.DBTX", ip)
+		}
+		if ip == pgxpoolImport && !hasAnyPrefix(slashPath, poolDirs) {
+			report(imp.Pos(), "pgxpool only in %s: a pool used elsewhere skips the transaction context", strings.Join(poolDirs, " and "))
 		}
 	}
 
 	ast.Inspect(f, func(n ast.Node) bool {
+		if lit, ok := n.(*ast.BasicLit); ok && lit.Kind == token.STRING && !inDB {
+			if text, err := strconv.Unquote(lit.Value); err == nil && contextSQL.MatchString(text) {
+				report(lit.Pos(), "SQL that writes the RLS context or the role belongs in %s only (ADR 0005)", dbDir)
+			}
+			return true
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
+		}
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && (sel.Sel.Name == "Begin" || sel.Sel.Name == "BeginTx") && !inDB {
+			report(call.Pos(), "%s only in %s: a transaction opened elsewhere has no team context", sel.Sel.Name, dbDir)
 		}
 		pkg, fn, ok := selector(call.Fun)
 		if !ok {
@@ -182,4 +233,28 @@ func packageConsts(f *ast.File) []string {
 		}
 	}
 	return names
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkSQLFile applies rule 3 to a .sql file read by sqlc (queries and their schema): the
+// go/ast rules cannot see them. SQL comments are ignored.
+func checkSQLFile(path, text string) []string {
+	var problems []string
+	for i, line := range strings.Split(text, "\n") {
+		if before, _, found := strings.Cut(line, "--"); found {
+			line = before
+		}
+		if contextSQL.MatchString(line) {
+			problems = append(problems, fmt.Sprintf("%s:%d: SQL that writes the RLS context or the role belongs in %s only (ADR 0005)", path, i+1, dbDir))
+		}
+	}
+	return problems
 }

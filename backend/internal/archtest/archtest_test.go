@@ -77,6 +77,87 @@ func TestRules(t *testing.T) {
 	}
 }
 
+func TestRLSContextAndTransactionRules(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, path, src, wantHit string
+	}{
+		// Rule 3: the context has one writer.
+		{name: "set_config of the team outside db", path: "internal/garage/store/cars.go", wantHit: "RLS context",
+			src: "package p\nconst q = `SELECT set_config('app.team_id', $1, true)`\n"},
+		{name: "SET LOCAL in an ordinary string", path: "internal/garage/store/cars.go", wantHit: "RLS context",
+			src: "package p\nvar q = \"SET LOCAL app.team_id = 'x'\"\n"},
+		{name: "SET ROLE", path: "internal/garage/store/cars.go", wantHit: "RLS context", src: "package p\nvar q = \"set role pitbox_owner\"\n"},
+		{name: "RESET ALL", path: "internal/garage/store/cars.go", wantHit: "RLS context", src: "package p\nvar q = \"RESET ALL\"\n"},
+		{name: "app.user_id alone", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SELECT current_setting('app.user_id')\"\n"},
+		{name: "session_replication_role", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET session_replication_role = replica\"\n"},
+		{name: "split over a concatenation", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SELECT set_config(\" + \"'app.team_id', $1, true)\"\n"},
+		{name: "the same strings in db are fine", path: "internal/platform/db/tx.go", src: "package p\nconst q = `SELECT set_config('app.team_id', $1, true)`\n"},
+		{name: "reading the context is fine", path: "internal/platform/audit/team.go", src: "package p\nconst q = `SELECT app.current_team_id(), app.current_user_id()::text`\n"},
+		{name: "ordinary SQL is fine", path: "internal/garage/store/cars.go", src: "package p\nconst q = `SELECT id FROM garage.car WHERE team_id = $1`\n"},
+		{name: "a reviewed exception", path: "internal/x/x.go", src: "package p\n//archtest:allow one-off migration helper reviewed in PR 123\nvar q = \"RESET ALL\"\n"},
+
+		// Rule 4: transactions and pools in one place.
+		{name: "Begin outside db", path: "internal/garage/store/cars.go", wantHit: "Begin only in", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},
+		{name: "BeginTx on a field", path: "internal/garage/app/x.go", wantHit: "BeginTx only in", src: "package p\ntype s struct{ pool interface{ BeginTx(int) } }\nfunc (x s) f() { x.pool.BeginTx(1) }\n"},
+		{name: "Begin inside db", path: "internal/platform/db/tx.go", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},
+		{name: "pgxpool in a module", path: "internal/garage/store/cars.go", wantHit: "pgxpool only in", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n"},
+		{name: "pgxpool in the bootstrap", path: "internal/bootstrap/auth.go", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n"},
+		{name: "pgxpool in db", path: "internal/platform/db/db.go", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n"},
+
+		// Rule 5: layers.
+		{name: "pgx in domain", path: "internal/garage/domain/car.go", wantHit: "database driver", src: "package p\nimport _ \"github.com/jackc/pgx/v5\"\n"},
+		{name: "pgconn in app", path: "internal/garage/app/svc.go", wantHit: "database driver", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgconn\"\n"},
+		{name: "database/sql in transport", path: "internal/garage/transport/h.go", wantHit: "database driver", src: "package p\nimport _ \"database/sql\"\n"},
+		{name: "pgx in store is fine", path: "internal/garage/store/cars.go", src: "package p\nimport _ \"github.com/jackc/pgx/v5\"\n"},
+		{name: "pgx in platform is fine", path: "internal/platform/audit/audit.go", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgconn\"\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := checkSource(tc.path, tc.src, nil)
+			if err != nil {
+				t.Fatalf("checkSource: %v", err)
+			}
+			switch {
+			case tc.wantHit == "" && len(got) != 0:
+				t.Errorf("unexpected findings: %v", got)
+			case tc.wantHit != "" && (len(got) == 0 || !strings.Contains(strings.Join(got, "\n"), tc.wantHit)):
+				t.Errorf("findings = %v, want one containing %q", got, tc.wantHit)
+			}
+		})
+	}
+}
+
+// The .sql files that sqlc reads are not Go: the go/ast rules do not see them.
+func TestSQLFilesCannotWriteTheRLSContext(t *testing.T) {
+	t.Parallel()
+
+	bad := map[string]string{
+		"set_config":      "-- name: X :exec\nSELECT set_config('app.team_id', $1, true);",
+		"SET LOCAL":       "SET LOCAL app.user_id = '1';",
+		"SET ROLE":        "SET ROLE pitbox_owner;",
+		"multi-line":      "SELECT 1;\nSELECT\n  set_config(\n 'x', 'y', false);",
+		"after a comment": "SELECT 1; -- harmless\nRESET ALL;",
+	}
+	for name, text := range bad {
+		if got := checkSQLFile("internal/x/store/queries/q.sql", text); len(got) == 0 {
+			t.Errorf("%s: not detected", name)
+		}
+	}
+	good := map[string]string{
+		"plain":                  "-- name: ListCars :many\nSELECT * FROM garage.car WHERE team_id = $1;",
+		"a comment that says it": "-- never SET LOCAL app.team_id here\nSELECT 1;",
+		"reading the context":    "SELECT app.current_team_id();",
+	}
+	for name, text := range good {
+		if got := checkSQLFile("internal/x/store/queries/q.sql", text); len(got) != 0 {
+			t.Errorf("%s: false positive: %v", name, got)
+		}
+	}
+}
+
 // An import alias must not hide a call from the rules.
 func TestAliasesAreFollowed(t *testing.T) {
 	t.Parallel()
@@ -156,6 +237,24 @@ func TestBackendFollowsTheRules(t *testing.T) {
 	}
 	if len(files) < 10 {
 		t.Fatalf("only %d production files found: the scan is not looking at the backend", len(files))
+	}
+
+	// The queries sqlc reads (rule 3).
+	for _, pattern := range []string{"internal/*/store/queries/*.sql", "internal/platform/*/queries/*.sql"} {
+		sqlFiles, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(pattern)))
+		if err != nil {
+			t.Fatalf("glob %s: %v", pattern, err)
+		}
+		for _, f := range sqlFiles {
+			text, err := os.ReadFile(f) //nolint:gosec // paths come from the Glob above, inside the module
+			if err != nil {
+				t.Fatalf("read %s: %v", f, err)
+			}
+			rel, _ := filepath.Rel(root, f)
+			for _, p := range checkSQLFile(filepath.ToSlash(rel), string(text)) {
+				t.Error(p)
+			}
+		}
 	}
 
 	for _, rel := range files {

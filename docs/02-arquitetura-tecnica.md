@@ -254,9 +254,11 @@ type setup
 ### 6.2 Isolamento na base de dados (RLS)
 
 - Todas as tabelas com dados de equipa têm `team_id NOT NULL`
-- A aplicação liga-se com um papel sem `BYPASSRLS`; no início de cada transação define `SET LOCAL app.team_id = '<uuid>'` depois de a autorização ter confirmado o acesso
-- Política: `USING (team_id = current_setting('app.team_id')::uuid)` para leitura e escrita
+- A aplicação liga-se com um papel sem `BYPASSRLS` (verificado em cada ligação: membro de `pitbox_app`, nunca superutilizador, `BYPASSRLS` nem membro de `pitbox_owner`); cada caso de uso corre em `db.WithTeamTx` (ou `WithTeamReadTx`, nos RPCs `NO_SIDE_EFFECTS`), depois de `authz.Check`. A transação define `app.user_id` e `app.team_id` com `set_config(…, true)` (parâmetros, nunca texto concatenado), confirma na tabela `membership` que o utilizador pertence à equipa (senão `ErrNotMember`, que sai como `NOT_FOUND`) e só então corre a função, que recebe a interface estreita `db.DBTX` e não pode fazer `Commit`
+- Política: `USING (team_id = app.current_team_id())` para leitura e escrita; um contexto vazio não vê nada e um malformado dá erro
+- O contexto é uma variável de sessão: só `platform/db` a escreve, e um teste de arquitetura recusa SQL de contexto (Go e `.sql` do `sqlc`) noutro sítio (ADR 0005, emenda)
 - Migrações correm com outro papel; um teste no CI falha se alguma tabela com `team_id` não tiver RLS ativo
+- Escritas de auditoria de equipa (`audit.RecordTeam`) vão na mesma transação, com a equipa e o autor lidos do contexto da própria transação
 
 ### 6.3 Links de partilha
 

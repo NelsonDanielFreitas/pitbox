@@ -1,6 +1,6 @@
 {
   "source": "docs/03-plano-de-trabalho.md",
-  "generated": "2026-10-13",
+  "generated": "2026-10-14",
   "phases": {
     "0": {
       "title": "Fase 0 — Preparação",
@@ -438,11 +438,13 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Middleware que abre a transação e faz `SET LOCAL app.user_id` e `app.team_id`; ligação como `pitbox_app`",
+      "todo": "`db.WithTeamTx`, `WithTeamReadTx` e `WithUserTx` (não é um middleware: a equipa só se conhece no caso de uso, depois de `authz.Check`): `set_config` de `app.user_id` e `app.team_id` com parâmetros, verificação de pertença à equipa na própria base (`ErrNotMember` → `NOT_FOUND` no interceptor de erros), papel da ligação verificado em cada ligação (`pitbox_app`, nunca dono, superutilizador nem `BYPASSRLS`), auditoria de equipa na mesma transação (`audit.RecordTeam`) e testes de arquitetura (só `platform/db` escreve o contexto) (ADR 0005, emenda)",
       "done_when": [
-        "Teste de integração: utilizador da equipa B não lê dados da equipa A"
+        "Teste de integração com PostgreSQL real: o utilizador da equipa B não lê nem escreve dados da equipa A",
+        "quem não é membro recebe `NOT_FOUND`, igual para equipa de outro, inexistente ou apagada",
+        "o contexto não passa de um pedido para o seguinte na mesma ligação"
       ],
-      "done_when_raw": "Teste de integração: utilizador da equipa B não lê dados da equipa A",
+      "done_when_raw": "Teste de integração com PostgreSQL real: o utilizador da equipa B não lê nem escreve dados da equipa A; quem não é membro recebe `NOT_FOUND`, igual para equipa de outro, inexistente ou apagada; o contexto não passa de um pedido para o seguinte na mesma ligação",
       "doc_references": [],
       "suggested_branch": "f1-04-contexto-de-equipa-e-rls",
       "issue_title": "F1-04 — Contexto de equipa e RLS",
@@ -454,7 +456,9 @@
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0005"
+      ]
     },
     {
       "id": "F1-04b",

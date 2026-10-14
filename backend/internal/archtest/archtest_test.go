@@ -1,6 +1,7 @@
 package archtest
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -27,7 +28,7 @@ var _ = fmt.Sprint
 func TestRules(t *testing.T) {
 	t.Parallel()
 
-	consts := map[string]bool{"fixed": true}
+	consts := constTable{"fixed": {val: "something went wrong", isStr: true}}
 	tests := []struct {
 		name    string
 		path    string
@@ -93,6 +94,23 @@ func TestRLSContextAndTransactionRules(t *testing.T) {
 		{name: "app.user_id alone", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SELECT current_setting('app.user_id')\"\n"},
 		{name: "session_replication_role", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET session_replication_role = replica\"\n"},
 		{name: "split over a concatenation", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SELECT set_config(\" + \"'app.team_id', $1, true)\"\n"},
+		// The ways round it that were found in review: none may pass.
+		{name: "set_config split into pieces", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = \"set_\" + \"config(\" + \"$1, $2, true)\"\n"},
+		{name: "quoted name and the GUC split with ||", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = `SELECT \"set_config\"('app.' || 'team_id', $1, true)`\n"},
+		{name: "concat() of the GUC name", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = `SELECT x(concat('app.', 'team_id'))`\n"},
+		{name: "a newline between the name and the parenthesis", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = `SELECT set_config\n('x', 'y', true)`\n"},
+		{name: "a comment between SET and LOCAL", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = `SET /* hidden */ LOCAL x = 1`\n"},
+		{name: "SET and LOCAL on two lines", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = \"SET\\nLOCAL x = 1\"\n"},
+		{name: "parentheses around the concatenation", path: "internal/x/x.go", wantHit: "RLS context",
+			src: "package p\nvar q = (\"set_\" + (\"con\" + \"fig\"))\n"},
+		{name: "upper case", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SELECT SET_CONFIG('x','y',true)\"\n"},
+		{name: "words that merely contain set are fine", path: "internal/x/x.go", src: "package p\nvar q = \"SELECT id FROM t OFFSET 5 -- dataset local copy\"\n"},
 		{name: "the same strings in db are fine", path: "internal/platform/db/tx.go", src: "package p\nconst q = `SELECT set_config('app.team_id', $1, true)`\n"},
 		{name: "reading the context is fine", path: "internal/platform/audit/team.go", src: "package p\nconst q = `SELECT app.current_team_id(), app.current_user_id()::text`\n"},
 		{name: "ordinary SQL is fine", path: "internal/garage/store/cars.go", src: "package p\nconst q = `SELECT id FROM garage.car WHERE team_id = $1`\n"},
@@ -130,16 +148,24 @@ func TestRLSContextAndTransactionRules(t *testing.T) {
 	}
 }
 
-// The .sql files that sqlc reads are not Go: the go/ast rules do not see them.
+// The .sql files that sqlc reads are not Go: the go/ast rules do not see them. The whole file is
+// searched, comments included, because "--" inside a string literal is not a comment.
 func TestSQLFilesCannotWriteTheRLSContext(t *testing.T) {
 	t.Parallel()
 
 	bad := map[string]string{
-		"set_config":      "-- name: X :exec\nSELECT set_config('app.team_id', $1, true);",
-		"SET LOCAL":       "SET LOCAL app.user_id = '1';",
-		"SET ROLE":        "SET ROLE pitbox_owner;",
-		"multi-line":      "SELECT 1;\nSELECT\n  set_config(\n 'x', 'y', false);",
-		"after a comment": "SELECT 1; -- harmless\nRESET ALL;",
+		"set_config":                       "-- name: X :exec\nSELECT set_config('app.team_id', $1, true);",
+		"SET LOCAL":                        "SET LOCAL app.user_id = '1';",
+		"SET ROLE":                         "SET ROLE pitbox_owner;",
+		"multi-line call":                  "SELECT 1;\nSELECT\n  set_config(\n 'x', 'y', false);",
+		"the parenthesis on the next line": "SELECT set_config\n('x', 'y', true);",
+		"a '--' inside a string literal":   "SELECT '--', set_config('x', 'y', true);",
+		"a '--' in a string, SET after":    "SELECT '--'; SET LOCAL x = 1;",
+		"quoted name":                      `SELECT "set_config"('x', 'y', true);`,
+		"the GUC split with ||":            "SELECT current_setting('app.' || 'team_id');",
+		"a comment between SET and LOCAL":  "SET /* c */ LOCAL x = 1;",
+		"after a comment":                  "SELECT 1; -- harmless\nRESET ALL;",
+		"a comment that names it":          "-- never SET LOCAL app.team_id here\nSELECT 1;", // reported on purpose: comments are not stripped
 	}
 	for name, text := range bad {
 		if got := checkSQLFile("internal/x/store/queries/q.sql", text); len(got) == 0 {
@@ -147,14 +173,50 @@ func TestSQLFilesCannotWriteTheRLSContext(t *testing.T) {
 		}
 	}
 	good := map[string]string{
-		"plain":                  "-- name: ListCars :many\nSELECT * FROM garage.car WHERE team_id = $1;",
-		"a comment that says it": "-- never SET LOCAL app.team_id here\nSELECT 1;",
-		"reading the context":    "SELECT app.current_team_id();",
+		"plain":               "-- name: ListCars :many\nSELECT * FROM garage.car WHERE team_id = $1;",
+		"reading the context": "SELECT app.current_team_id(), app.current_user_id();",
+		"offset":              "SELECT * FROM t OFFSET 10;",
 	}
 	for name, text := range good {
 		if got := checkSQLFile("internal/x/store/queries/q.sql", text); len(got) != 0 {
 			t.Errorf("%s: false positive: %v", name, got)
 		}
+	}
+}
+
+// Constants declared in the package are followed, also when one is built from others.
+func TestConstantsAreFollowed(t *testing.T) {
+	t.Parallel()
+
+	src := `package p
+
+const (
+	a = "set_"
+	b = "con"
+	c = b + "fig"
+	q = a + c
+)
+
+var _ = q + "('x', 'y', true)"
+var _ = a
+`
+	f, err := parser.ParseFile(token.NewFileSet(), "x.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table := constTable{}
+	for range 4 {
+		packageConsts(f, table)
+	}
+	if got := table["q"]; !got.isStr || got.val != "set_config" {
+		t.Fatalf("q = %+v, want the string set_config", got)
+	}
+	problems, err := checkSource("internal/x/x.go", src, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(problems) == 0 {
+		t.Error("set_config built from constants was not reported")
 	}
 }
 
@@ -200,8 +262,8 @@ func TestDotImportsAreRefused(t *testing.T) {
 // tests and no generated code.
 func TestBackendFollowsTheRules(t *testing.T) {
 	root := filepath.Join("..", "..") // backend/
-	constsByDir := make(map[string]map[string]bool)
 	var files []string
+	parsed := make(map[string][]*ast.File) // per directory, to settle the constants of the package
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -224,16 +286,21 @@ func TestBackendFollowsTheRules(t *testing.T) {
 			return err
 		}
 		dir := filepath.Dir(rel)
-		if constsByDir[dir] == nil {
-			constsByDir[dir] = make(map[string]bool)
-		}
-		for _, n := range packageConsts(f) {
-			constsByDir[dir][n] = true
-		}
+		parsed[dir] = append(parsed[dir], f)
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk: %v", err)
+	}
+	constsByDir := make(map[string]constTable)
+	for dir, fs := range parsed {
+		table := constTable{}
+		for range 4 { // constants built from constants of another file: a few passes settle them
+			for _, f := range fs {
+				packageConsts(f, table)
+			}
+		}
+		constsByDir[dir] = table
 	}
 	if len(files) < 10 {
 		t.Fatalf("only %d production files found: the scan is not looking at the backend", len(files))

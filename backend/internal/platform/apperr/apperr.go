@@ -9,3 +9,9 @@ import "errors"
 // (and the same answer, NOT_FOUND), so that ids cannot be probed (ADR 0005). Wrap it
 // ("... : %w") to add context for the log; errors.Is still finds it.
 var ErrNotFound = errors.New("not found")
+
+// ErrInvalidArgument means a value that came from the client is not acceptable and the
+// validation of the contract could not catch it (for example, the nil UUID, which a UUID rule
+// accepts). The errors interceptor answers INVALID_ARGUMENT with a fixed message; wrap it with
+// context for the log and never put the value in the text.
+var ErrInvalidArgument = errors.New("invalid argument")

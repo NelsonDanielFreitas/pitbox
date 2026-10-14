@@ -309,7 +309,9 @@ func TestZeroAndMalformedIdsNeverReachTheDatabase(t *testing.T) {
 		"newline":      idTeamA[:35] + "\n",
 		"non-hex char": "0190000g-0000-7000-8000-0000000000a1",
 	} {
-		if _, err := db.ParseTeamID(s); !errors.Is(err, db.ErrInvalidScope) {
+		// A team id comes from the client: its error is the client's (INVALID_ARGUMENT). A user id
+		// comes from our own session: its error is ours (internal) and must not become the client's.
+		if _, err := db.ParseTeamID(s); !errors.Is(err, db.ErrInvalidScope) || !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: ParseTeamID err = %v", name, err)
 		}
 		if _, err := db.ParseUserID(s); !errors.Is(err, db.ErrInvalidScope) {

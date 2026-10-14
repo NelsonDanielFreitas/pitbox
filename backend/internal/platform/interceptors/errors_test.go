@@ -34,6 +34,8 @@ func TestPublicError(t *testing.T) {
 		{name: "canceled", err: context.Canceled, wantCode: connect.CodeCanceled, wantMessage: publicCanceledMessage},
 		// One place maps it: a resource of another team and one that does not exist look the same.
 		{name: "not found, bare", err: apperr.ErrNotFound, wantCode: connect.CodeNotFound, wantMessage: publicNotFoundMessage},
+		{name: "invalid argument, bare", err: apperr.ErrInvalidArgument, wantCode: connect.CodeInvalidArgument, wantMessage: publicInvalidMessage},
+		{name: "invalid argument, wrapped with context that is not for the client", err: fmt.Errorf("team id 0000: %w", apperr.ErrInvalidArgument), wantCode: connect.CodeInvalidArgument, wantMessage: publicInvalidMessage, leak: "0000"},
 		{name: "not found, wrapped with context that is not for the client", err: fmt.Errorf("team 0190f2a4: user 0190aaaa is not a member: %w", apperr.ErrNotFound), wantCode: connect.CodeNotFound, wantMessage: publicNotFoundMessage, leak: "0190"},
 	}
 	for _, tc := range tests {
@@ -80,6 +82,7 @@ func TestErrorsLogsOneLinePerRPC(t *testing.T) {
 		{name: "success is debug", err: nil, wantLevel: "DEBUG", wantCode: "ok"},
 		{name: "internal is an error with its cause", err: errors.New("pg: connection refused"), wantLevel: "ERROR", wantCode: "internal", wantCause: true, causeSubstr: "pg: connection refused"},
 		{name: "client error is info and logs no cause", err: connect.NewError(connect.CodeInvalidArgument, "name too long").WithCause(errors.New("name=Alice Silva")), wantLevel: "INFO", wantCode: "invalid_argument"},
+		{name: "invalid argument is info, not an error, and logs no cause", err: fmt.Errorf("team id Alice: %w", apperr.ErrInvalidArgument), wantLevel: "INFO", wantCode: "invalid_argument"},
 		{name: "not found is info and logs no cause", err: fmt.Errorf("team Alice: %w", apperr.ErrNotFound), wantLevel: "INFO", wantCode: "not_found"},
 		{name: "canceled is info", err: context.Canceled, wantLevel: "INFO", wantCode: "canceled"},
 		{name: "deadline is a warning", err: context.DeadlineExceeded, wantLevel: "WARN", wantCode: "deadline_exceeded", wantCause: true, causeSubstr: "context deadline exceeded"},

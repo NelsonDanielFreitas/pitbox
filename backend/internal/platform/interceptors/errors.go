@@ -17,6 +17,7 @@ const (
 	publicDeadlineMessage = "deadline exceeded"
 	publicCanceledMessage = "canceled"
 	publicNotFoundMessage = "not found"
+	publicInvalidMessage  = "invalid argument"
 )
 
 // Errors makes sure the only errors that leave the server are ones written for the
@@ -27,6 +28,9 @@ const (
 //   - A remote *connect.Error (from a Connect client of ours) is not forwarded.
 //   - apperr.ErrNotFound (a resource of another team, or one that does not exist) becomes
 //     NOT_FOUND with a fixed message. It is the one place that maps it.
+//   - apperr.ErrInvalidArgument (a client value the contract could not refuse) becomes
+//     INVALID_ARGUMENT with a fixed message, never an INTERNAL error that the client could
+//     provoke at will.
 //   - Context errors keep their meaning (deadline, canceled).
 //   - Everything else becomes CodeInternal with a fixed message; the cause is only
 //     logged.
@@ -56,6 +60,8 @@ func publicError(err error) error {
 	switch {
 	case errors.Is(err, apperr.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, publicNotFoundMessage).WithCause(err)
+	case errors.Is(err, apperr.ErrInvalidArgument):
+		return connect.NewError(connect.CodeInvalidArgument, publicInvalidMessage).WithCause(err)
 	case errors.Is(err, context.DeadlineExceeded):
 		return connect.NewError(connect.CodeDeadlineExceeded, publicDeadlineMessage).WithCause(err)
 	case errors.Is(err, context.Canceled):

@@ -118,4 +118,22 @@ DO $$ BEGIN
     'falta a política de retenção';
 END $$;
 
+-- 9. SECURITY DEFINER: lista exata (cada uma é uma exceção à RLS e tem de ser revista), dona
+--    pitbox_owner, search_path fixo, e ninguém além de pitbox_app a executa (nem PUBLIC).
+DO $$ DECLARE got text; bad text; BEGIN
+  SELECT string_agg(p.oid::regprocedure::text, ', ' ORDER BY p.oid::regprocedure::text) INTO got
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit');
+  ASSERT got = 'identity.resolve_login(text,citext,text)', format('funções SECURITY DEFINER: %s', got);
+  SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit')
+    AND (pg_get_userbyid(p.proowner) <> 'pitbox_owner'
+         OR NOT ('search_path=pg_catalog, pg_temp' = ANY (COALESCE(p.proconfig, '{}')))
+         OR has_function_privilege('pitbox_readonly', p.oid, 'EXECUTE')
+         OR EXISTS (SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a WHERE a.grantee = 0)
+         OR NOT has_function_privilege('pitbox_app', p.oid, 'EXECUTE'));
+  ASSERT bad IS NULL, 'SECURITY DEFINER mal configurada: ' || bad;
+END $$;
+
 \echo 'Testes estruturais passaram.'

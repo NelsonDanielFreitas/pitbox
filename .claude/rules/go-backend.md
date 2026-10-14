@@ -45,9 +45,16 @@ paths:
 - Nunca registar tokens, cookies, palavras-passe, emails, valores de setup ou corpos de pedidos.
 - Spans OpenTelemetry nos casos de uso e nas chamadas externas.
 
+## Autenticação
+- Todo o RPC exige sessão: o interceptor de autenticação (lugar 5 da cadeia) é *default deny*. Só um procedimento listado explicitamente como público passa sem sessão; uma falha de armazém ou de IdP é `UNAVAILABLE`, nunca `UNAUTHENTICATED` nem acesso.
+- O `Principal` (`auth.PrincipalFrom(ctx)`) traz `user_id`, `sub`, `amr` e `auth_time` da sessão; equipas e papéis nunca vêm da sessão (verifica-se no OpenFGA). A identidade nunca viaja numa mensagem de pedido.
+- O caminho `Authorization: Bearer` não existe até ao F2-06. Nada de tokens, cookies, `code`, `state`, emails ou *claims* em logs, traces, erros ou auditoria.
+- Os segredos (`PITBOX_OIDC_CLIENT_SECRET`, `PITBOX_VALKEY_PASSWORD`, `PITBOX_DATABASE_URL`, `PITBOX_AUTH_KEYS`) nunca em `LogValue`, em erros ou em `fmt`; erros sobre eles não repetem o valor.
+
 ## Testes
 - Table-driven, `t.Parallel()` quando seguro, `testify/require` para pré-condições.
 - `domain/` e `app/` com testes unitários (repositórios falsos); `store/` com `testcontainers-go` e Postgres real com o `schema.sql`.
+- Testes que precisam de Valkey ou PostgreSQL usam `testutil.StartValkey` / `StartPostgres` (a imagem e o arranque do compose); com Docker em falta saltam, exceto com `PITBOX_REQUIRE_DOCKER=1` (CI): um teste de segurança saltado não é um teste passado. Testes de segurança têm teste de mutação (estragar o controlo faz falhar um teste).
 - Todo o endpoint tem teste de acesso cruzado: utilizador da equipa B a ler/escrever recurso da equipa A → `NOT_FOUND`.
 - Código que faz parsing de dados externos tem `FuzzXxx` (`go test -fuzz`).
 

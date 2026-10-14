@@ -1,6 +1,6 @@
 {
   "source": "docs/03-plano-de-trabalho.md",
-  "generated": "2026-10-12",
+  "generated": "2026-10-13",
   "phases": {
     "0": {
       "title": "Fase 0 — Preparação",
@@ -370,14 +370,16 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Projeto e aplicação OIDC no Zitadel local; fluxo Authorization Code + PKCE no BFF; cookie `__Host-` HttpOnly; validação de JWT com JWKS em cache",
+      "todo": "(a) Projeto e aplicação OIDC no Zitadel local com ES256 e tokens curtos (script idempotente); `/auth/login`, `/auth/callback` e `/auth/logout` no BFF (Authorization Code + PKCE, cookies `__Host-`, sessão no Valkey com refresh token cifrado); interceptor de autenticação no lugar 5 da cadeia; (b) criação do `user_account` no primeiro login (`identity.resolve_login`, só com email verificado) (ADR 0013)",
       "done_when": [
         "Login e logout no browser",
-        "token adulterado é rejeitado num teste"
+        "ID token adulterado, de outro emissor, com `nonce` errado ou algoritmo fora da lista é rejeitado num teste",
+        "50 pedidos simultâneos com o access token caducado fazem um só refresh",
+        "segundo login não duplica o utilizador"
       ],
-      "done_when_raw": "Login e logout no browser; token adulterado é rejeitado num teste",
+      "done_when_raw": "Login e logout no browser; ID token adulterado, de outro emissor, com `nonce` errado ou algoritmo fora da lista é rejeitado num teste; 50 pedidos simultâneos com o access token caducado fazem um só refresh; segundo login não duplica o utilizador",
       "doc_references": [],
-      "suggested_branch": "f1-03-login-com-zitadel-bff",
+      "suggested_branch": "f1-03-login-zitadel-bff",
       "issue_title": "F1-03 — Login com Zitadel + BFF",
       "labels": [
         "fase-1",
@@ -386,7 +388,43 @@
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0004",
+        "0013"
+      ]
+    },
+    {
+      "id": "F1-03c",
+      "title": "Passkeys, MFA e sessões",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Passkeys, MFA obrigatório para donos, códigos de recuperação, recuperação de conta, lista e revogação de sessões (*back-channel logout*), *step-up* com `auth_time` e `amr` lidos da sessão (ADR 0013)",
+      "done_when": [
+        "Operação sensível com sessão antiga devolve `UNAUTHENTICATED` com pedido de reautenticação",
+        "sessão terminada no Zitadel deixa de funcionar"
+      ],
+      "done_when_raw": "Operação sensível com sessão antiga devolve `UNAUTHENTICATED` com pedido de reautenticação; sessão terminada no Zitadel deixa de funcionar",
+      "doc_references": [
+        "§5.1"
+      ],
+      "suggested_branch": "f1-03c-passkeys-mfa-sessoes",
+      "issue_title": "F1-03c — Passkeys, MFA e sessões",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0013"
+      ]
     },
     {
       "id": "F1-04",
@@ -897,11 +935,12 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Empacotar a app; plugins de vibração, ecrã sempre ligado, notificações locais, armazenamento seguro, SQLite nativo cifrado",
+      "todo": "Empacotar a app; plugins de vibração, ecrã sempre ligado, notificações locais, armazenamento seguro, SQLite nativo cifrado; login móvel com AppAuth e caminho `Authorization: Bearer` no backend (ADR 0013: `client_id` permitido, rejeitar tokens com `nonce`, `at_hash` ou `auth_time`, JWKS com TTL e limite de pedidos, revogação da família de refresh tokens, que o Zitadel não faz)",
       "done_when": [
-        "App instalada no teu telemóvel por APK de teste"
+        "App instalada no teu telemóvel por APK de teste",
+        "ID token apresentado como Bearer é rejeitado num teste"
       ],
-      "done_when_raw": "App instalada no teu telemóvel por APK de teste",
+      "done_when_raw": "App instalada no teu telemóvel por APK de teste; ID token apresentado como Bearer é rejeitado num teste",
       "doc_references": [],
       "suggested_branch": "f2-06-capacitor-no-android",
       "issue_title": "F2-06 — Capacitor no Android",
@@ -912,7 +951,9 @@
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0013"
+      ]
     },
     {
       "id": "F2-07",
@@ -1764,7 +1805,7 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "DNS, TLS, WAF, rate limiting; origem só aceita tráfego da Cloudflare",
+      "todo": "DNS, TLS, WAF, rate limiting (incluindo `/auth/*` por IP: o BFF não limita, ADR 0013); origem só aceita tráfego da Cloudflare",
       "done_when": [
         "Pedido direto à origem é recusado"
       ],

@@ -3,6 +3,7 @@ package interceptors
 import (
 	"context"
 	"net"
+	"net/http"
 	"net/netip"
 	"strings"
 	"unicode"
@@ -58,6 +59,23 @@ func Audit(clientIPHeader string) connect.ServerInterceptor {
 			return next(context.WithValue(ctx, auditKey{}, meta), spec, stream)
 		}
 	}
+}
+
+// RequestMeta builds the same metadata for a plain HTTP request (the /auth/* handlers are
+// not Connect RPCs and do not pass through the Audit interceptor). clientIPHeader has the
+// same meaning as in Audit.
+func RequestMeta(r *http.Request, clientIPHeader string) AuditMeta {
+	meta := AuditMeta{TraceID: traceID(r.Context()), UserAgent: sanitizeUserAgent(r.Header.Get("User-Agent"), maxUserAgentBytes)}
+	value := r.RemoteAddr
+	if clientIPHeader != "" {
+		value = r.Header.Get(clientIPHeader)
+	} else if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		value = host
+	}
+	if a, err := netip.ParseAddr(strings.TrimSpace(value)); err == nil {
+		meta.IP = a.Unmap()
+	}
+	return meta
 }
 
 func traceID(ctx context.Context) string {

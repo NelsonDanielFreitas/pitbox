@@ -101,6 +101,9 @@ jobs:
         run: make lint-go
 
       - name: Tests (race detector)
+        # Docker is available on the runner: the Valkey tests must run, never skip.
+        env:
+          PITBOX_REQUIRE_DOCKER: "1"
         run: make test
 
       - name: govulncheck

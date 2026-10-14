@@ -1,8 +1,11 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api smoke-auth zitadel-provision test-scripts
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
+# Data de validade do PAT do utilizador de provisionamento do Zitadel (30 dias). Só conta no
+# primeiro arranque do volume; o compose exige-a, por isso passa sempre pelo make.
+export ZITADEL_PROVISIONER_PAT_EXPIRATION ?= $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
 COMPOSE     := docker compose --project-directory $(COMPOSE_DIR) --env-file $(ENV_FILE) -f $(COMPOSE_DIR)/docker-compose.yml
 
 help: ## Mostra os alvos disponíveis
@@ -20,26 +23,25 @@ tools-check: ## Verifica a toolchain declarada em mise.toml
 	@golangci-lint --version
 	@docker --version || { echo "Docker não disponível: ativa a integração WSL no Docker Desktop"; exit 1; }
 
-init: ## Gera deploy/compose/.env com segredos aleatórios (não sobrescreve)
-	@if [ -e $(ENV_FILE) ]; then echo "$(ENV_FILE) já existe: não sobrescrevo (apaga-o para regenerar)."; exit 0; fi; \
-	umask 077; \
-	{ \
-	  echo "POSTGRES_SUPERUSER_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "PITBOX_MIGRATOR_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "PITBOX_API_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "ZITADEL_DB_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "OPENFGA_DB_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "OPENFGA_PRESHARED_KEY=$$(openssl rand -hex 24)"; \
-	  echo "VALKEY_PASSWORD=$$(openssl rand -hex 24)"; \
-	  echo "ZITADEL_MASTERKEY=$$(openssl rand -hex 16)"; \
-	  echo "ZITADEL_LOGIN_COOKIE_SECRET=$$(openssl rand -hex 32)"; \
-	  echo "ZITADEL_ADMIN_USERNAME=zitadel-admin"; \
-	  echo "ZITADEL_ADMIN_PASSWORD=$$(openssl rand -hex 12)A1!"; \
-	  echo "S3_ACCESS_KEY=$$(openssl rand -hex 10)"; \
-	  echo "S3_SECRET_KEY=$$(openssl rand -hex 24)"; \
-	} > $(ENV_FILE); \
-	chmod 600 $(ENV_FILE); \
-	echo "Criado $(ENV_FILE) (permissões 600, fora do Git)."
+init: ## Cria deploy/compose/.env com segredos aleatórios; acrescenta as chaves em falta (nunca altera as existentes)
+	@umask 077; touch $(ENV_FILE); chmod 600 $(ENV_FILE); \
+	add() { grep -q "^$$1=" $(ENV_FILE) || { echo "$$1=$$2" >> $(ENV_FILE); echo "  + $$1"; }; }; \
+	add POSTGRES_SUPERUSER_PASSWORD "$$(openssl rand -hex 24)"; \
+	add PITBOX_MIGRATOR_PASSWORD "$$(openssl rand -hex 24)"; \
+	add PITBOX_API_PASSWORD "$$(openssl rand -hex 24)"; \
+	add ZITADEL_DB_PASSWORD "$$(openssl rand -hex 24)"; \
+	add OPENFGA_DB_PASSWORD "$$(openssl rand -hex 24)"; \
+	add OPENFGA_PRESHARED_KEY "$$(openssl rand -hex 24)"; \
+	add VALKEY_PASSWORD "$$(openssl rand -hex 24)"; \
+	add VALKEY_API_PASSWORD "$$(openssl rand -hex 24)"; \
+	add ZITADEL_MASTERKEY "$$(openssl rand -hex 16)"; \
+	add ZITADEL_LOGIN_COOKIE_SECRET "$$(openssl rand -hex 32)"; \
+	add ZITADEL_ADMIN_USERNAME "zitadel-admin"; \
+	add ZITADEL_ADMIN_PASSWORD "$$(openssl rand -hex 12)A1!"; \
+	add S3_ACCESS_KEY "$$(openssl rand -hex 10)"; \
+	add S3_SECRET_KEY "$$(openssl rand -hex 24)"; \
+	add PITBOX_AUTH_KEYS "k1:$$(openssl rand -base64 32)"; \
+	echo "$(ENV_FILE): permissões 600, fora do Git."
 
 up: ## Levanta todo o ambiente local e espera pelos health checks
 	@test -f $(ENV_FILE) || { echo "Falta $(ENV_FILE): corre 'make init'."; exit 1; }
@@ -94,8 +96,11 @@ lint-go:
 breaking: ## buf breaking contra o branch local main (no CI cria-se com git branch --force main origin/main)
 	buf breaking --against '.git#branch=main'
 
-test: ## Testes do backend com -race (app e firmware entram mais tarde)
+test: test-scripts ## Testes do backend com -race e dos scripts (app e firmware entram mais tarde)
 	cd backend && go test -race ./...
+
+test-scripts: ## Testes dos scripts Python (Zitadel falso, sem Docker)
+	python3 -I -m unittest discover -s scripts -p 'test_*.py'
 
 app-typecheck: ## tsc --noEmit ao TypeScript gerado
 	@test -x app/node_modules/.bin/tsc || (cd app && pnpm install --frozen-lockfile)
@@ -111,8 +116,14 @@ workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKE
 	actionlint
 	zizmor $(if $(GH_TOKEN),,--offline) .github/workflows
 
-run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger local (make up); Ctrl+C para parar
-	cd backend && PITBOX_ENV=local OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:$${OTLP_HTTP_PORT:-4318} go run ./cmd/api
+run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger; com login se `make zitadel-provision` já correu (Ctrl+C para parar)
+	@bash scripts/run-api.sh
+
+zitadel-provision: ## Projeto, app OIDC, tempos dos tokens e política de login do Zitadel local (idempotente; precisa de make up)
+	python3 -I scripts/zitadel-provision.py $(ARGS)
+
+smoke-auth: ## Prova o login ponta a ponta contra o Zitadel local, sem browser (precisa de make up e make zitadel-provision)
+	python3 -I scripts/auth-smoke.py
 
 smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)
 	bash scripts/api-smoke.sh

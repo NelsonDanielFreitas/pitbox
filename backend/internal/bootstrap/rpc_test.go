@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,7 @@ import (
 
 	identityv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
 	"github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
@@ -60,6 +62,22 @@ type harness struct {
 // server with its trace middleware) around a fake service, behind an httptest server.
 func newHarness(t *testing.T, env map[string]string, teams *fakeTeams, extra ...func(*connect.Server)) *harness {
 	t.Helper()
+	return newHarnessWithAuth(t, env, teams, signedInAs("user-test"), extra...)
+}
+
+// signedInAs stands for the authentication interceptor in the tests of the other controls:
+// it lets every call through as the given user. The real one is tested in
+// internal/platform/auth and, wired in, by TestRPCsAreRefusedWithoutAuthentication.
+func signedInAs(userID string) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(auth.WithPrincipal(ctx, auth.Principal{UserID: userID}), spec, stream)
+		}
+	}
+}
+
+func newHarnessWithAuth(t *testing.T, env map[string]string, teams *fakeTeams, authn connect.ServerInterceptor, extra ...func(*connect.Server)) *harness {
+	t.Helper()
 	cfg, err := config.LoadFrom(env)
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
@@ -72,7 +90,7 @@ func newHarness(t *testing.T, env map[string]string, teams *fakeTeams, extra ...
 	register := append([]func(*connect.Server){func(s *connect.Server) {
 		identityv1connect.RegisterTeamServiceHandler(s, teams)
 	}}, extra...)
-	api, err := newRPCServer(cfg, logger, tp, register...)
+	api, err := newRPCServer(cfg, logger, tp, authn, register...)
 	if err != nil {
 		t.Fatalf("newRPCServer: %v", err)
 	}
@@ -527,6 +545,10 @@ func TestReflectionIsLocalOnly(t *testing.T) {
 		t.Run(tc.env, func(t *testing.T) {
 			t.Parallel()
 			env := map[string]string{"PITBOX_ENV": tc.env}
+			if tc.env != "local" {
+				// Authentication is mandatory outside local: a complete (fake) setup.
+				maps.Copy(env, hostedAuthEnv())
+			}
 			h := newHarness(t, env, &fakeTeams{})
 
 			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, h.url+path, strings.NewReader(""))
@@ -543,5 +565,22 @@ func TestReflectionIsLocalOnly(t *testing.T) {
 				t.Errorf("env %s: status %d, reflection mounted = %v, want %v", tc.env, resp.StatusCode, mounted, tc.wantMount)
 			}
 		})
+	}
+}
+
+// The wiring puts authentication in front of the service: with the deny-all interceptor
+// (what runs when authentication is not configured) the handler is never reached.
+func TestRPCsAreRefusedWithoutAuthentication(t *testing.T) {
+	t.Parallel()
+
+	teams := &fakeTeams{}
+	h := newHarnessWithAuth(t, map[string]string{}, teams, auth.DenyAll())
+	_, err := h.client.CreateTeam(context.Background(), validRequest())
+	code, msg := codeAndMessage(t, err)
+	if code != connect.CodeUnauthenticated || msg != "unauthenticated" {
+		t.Fatalf("code %v, message %q", code, msg)
+	}
+	if teams.calls.Load() != 0 {
+		t.Error("the handler ran for an unauthenticated call")
 	}
 }

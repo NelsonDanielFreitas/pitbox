@@ -40,6 +40,11 @@ const (
 	// MaxRPCStreamDuration is the longest a streaming RPC may be configured to run: the
 	// Cloud Run request timeout is at most 60 min (to confirm in F5-04).
 	MaxRPCStreamDuration = 60 * time.Minute
+
+	// MaxSessionAbsolute is the longest a web session may live. It matches the
+	// absolute refresh token expiration configured in Zitadel (720 h, ADR 0013): a
+	// longer session could not be renewed anyway.
+	MaxSessionAbsolute = 720 * time.Hour
 )
 
 // Config is the configuration of pitbox-api.
@@ -76,6 +81,38 @@ type Config struct {
 	// OriginCloudflareOnly declares that the origin only accepts traffic from the
 	// Cloudflare edge (F5-05). It must stay false until that is true.
 	OriginCloudflareOnly bool `env:"PITBOX_ORIGIN_CLOUDFLARE_ONLY" envDefault:"false"`
+
+	// Authentication (F1-03, ADR 0013). Nothing here has a safe default outside local
+	// development: Validate requires all of it in staging, preview and production.
+
+	// PublicURL is the origin the browser sees for pitbox-api (scheme and host, no path).
+	// The OIDC redirect URI is PublicURL + "/auth/callback".
+	PublicURL string `env:"PITBOX_PUBLIC_URL" envDefault:"http://localhost:8081"`
+	// OIDCIssuer is the Zitadel issuer, compared exactly with the "iss" of the ID token.
+	OIDCIssuer       string `env:"PITBOX_OIDC_ISSUER" envDefault:"http://localhost:8080"`
+	OIDCClientID     string `env:"PITBOX_OIDC_CLIENT_ID"`
+	OIDCClientSecret string `env:"PITBOX_OIDC_CLIENT_SECRET"`
+	// OIDCAllowedAlgs are the ID token signature algorithms accepted (cryptographic
+	// agility: change the list, not the code). "none" and HS* are never valid.
+	OIDCAllowedAlgs []string `env:"PITBOX_OIDC_ALLOWED_ALGS" envSeparator:"," envDefault:"ES256"`
+
+	ValkeyAddr     string `env:"PITBOX_VALKEY_ADDR" envDefault:"127.0.0.1:6379"`
+	ValkeyUsername string `env:"PITBOX_VALKEY_USERNAME" envDefault:"pitbox_api"`
+	ValkeyPassword string `env:"PITBOX_VALKEY_PASSWORD"`
+	ValkeyTLS      bool   `env:"PITBOX_VALKEY_TLS" envDefault:"false"`
+
+	// DatabaseURL is the PostgreSQL connection string of the application role (pitbox_api,
+	// never the owner or the migrator). It carries the password: a secret.
+	DatabaseURL string `env:"PITBOX_DATABASE_URL"`
+
+	// AuthKeys are the master keys for sealing cookies and refresh tokens, as
+	// "kid:base64,kid:base64". The first one seals; the others only open (rotation).
+	// Read them with AuthKeyring.
+	AuthKeys string `env:"PITBOX_AUTH_KEYS"`
+
+	// SessionIdleTimeout and SessionAbsoluteTimeout bound a web session (ADR 0013).
+	SessionIdleTimeout     time.Duration `env:"PITBOX_SESSION_IDLE_TIMEOUT" envDefault:"168h"`
+	SessionAbsoluteTimeout time.Duration `env:"PITBOX_SESSION_ABSOLUTE_TIMEOUT" envDefault:"720h"`
 
 	// The standard OpenTelemetry variables are read here only to validate them:
 	// the SDK reads them again itself. Tracing is off when neither is set.
@@ -150,6 +187,7 @@ func (c Config) Validate() error {
 	if err := c.validateClientIPMode(); err != nil {
 		errs = append(errs, err)
 	}
+	errs = append(errs, c.validateAuth()...)
 
 	// Telemetry must not travel in clear text outside local development.
 	if c.Env != EnvLocal {
@@ -219,6 +257,17 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("rpc_max_timeout", c.RPCMaxTimeout),
 		slog.Duration("rpc_stream_max_duration", c.RPCStreamMaxDuration),
 		slog.String("client_ip_mode", c.ClientIPMode),
+		slog.Bool("auth_configured", c.AuthConfigured()),
+		slog.String("public_url", c.PublicURL),
+		slog.String("oidc_issuer", c.OIDCIssuer),
+		slog.Duration("session_idle_timeout", c.SessionIdleTimeout),
+		slog.Duration("session_absolute_timeout", c.SessionAbsoluteTimeout),
 		slog.Bool("tracing_enabled", c.TracingEnabled()),
 	)
 }
+
+// String and GoString keep the secrets out of fmt verbs (%v, %+v, %#v) and of any
+// code that prints the configuration by accident: Config holds the OIDC client
+// secret, the Valkey password and the master keys.
+func (Config) String() string   { return "config.Config{<redacted>}" }
+func (Config) GoString() string { return "config.Config{<redacted>}" }

@@ -158,7 +158,7 @@ Implementam-se como `connect.ServerInterceptor` (Connect v2, ADR 0012) e passam-
 2. Recuperação de panics
 3. Erros: mensagem pública fixa para erros internos e uma linha de log por RPC (dentro da recuperação, fora de tudo o resto, para apanhar as recusas dos passos 5 a 7)
 4. Limites: deadline (30 s nos unários, 55 min nos streams, configuráveis para baixo; o limite de **tamanho** é do transporte: 4 MiB por mensagem nos dois sentidos, também depois de descomprimir; 32 MiB só na ingestão de telemetria, que é outro processo)
-5. Autenticação: validação do JWT e construção do principal (F1-03)
+5. Autenticação: sessão do BFF (cookie) e construção do principal (F1-03)
 6. Rate limiting por utilizador e por equipa (F1-04b)
 7. Validação (protovalidate), com o validador compilado no arranque
 8. Contexto de auditoria nas escritas (`AuditMeta`: trace id, IP do peer e user agent); a linha em `audit.audit_log` escreve-se na transação do caso de uso
@@ -173,7 +173,8 @@ Os RPCs são traçados só pelo `otelconnect`, que não confia no `traceparent` 
 | Postgres | jackc/pgx v5 + sqlc |
 | Migrações | Atlas Community: SQL escrito à mão, `atlas.sum`, teste de desvio contra `schema.sql` e lint por script (ADR 0010) |
 | Fila de tarefas | riverqueue/river |
-| JWT e OIDC | coreos/go-oidc, lestrrat-go/jwx |
+| OIDC | coreos/go-oidc v3 + golang.org/x/oauth2 (login e ID token). `lestrrat-go/jwx` só se o F2-06 (Bearer) o exigir (ADR 0013) |
+| Valkey | valkey-io/valkey-go (sessões BFF, locks, rate limiting; sem `valkeylock`) |
 | Autorização | OpenFGA Go SDK (secção 6) |
 | Configuração | variáveis de ambiente + caarlos0/env; segredos do gestor de segredos |
 | Logs | log/slog (JSON) |
@@ -187,12 +188,13 @@ Utilizadores autenticam-se no Zitadel por OIDC com PKCE; o backend nunca vê pal
 ### 5.1 Utilizadores
 
 - **IdP**: Zitadel, alojado na UE; passkeys, TOTP, verificação de palavras-passe comprometidas, política de bloqueio e emails transacionais configurados lá
-- **Web**: padrão BFF. Um pequeno endpoint no `pitbox-api` faz o fluxo Authorization Code + PKCE, guarda os tokens no servidor (Redis/Valkey) e entrega ao browser só um cookie de sessão `__Host-`, HttpOnly, Secure, SameSite=Strict. Nenhum token no JavaScript
+- **Web**: padrão BFF. O `pitbox-api` faz o fluxo Authorization Code + PKCE (S256) como cliente confidencial; o estado do pré-login vai num cookie cifrado (`__Host-pitbox_login`, Lax) e a sessão no Valkey, com o cookie `__Host-pitbox_session` (HttpOnly, Secure, SameSite=Strict) a guardar só um valor aleatório (no Valkey fica o SHA-256). A sessão guarda identificadores e o refresh token cifrado; nenhum token no JavaScript (ADR 0013)
 - **Android/iOS (Capacitor)**: Authorization Code + PKCE com o browser do sistema (AppAuth); tokens no Keychain/Keystore
-- **Tokens**: access token JWT de 10 min, assinado com ES256, audiência `pitbox-api`; refresh token rotativo com deteção de reutilização
-- **Validação no backend**: assinatura via JWKS em cache (renovado a cada 10 min ou em `kid` desconhecido), `iss`, `aud`, `exp`, `nbf`, tolerância de relógio de 30 s; algoritmo fixo (rejeita `none` e HS\*)
-- **Principal interno**: `{user_id, session_id, amr, auth_time}`; as equipas e papéis não vêm no token, são verificados no motor de autorização (o token não fica desatualizado quando alguém muda de papel)
-- **Operações sensíveis** exigem `auth_time` ≤ 5 min e `amr` com fator forte; caso contrário a API devolve `UNAUTHENTICATED` com pedido de reautenticação (step-up)
+- **Tokens**: ID token validado no login (`go-oidc`, algoritmo fixo em `PITBOX_OIDC_ALLOWED_ALGS`, por omissão ES256 configurado nas *web keys* do Zitadel); access token de 10 min, ID token de 5 min, refresh token com 168 h de inatividade e 720 h absolutas. O Zitadel rota o refresh token mas **não revoga a família** se um antigo for reutilizado (ADR 0004, emenda)
+- **Validação no backend** (BFF): a API autentica pela sessão do cookie. O ID token é verificado no callback: assinatura, `iss`, `aud`, `exp` (sem tolerância), `nbf` (tolerância fixa de 5 min do `go-oidc`) e `nonce` (à mão). O JWKS é pedido pelo `go-oidc`, que não tem TTL (só volta ao JWKS numa falha); isto só é aceitável enquanto o único JWT validado vier do endpoint de tokens. O caminho `Authorization: Bearer` (telemóvel) fica no F2-06
+- **Principal interno**: `{user_id, session_id, amr, auth_time}` lido da **sessão**, não do token (`auth_time`, `amr` e `sid` só existem no ID token); as equipas e papéis não vêm da sessão, são verificados no motor de autorização
+- **Utilizador desativado**: o access token de 10 min é a janela de revogação. No refresh seguinte o Zitadel recusa (`invalid_grant`, ou `invalid_request` com `Errors.User.*`) e a sessão acaba; uma falha do Zitadel ou do Valkey nunca desloga (`UNAVAILABLE`, graça de 2 min)
+- **Operações sensíveis** (F1-03c) exigem `auth_time` ≤ 5 min e `amr` com fator forte (lidos da sessão, renovados por reautenticação com `prompt=login`); caso contrário a API devolve `UNAUTHENTICATED` com pedido de reautenticação (step-up). OTP por SMS e por email estão desligados no Zitadel: dão `amr` `mfa` e estragariam esta regra
 
 ### 5.2 Modo box offline
 
@@ -614,7 +616,7 @@ pitbox/
 | [0007](adr/0007-firmware-rust-lora.md) | Firmware em Rust com Embassy; LoRa 868 MHz para tempo real (inclui migração para ML-DSA e tempo de antena) |
 | [0008](adr/0008-cloud-run-depois-kubernetes.md) | Cloud Run na fase 1, Kubernetes na fase 2 com gatilhos definidos |
 
-Posteriores: [0009](adr/0009-seaweedfs-s3-local.md) (SeaweedFS no ambiente local), [0010](adr/0010-migracoes-atlas-community.md) (migrações com Atlas Community) e [0011](adr/0011-telemetria-sem-compressao.md) (telemetria sem compressão). O threat model está em [threat-model/](threat-model/README.md).
+Posteriores: [0009](adr/0009-seaweedfs-s3-local.md) (SeaweedFS no ambiente local), [0010](adr/0010-migracoes-atlas-community.md) (migrações com Atlas Community) e [0011](adr/0011-telemetria-sem-compressao.md) (telemetria sem compressão), [0012](adr/0012-connect-v2-antes-do-f1-02.md) (Connect v2) e [0013](adr/0013-sessoes-bff-e-tokens.md) (sessões BFF e tratamento de tokens). O threat model está em [threat-model/](threat-model/README.md).
 
 Cada ADR segue o formato: contexto, decisão, alternativas, consequências. Novas decisões estruturais exigem um ADR no mesmo PR.
 

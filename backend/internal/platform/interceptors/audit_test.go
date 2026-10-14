@@ -2,6 +2,8 @@ package interceptors
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"strings"
 	"testing"
@@ -134,4 +136,44 @@ func FuzzSanitizeUserAgent(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestRequestMeta(t *testing.T) {
+	t.Parallel()
+
+	req := func(remote, header string) *http.Request {
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.example.eu/auth/login", nil)
+		r.RemoteAddr = remote
+		r.Header.Set("User-Agent", "agent\x00\n/1.0")
+		if header != "" {
+			r.Header.Set("CF-Connecting-IP", header)
+		}
+		return r
+	}
+	tests := []struct {
+		name, remote, header, clientIPHeader, wantIP string
+	}{
+		{"peer", "203.0.113.7:51234", "", "", "203.0.113.7"},
+		{"peer ipv6", "[2001:db8::1]:443", "", "", "2001:db8::1"},
+		{"a forged header is ignored in peer mode", "203.0.113.7:1", "198.51.100.9", "", "203.0.113.7"},
+		{"trusted header", "10.0.0.1:1", "198.51.100.9", "CF-Connecting-IP", "198.51.100.9"},
+		{"unparsable header gives no address", "10.0.0.1:1", "not-an-ip", "CF-Connecting-IP", ""},
+		{"unparsable peer gives no address", "garbage", "", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := RequestMeta(req(tc.remote, tc.header), tc.clientIPHeader)
+			got := ""
+			if m.IP.IsValid() {
+				got = m.IP.String()
+			}
+			if got != tc.wantIP {
+				t.Errorf("IP = %q, want %q", got, tc.wantIP)
+			}
+			if m.UserAgent != "agent/1.0" {
+				t.Errorf("UserAgent = %q, want it sanitized", m.UserAgent)
+			}
+		})
+	}
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
@@ -582,5 +583,28 @@ func TestRPCsAreRefusedWithoutAuthentication(t *testing.T) {
 	}
 	if teams.calls.Load() != 0 {
 		t.Error("the handler ran for an unauthenticated call")
+	}
+}
+
+// The one place that maps "not a member of the team" to the public answer: whatever the use case
+// wraps around it, the client gets NOT_FOUND with a fixed message, never PERMISSION_DENIED
+// (ADR 0005: team ids cannot be probed) and never the internal text.
+func TestANotMemberErrorIsNotFoundForTheClient(t *testing.T) {
+	t.Parallel()
+
+	teams := &fakeTeams{create: func(context.Context, *identityv1.CreateTeamRequest) (*identityv1.CreateTeamResponse, error) {
+		return nil, fmt.Errorf("create team 0190f2a4 for user 0190aaaa: %w", db.ErrNotMember)
+	}}
+	h := newHarness(t, map[string]string{}, teams)
+	_, err := h.client.CreateTeam(context.Background(), validRequest())
+	code, msg := codeAndMessage(t, err)
+	if code != connect.CodeNotFound || msg != "not found" {
+		t.Fatalf("code %v, message %q; want NOT_FOUND and the fixed message", code, msg)
+	}
+	if strings.Contains(msg, "0190") || strings.Contains(msg, "member") {
+		t.Errorf("the message leaks internal text: %q", msg)
+	}
+	if strings.Contains(h.logs.String(), "0190aaaa") {
+		t.Error("the cause of a client error must not be logged")
 	}
 }

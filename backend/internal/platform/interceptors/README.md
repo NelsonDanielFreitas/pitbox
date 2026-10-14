@@ -18,6 +18,7 @@ O limite de **tamanho** (4 MiB por mensagem, também depois de descomprimir) e o
 ## Regras para quem escreve código de serviço
 
 - **Erros para o cliente:** `connect.NewError(code, "mensagem fixa").WithCause(err)`. Só um `*connect.Error` escrito por nós chega ao cliente; qualquer outro erro sai como `Internal` / `internal error`. A mensagem tem de ser um literal ou uma constante do pacote; `internal/archtest` falha o `make test` se não for. Nunca `err.Error()`, `fmt.Sprintf` nem `connect.Errorf`.
+- **Não encontrado:** um caso de uso devolve `apperr.ErrNotFound` (ou `db.ErrNotMember`, que o embrulha), embrulhado como quiser; o interceptor de erros responde `NOT_FOUND` com a mensagem fixa "not found" e a causa só vai para o log se for falha do servidor (aqui não é). Não se converte nos handlers.
 - **Embrulhar erros:** com o nome da operação, nunca com valores do pedido (`fmt.Errorf("create team: %w", err)`). A causa vai para o log nas falhas do servidor, e pode ter dados pessoais se alguém lá os pôs.
 - **Escritas e leituras:** uma leitura nova declara `option idempotency_level = NO_SIDE_EFFECTS;` no `.proto`. Sem isso conta como escrita e recebe `AuditMeta` (`AuditMetaFromContext`), que o caso de uso usa para escrever em `audit.audit_log` na mesma transação. O `request_id` vem do campo da mensagem.
 - **Serviços novos:** acrescenta os tipos de pedido a `requestMessages()` em `internal/bootstrap/rpc.go`; o validador recusa tipos que não conheça e `TestRequestMessagesCoverEveryService` falha se faltar algum.

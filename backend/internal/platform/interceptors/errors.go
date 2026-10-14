@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/apperr"
 )
 
 // Fixed, public texts. Anything else a client could read would have to be written
@@ -14,6 +16,7 @@ import (
 const (
 	publicDeadlineMessage = "deadline exceeded"
 	publicCanceledMessage = "canceled"
+	publicNotFoundMessage = "not found"
 )
 
 // Errors makes sure the only errors that leave the server are ones written for the
@@ -22,6 +25,8 @@ const (
 //   - A *connect.Error created by our code keeps its code and message (even if
 //     wrapped with fmt.Errorf("...: %w", err): errors.As walks the chain).
 //   - A remote *connect.Error (from a Connect client of ours) is not forwarded.
+//   - apperr.ErrNotFound (a resource of another team, or one that does not exist) becomes
+//     NOT_FOUND with a fixed message. It is the one place that maps it.
 //   - Context errors keep their meaning (deadline, canceled).
 //   - Everything else becomes CodeInternal with a fixed message; the cause is only
 //     logged.
@@ -49,6 +54,8 @@ func publicError(err error) error {
 		return err
 	}
 	switch {
+	case errors.Is(err, apperr.ErrNotFound):
+		return connect.NewError(connect.CodeNotFound, publicNotFoundMessage).WithCause(err)
 	case errors.Is(err, context.DeadlineExceeded):
 		return connect.NewError(connect.CodeDeadlineExceeded, publicDeadlineMessage).WithCause(err)
 	case errors.Is(err, context.Canceled):

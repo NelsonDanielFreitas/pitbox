@@ -18,7 +18,11 @@ import (
 type Postgres struct {
 	// URL connects as pitbox_api, the application role (no BYPASSRLS, member of pitbox_app).
 	URL string
-	// OwnerExec runs SQL as the superuser, for tests that need to look behind the RLS.
+	// MigratorURL connects as pitbox_migrator (a member of pitbox_owner, whose sessions run as
+	// the owner) and SuperURL as the postgres superuser: roles the application must never use,
+	// for the tests that prove the pool refuses them.
+	MigratorURL, SuperURL string
+	// Exec runs SQL as the superuser, for tests that need to look behind the RLS.
 	container     string
 	superPassword string
 }
@@ -68,8 +72,10 @@ func StartPostgres(t testing.TB) Postgres {
 		t.Fatalf("apply schema.sql: %v: %s", err, redact(out, super, migrator, api))
 	}
 	return Postgres{
-		URL:       fmt.Sprintf("postgres://pitbox_api:%s@%s/pitbox?sslmode=disable", api, addr),
-		container: name, superPassword: super,
+		URL:         fmt.Sprintf("postgres://pitbox_api:%s@%s/pitbox?sslmode=disable", api, addr),
+		MigratorURL: fmt.Sprintf("postgres://pitbox_migrator:%s@%s/pitbox?sslmode=disable", migrator, addr),
+		SuperURL:    fmt.Sprintf("postgres://postgres:%s@%s/pitbox?sslmode=disable", super, addr),
+		container:   name, superPassword: super,
 	}
 }
 

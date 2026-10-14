@@ -53,9 +53,21 @@ type DB struct {
 	tracer trace.Tracer
 }
 
+// DBOption configures New.
+type DBOption func(*DB)
+
+// WithTracerProvider sets where the db.tx spans go (the global provider by default).
+func WithTracerProvider(tp trace.TracerProvider) DBOption {
+	return func(d *DB) { d.tracer = tp.Tracer("pitbox/db") }
+}
+
 // New wraps a pool made by Open.
-func New(pool *pgxpool.Pool) *DB {
-	return &DB{pool: pool, tracer: otel.Tracer("pitbox/db")}
+func New(pool *pgxpool.Pool, opts ...DBOption) *DB {
+	d := &DB{pool: pool, tracer: otel.Tracer("pitbox/db")}
+	for _, o := range opts {
+		o(d)
+	}
+	return d
 }
 
 // SQL, in one place. Everything is parameterised: the ids reach the database as values,
@@ -112,9 +124,11 @@ func (d *DB) run(ctx context.Context, user UserID, team *TeamID, readOnly bool, 
 	}
 
 	ctx, span := d.tracer.Start(ctx, "db.tx", trace.WithAttributes(attribute.Bool("db.read_only", readOnly)))
+	finished := false // set only on the way out of a transaction that committed
 	defer func() {
-		if err != nil {
-			// No RecordError: the error text can carry data. The status is enough to find it.
+		// Not "err != nil": a panic leaves err nil, and the span must still say the transaction
+		// failed. No RecordError: the error text can carry data; the status is enough to find it.
+		if !finished {
 			span.SetStatus(codes.Error, "transaction failed")
 		}
 		span.End()
@@ -151,6 +165,7 @@ func (d *DB) run(ctx context.Context, user UserID, team *TeamID, readOnly bool, 
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 	committed = true
+	finished = true
 	return nil
 }
 

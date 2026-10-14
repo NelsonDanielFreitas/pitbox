@@ -12,8 +12,9 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 )
 
-// ErrNoContext means the statement ran outside db.WithTeamTx (or WithTeamReadTx): the
-// transaction has no team and user. Nothing is written.
+// ErrNoContext means the transaction has no team or no user: the statement ran outside the
+// transactions of the db package, or inside WithUserTx, which has a user but no team (a team
+// event needs both). Nothing is written.
 var ErrNoContext = errors.New("audit: the transaction has no team and user context")
 
 // ErrInvalidEvent means a field of the event is not acceptable. The text never repeats it.

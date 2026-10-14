@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/apperr"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
@@ -249,6 +253,38 @@ func TestTeamIsolation(t *testing.T) {
 		pg.Exec(t, `DELETE FROM garage.car WHERE transponder_number = '7777777'`)
 	})
 
+	// TM-AUTHZ-08: the membership is read from identity.membership in every transaction, so a member
+	// who is removed (or demoted) loses access (or the role) at once: nothing is cached and nobody
+	// has to wait for the worker to delete the relation in OpenFGA.
+	t.Run("a removed member loses access at once, a demoted one the role", func(t *testing.T) {
+		uC := user(t, idUserC)
+		pg.Exec(t, `INSERT INTO identity.membership (team_id, user_id, role) VALUES ('`+idTeamA+`', '`+idUserC+`', 'mechanic')`)
+		read := func() (string, error) {
+			var role string
+			err := d.WithTeamReadTx(ctx, uC, tA, func(ctx context.Context, tx db.DBTX, m db.Membership) error {
+				role = m.Role
+				if n := count(t, tx, `SELECT count(*) FROM garage.car`); n != 1 {
+					t.Errorf("a member sees %d cars, want 1", n)
+				}
+				return nil
+			})
+			return role, err
+		}
+		if role, err := read(); err != nil || role != "mechanic" {
+			t.Fatalf("as a member: role %q, err %v", role, err)
+		}
+		pg.Exec(t, `UPDATE identity.membership SET role = 'guest' WHERE team_id = '`+idTeamA+`' AND user_id = '`+idUserC+`'`)
+		if role, err := read(); err != nil || role != "guest" {
+			t.Fatalf("after the demotion: role %q, err %v", role, err)
+		}
+		pg.Exec(t, `DELETE FROM identity.membership WHERE team_id = '`+idTeamA+`' AND user_id = '`+idUserC+`'`)
+		called := false
+		err := d.WithTeamReadTx(ctx, uC, tA, func(context.Context, db.DBTX, db.Membership) error { called = true; return nil })
+		if !errors.Is(err, db.ErrNotMember) || called {
+			t.Errorf("right after the removal: err %v, fn called %v; want ErrNotMember and no call", err, called)
+		}
+	})
+
 	t.Run("a read transaction refuses writes", func(t *testing.T) {
 		err := d.WithTeamReadTx(ctx, uA, tA, func(ctx context.Context, tx db.DBTX, _ db.Membership) error {
 			_, err := tx.Exec(ctx, `INSERT INTO garage.car (team_id, make, model, transponder_number) VALUES (app.current_team_id(), 'R', 'R', '5555555')`)
@@ -314,7 +350,7 @@ func TestZeroAndMalformedIdsNeverReachTheDatabase(t *testing.T) {
 		if _, err := db.ParseTeamID(s); !errors.Is(err, db.ErrInvalidScope) || !errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: ParseTeamID err = %v", name, err)
 		}
-		if _, err := db.ParseUserID(s); !errors.Is(err, db.ErrInvalidScope) {
+		if _, err := db.ParseUserID(s); !errors.Is(err, db.ErrInvalidScope) || errors.Is(err, apperr.ErrInvalidArgument) {
 			t.Errorf("%s: ParseUserID err = %v", name, err)
 		}
 	}
@@ -528,6 +564,113 @@ func TestThePoolRefusesRolesThatBypassRLS(t *testing.T) {
 	defer pool.Close()
 	if err := pool.Ping(ctx); err != nil {
 		t.Errorf("the application role must work: %v", err)
+	}
+}
+
+// A connection that starts with a context (a URL with options=-c app.team_id=..., or a role or a
+// database with that setting) would give a team to everything that runs outside WithTeamTx, so the
+// pool refuses it.
+func TestThePoolRefusesConnectionsThatStartWithAContext(t *testing.T) {
+	t.Parallel()
+	pg := testutil.StartPostgres(t)
+	ctx := context.Background()
+
+	for name, option := range map[string]string{
+		"a team in the startup options": "-c app.team_id=" + idTeamA,
+		"a user in the startup options": "-c app.user_id=" + idUserA,
+	} {
+		pool, err := db.Open(ctx, pg.URL+"&options="+url.QueryEscape(option))
+		if err != nil {
+			t.Fatalf("%s: Open must not connect: %v", name, err)
+		}
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		err = pool.Ping(cctx)
+		cancel()
+		pool.Close()
+		if err == nil {
+			t.Errorf("%s: the pool accepted a connection that starts with a context", name)
+		} else if strings.Contains(err.Error(), idTeamA) || strings.Contains(err.Error(), pg.URL) {
+			t.Errorf("%s: the error leaks the setting or the URL: %v", name, err)
+		}
+	}
+
+	// A role-level setting is the same thing, set where an administrator could have put it.
+	pg.Exec(t, `ALTER ROLE pitbox_api SET app.team_id = '`+idTeamA+`'`)
+	pool, err := db.Open(ctx, pg.URL)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err == nil {
+		t.Error("the pool accepted a role that carries app.team_id")
+	}
+	pg.Exec(t, `ALTER ROLE pitbox_api RESET app.team_id`)
+	pool2, err := db.Open(ctx, pg.URL)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer pool2.Close()
+	if err := pool2.Ping(ctx); err != nil {
+		t.Errorf("without the setting the role works: %v", err)
+	}
+}
+
+// The span of a transaction says whether it failed, panics included, and carries no ids.
+func TestTransactionSpans(t *testing.T) {
+	t.Parallel()
+	rec := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))
+	pg := testutil.StartPostgres(t)
+	pg.Exec(t, fixtures)
+	pool, err := db.Open(context.Background(), pg.URL)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	d := db.New(pool, db.WithTracerProvider(tp))
+	ctx := context.Background()
+	uA, tA, tB := user(t, idUserA), team(t, idTeamA), team(t, idTeamB)
+
+	ok := func(context.Context, db.DBTX, db.Membership) error { return nil }
+	_ = d.WithTeamReadTx(ctx, uA, tA, ok)
+	_ = d.WithTeamTx(ctx, uA, tA, func(context.Context, db.DBTX, db.Membership) error { return errors.New("boom: secret detail") })
+	func() {
+		defer func() { _ = recover() }()
+		_ = d.WithTeamTx(ctx, uA, tA, func(context.Context, db.DBTX, db.Membership) error { panic("x") })
+	}()
+	_ = d.WithTeamTx(ctx, uA, tB, ok) // refused: not a member
+
+	spans := rec.Ended()
+	if len(spans) != 4 {
+		t.Fatalf("%d spans, want 4", len(spans))
+	}
+	want := []struct {
+		name     string
+		failed   bool
+		readOnly bool
+	}{{"success", false, true}, {"an error in fn", true, false}, {"a panic in fn", true, false}, {"a refused membership", true, false}}
+	for i, w := range want {
+		sp := spans[i]
+		if sp.Name() != "db.tx" {
+			t.Errorf("%s: span %q", w.name, sp.Name())
+		}
+		if failed := sp.Status().Code == codes.Error; failed != w.failed {
+			t.Errorf("%s: failed = %v, want %v (status %v)", w.name, failed, w.failed, sp.Status())
+		}
+		for _, a := range sp.Attributes() {
+			if a.Key != "db.read_only" {
+				t.Errorf("%s: unexpected attribute %v", w.name, a)
+			}
+			if a.Value.AsBool() != w.readOnly {
+				t.Errorf("%s: db.read_only = %v", w.name, a.Value.AsBool())
+			}
+		}
+		if len(sp.Events()) != 0 {
+			t.Errorf("%s: the span has events (an error text could carry data): %v", w.name, sp.Events())
+		}
+		if strings.Contains(sp.Status().Description, "secret") {
+			t.Errorf("%s: the status leaks the error text", w.name)
+		}
 	}
 }
 

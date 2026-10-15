@@ -193,7 +193,7 @@ services:
 
   zitadel-login:
     <<: *hardening
-    image: ghcr.io/zitadel/zitadel-login:v4.19.4@sha256:93ffd1395b827f685ba29c02fa70aee881fc21102519c4e2bbb0b89c0e00f42c
+    image: ghcr.io/zitadel/zitadel-login:v4.19.5@sha256:2f8e57672fcd4f9a285d99355fae9f85fd7495768c090c07c3bbc2d84fc06617
     restart: unless-stopped
     user: "0"
     environment:

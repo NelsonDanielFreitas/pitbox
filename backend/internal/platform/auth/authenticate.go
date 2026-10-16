@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/oauth2"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 )
 
@@ -54,30 +55,30 @@ type Authenticator struct {
 }
 
 // Authenticate resolves the cookie value to the principal of the request.
-func (a *Authenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
+func (a *Authenticator) Authenticate(ctx context.Context, token string) (principal.Principal, error) {
 	if token == "" {
-		return Principal{}, ErrUnauthenticated
+		return principal.Principal{}, ErrUnauthenticated
 	}
 	sess, err := a.Store.Get(ctx, token)
 	switch {
 	case errors.Is(err, ErrNoSession):
-		return Principal{}, ErrUnauthenticated
+		return principal.Principal{}, ErrUnauthenticated
 	case err != nil:
 		a.Log.ErrorContext(ctx, "read session", slog.String("reason", "store"))
-		return Principal{}, ErrUnavailable
+		return principal.Principal{}, ErrUnavailable
 	}
 	if a.Now().Before(sess.AccessExpires) {
 		return principalOf(sess), nil
 	}
 	sess, err = a.refresh(ctx, token, sess)
 	if err != nil {
-		return Principal{}, err
+		return principal.Principal{}, err
 	}
 	return principalOf(sess), nil
 }
 
-func principalOf(s Session) Principal {
-	return Principal{UserID: s.UserID, Subject: s.Subject, SessionRef: s.Ref(), AMR: s.AMR, AuthTime: s.AuthTime}
+func principalOf(s Session) principal.Principal {
+	return principal.Principal{UserID: s.UserID, Subject: s.Subject, SessionRef: s.Ref(), AMR: s.AMR, AuthTime: s.AuthTime}
 }
 
 // refresh renews the tokens of a session whose access token has expired. Exactly one of

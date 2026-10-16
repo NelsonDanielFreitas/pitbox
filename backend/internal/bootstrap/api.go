@@ -12,10 +12,14 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
 	platformotel "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/otel"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/ratelimit"
+	"go.opentelemetry.io/otel"
 )
 
 // RunAPI runs pitbox-api until ctx is cancelled. It returns nil after a clean
@@ -43,14 +47,33 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("setup telemetry: %w", err)
 	}
 
-	authn, err := newAuthStack(ctx, cfg, logger)
+	vk, err := OpenValkey(ctx, cfg)
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("open valkey: %w", err)
+	}
+	defer vk.Close()
+
+	authn, err := newAuthStack(ctx, cfg, logger, vk)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("set up authentication: %w", err)
 	}
 	defer authn.close()
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor)
+	rlimiter, err := ratelimit.NewLimiter(
+		vk,
+		ratelimit.FromConfig(cfg),
+		otel.GetMeterProvider().Meter("pitbox/ratelimit"),
+		clock.Real(),
+		logger,
+	)
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up rate limiting: %w", err)
+	}
+
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter))
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

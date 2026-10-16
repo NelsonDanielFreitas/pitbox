@@ -9,7 +9,7 @@ Cadeia de interceptors Connect do servidor (`connect.ServerInterceptor`, ADR 001
 | 3 | `Errors` | Erro que não é um `*connect.Error` nosso → `CodeInternal` com mensagem fixa; uma linha de log por RPC (sem corpos nem IP) |
 | 4 | `Limits` | Deadline: 30 s nos unários, 55 min nos streams; um prazo menor do cliente mantém-se |
 | 5 | *(F1-03)* | Autenticação |
-| 6 | *(F1-04b)* | Rate limiting |
+| 6 | `RateLimit` | Rate limiting por utilizador, por equipa (peek dinâmico do `team_id`) e por procedimento público; devolve `ResourceExhausted` com mensagem fixa |
 | 7 | `Validation` | protovalidate com o validador compilado no arranque (`NewValidator`) |
 | 8 | `Audit` | `AuditMeta` no contexto das escritas |
 
@@ -18,6 +18,7 @@ O limite de **tamanho** (4 MiB por mensagem, também depois de descomprimir) e o
 ## Regras para quem escreve código de serviço
 
 - **Erros para o cliente:** `connect.NewError(code, "mensagem fixa").WithCause(err)`. Só um `*connect.Error` escrito por nós chega ao cliente; qualquer outro erro sai como `Internal` / `internal error`. A mensagem tem de ser um literal ou uma constante do pacote; `internal/archtest` falha o `make test` se não for. Nunca `err.Error()`, `fmt.Sprintf` nem `connect.Errorf`.
+- **Rate limit:** o interceptor `RateLimit` devolve `connect.CodeResourceExhausted` com a mensagem fixa `"rate limit exceeded"`. Quotas, chaves do Valkey e estado do circuit breaker nunca chegam ao cliente.
 - **Não encontrado:** um caso de uso devolve `apperr.ErrNotFound` (ou `db.ErrNotMember`, que o embrulha), embrulhado como quiser; o interceptor de erros responde `NOT_FOUND` com a mensagem fixa "not found" e a causa só vai para o log se for falha do servidor (aqui não é). Não se converte nos handlers.
 - **Argumento inválido que o contrato não apanha** (por exemplo o UUID nulo): `apperr.ErrInvalidArgument` (que `db.ErrInvalidTeamID` embrulha) sai como `INVALID_ARGUMENT` com a mensagem fixa "invalid argument", registado como erro do cliente; nunca um `INTERNAL`.
 - **Embrulhar erros:** com o nome da operação, nunca com valores do pedido (`fmt.Errorf("create team: %w", err)`). A causa vai para o log nas falhas do servidor, e pode ter dados pessoais se alguém lá os pôs.

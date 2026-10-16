@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect/v2"
+
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 )
 
 // Fixed public messages (the archtest only admits literals or constants).
@@ -54,7 +56,7 @@ func Interceptor(a *Authenticator, origin string, public ...string) connect.Serv
 			case err != nil:
 				return connect.NewError(connect.CodeUnavailable, msgAuthUnavailable).WithCause(err)
 			}
-			return next(WithPrincipal(ctx, p), spec, stream)
+			return next(principal.With(ctx, p), spec, stream)
 		}
 	}
 }

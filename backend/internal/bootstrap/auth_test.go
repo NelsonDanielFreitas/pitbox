@@ -67,7 +67,13 @@ func TestAuthStackWiring(t *testing.T) {
 
 	logs := &syncBuffer{}
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
-	stack, err := newAuthStack(context.Background(), cfg, logger)
+	vkClient, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{vk.Addr}, Username: vk.Username, Password: vk.Password, DisableCache: true})
+	if err != nil {
+		t.Fatalf("valkey: %v", err)
+	}
+	t.Cleanup(vkClient.Close)
+
+	stack, err := newAuthStack(context.Background(), cfg, logger, vkClient)
 	if err != nil {
 		t.Fatalf("newAuthStack: %v", err)
 	}
@@ -80,7 +86,7 @@ func TestAuthStackWiring(t *testing.T) {
 		}
 		return &identityv1.CreateTeamResponse{}, nil
 	}}
-	api, err := newRPCServer(cfg, logger, noop.NewTracerProvider(), stack.interceptor, func(s *connect.Server) {
+	api, err := newRPCServer(cfg, logger, noop.NewTracerProvider(), stack.interceptor, noOpRateLimit(), func(s *connect.Server) {
 		identityv1connect.RegisterTeamServiceHandler(s, teams)
 	})
 	if err != nil {
@@ -100,12 +106,7 @@ func TestAuthStackWiring(t *testing.T) {
 	keyring, _ := cfg.AuthKeyring()
 	kr, _ := auth.NewKeyring(keyring)
 	sealer, _ := kr.Sealer(auth.PurposeSessionToken)
-	client, err := valkey.NewClient(valkey.ClientOption{InitAddress: []string{vk.Addr}, Username: vk.Username, Password: vk.Password, DisableCache: true})
-	if err != nil {
-		t.Fatalf("valkey: %v", err)
-	}
-	t.Cleanup(client.Close)
-	store := auth.NewStore(client, sealer, cfg.SessionIdleTimeout, cfg.SessionAbsoluteTimeout, time.Now)
+	store := auth.NewStore(vkClient, sealer, cfg.SessionIdleTimeout, cfg.SessionAbsoluteTimeout, time.Now)
 	token, err := store.Create(context.Background(), auth.Session{
 		UserID: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60", Subject: "sub-ana", AMR: []string{"pwd"},
 		AuthTime: time.Now(), AccessExpires: time.Now().Add(10 * time.Minute), RefreshToken: "rt", IDToken: "idt",
@@ -167,7 +168,7 @@ func TestUnconfiguredAuthenticationRefusesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	stack, err := newAuthStack(context.Background(), cfg, slog.New(slog.NewJSONHandler(&syncBuffer{}, nil)))
+	stack, err := newAuthStack(context.Background(), cfg, slog.New(slog.NewJSONHandler(&syncBuffer{}, nil)), nil)
 	if err != nil {
 		t.Fatalf("newAuthStack: %v", err)
 	}

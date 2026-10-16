@@ -28,6 +28,9 @@ type Options struct {
 	// Auth authenticates the call (internal/platform/auth). Required: a chain without it
 	// would serve everything to everyone, so building one is an error.
 	Auth connect.ServerInterceptor
+	// RateLimit enforces per-user, per-team and public-procedure quotas (F1-04b).
+	// Required: the chain refuses to build without it.
+	RateLimit connect.ServerInterceptor
 }
 
 type step struct {
@@ -60,15 +63,16 @@ func Server(o Options) ([]connect.ServerInterceptor, error) {
 //  4. limits: the deadline.
 //  5. authentication: before any payload work, and before rate limiting (which needs the
 //     user). Default deny: only procedures listed as public pass without a session.
-//  6. (F1-04b) rate limiting. Not here yet.
+//  6. rate limiting: per user and per team (peek of team_id) before validation, so
+//     requests above quota are rejected before spending CPU.
 //  7. validation: before the service implementation runs.
 //  8. audit: metadata for the use cases that write.
 //
 // The message size limit is not an interceptor: it belongs to the transport
 // (httpserver.MountRPC), which enforces it before and after decompression.
 func build(o Options) ([]step, error) {
-	if o.Logger == nil || o.TracerProvider == nil || o.Validator == nil || o.Auth == nil {
-		return nil, errors.New("interceptors: Logger, TracerProvider, Validator and Auth are required")
+	if o.Logger == nil || o.TracerProvider == nil || o.Validator == nil || o.Auth == nil || o.RateLimit == nil {
+		return nil, errors.New("interceptors: Logger, TracerProvider, Validator, Auth and RateLimit are required")
 	}
 	tracing, err := Tracing(o.TracerProvider)
 	if err != nil {
@@ -84,6 +88,7 @@ func build(o Options) ([]step, error) {
 		{"errors", Errors(o.Logger)},
 		{"limits", limits},
 		{"authentication", o.Auth},
+		{"ratelimit", o.RateLimit},
 		{"validation", Validation(o.Validator)},
 		{"audit", Audit(o.ClientIPHeader)},
 	}, nil

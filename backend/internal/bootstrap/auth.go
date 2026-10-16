@@ -35,7 +35,7 @@ type authStack struct {
 // Without configuration (possible only in local development, config.Validate) it returns the
 // deny-all interceptor and routes that answer 503: the service stays up and serves nothing,
 // it never serves unauthenticated.
-func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger) (*authStack, error) {
+func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, vk valkey.Client) (*authStack, error) {
 	if !cfg.AuthConfigured() {
 		logger.WarnContext(ctx, "authentication is not configured: every RPC is refused and /auth/* answers 503")
 		return &authStack{
@@ -66,13 +66,8 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		return nil, fmt.Errorf("session sealer: %w", err)
 	}
 
-	vk, err := openValkey(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
-		vk.Close()
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
@@ -87,7 +82,6 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 	refusals, err := auth.NewRefusalCounter(otel.GetMeterProvider().Meter("pitbox/auth"))
 	if err != nil {
 		pool.Close()
-		vk.Close()
 		return nil, fmt.Errorf("auth metrics: %w", err)
 	}
 	handler := &auth.Handler{
@@ -104,14 +98,14 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger) (
 		mount:       handler.Mount,
 		close: func() {
 			pool.Close()
-			vk.Close()
 		},
 	}, nil
 }
 
-// openValkey connects to the session store, retrying for a few seconds: in Compose and on
-// Cloud Run the store may come up a moment after the API.
-func openValkey(ctx context.Context, cfg config.Config) (valkey.Client, error) {
+// OpenValkey connects to the session store, retrying for a few seconds: in Compose and on
+// Cloud Run the store may come up a moment after the API. It is exported so the rate limiter
+// can share the same client.
+func OpenValkey(ctx context.Context, cfg config.Config) (valkey.Client, error) {
 	opt := valkey.ClientOption{
 		InitAddress:      []string{cfg.ValkeyAddr},
 		Username:         cfg.ValkeyUsername,

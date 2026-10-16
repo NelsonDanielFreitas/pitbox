@@ -20,7 +20,8 @@ func testOptions(t *testing.T) Options {
 	return Options{
 		Logger: newLogger(&syncBuffer{}), TracerProvider: noop.NewTracerProvider(), Validator: v,
 		MaxUnaryTimeout: 30 * time.Second, MaxStreamDuration: 55 * time.Minute,
-		Auth: func(next connect.ServerFunc) connect.ServerFunc { return next },
+		Auth:      func(next connect.ServerFunc) connect.ServerFunc { return next },
+		RateLimit: func(next connect.ServerFunc) connect.ServerFunc { return next },
 	}
 }
 
@@ -37,7 +38,7 @@ func TestChainOrder(t *testing.T) {
 	for _, s := range steps {
 		names = append(names, s.name)
 	}
-	want := []string{"tracing", "recovery", "errors", "limits", "authentication", "validation", "audit"}
+	want := []string{"tracing", "recovery", "errors", "limits", "authentication", "ratelimit", "validation", "audit"}
 	if !slices.Equal(names, want) {
 		t.Errorf("order = %v, want %v", names, want)
 	}
@@ -47,12 +48,13 @@ func TestBuildRequiresItsDependencies(t *testing.T) {
 	t.Parallel()
 
 	for name, mutate := range map[string]func(*Options){
-		"no logger":    func(o *Options) { o.Logger = nil },
-		"no tracer":    func(o *Options) { o.TracerProvider = nil },
-		"no validator": func(o *Options) { o.Validator = nil },
-		"no auth":      func(o *Options) { o.Auth = nil },
-		"no unary":     func(o *Options) { o.MaxUnaryTimeout = 0 },
-		"no stream":    func(o *Options) { o.MaxStreamDuration = 0 },
+		"no logger":     func(o *Options) { o.Logger = nil },
+		"no tracer":     func(o *Options) { o.TracerProvider = nil },
+		"no validator":  func(o *Options) { o.Validator = nil },
+		"no auth":       func(o *Options) { o.Auth = nil },
+		"no rate limit": func(o *Options) { o.RateLimit = nil },
+		"no unary":      func(o *Options) { o.MaxUnaryTimeout = 0 },
+		"no stream":     func(o *Options) { o.MaxStreamDuration = 0 },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

@@ -45,6 +45,10 @@ const (
 	// absolute refresh token expiration configured in Zitadel (720 h, ADR 0013): a
 	// longer session could not be renewed anyway.
 	MaxSessionAbsolute = 720 * time.Hour
+
+	// MaxRateLimitRPS is the ceiling for any rate limit. The GCRA script in Valkey
+	// uses millisecond precision; above 1000 RPS the increment rounds to zero.
+	MaxRateLimitRPS = 1000
 )
 
 // Config is the configuration of pitbox-api.
@@ -113,6 +117,20 @@ type Config struct {
 	// SessionIdleTimeout and SessionAbsoluteTimeout bound a web session (ADR 0013).
 	SessionIdleTimeout     time.Duration `env:"PITBOX_SESSION_IDLE_TIMEOUT" envDefault:"168h"`
 	SessionAbsoluteTimeout time.Duration `env:"PITBOX_SESSION_ABSOLUTE_TIMEOUT" envDefault:"720h"`
+
+	// Rate limiting (F1-04b, ADR 0014). Local limits are higher than the distributed
+	// Valkey limits so the local bucket does not reject requests that Valkey would allow.
+	RateLimitUserReadRPS    int           `env:"PITBOX_RL_USER_READ_RPS"    envDefault:"20"`
+	RateLimitUserReadBurst  int           `env:"PITBOX_RL_USER_READ_BURST"  envDefault:"30"`
+	RateLimitUserWriteRPS   int           `env:"PITBOX_RL_USER_WRITE_RPS"   envDefault:"5"`
+	RateLimitUserWriteBurst int           `env:"PITBOX_RL_USER_WRITE_BURST" envDefault:"10"`
+	RateLimitTeamReadRPS    int           `env:"PITBOX_RL_TEAM_READ_RPS"    envDefault:"100"`
+	RateLimitTeamReadBurst  int           `env:"PITBOX_RL_TEAM_READ_BURST"  envDefault:"150"`
+	RateLimitTeamWriteRPS   int           `env:"PITBOX_RL_TEAM_WRITE_RPS"   envDefault:"20"`
+	RateLimitTeamWriteBurst int           `env:"PITBOX_RL_TEAM_WRITE_BURST" envDefault:"40"`
+	RateLimitPublicRPS      int           `env:"PITBOX_RL_PUBLIC_RPS"       envDefault:"10"`
+	RateLimitPublicBurst    int           `env:"PITBOX_RL_PUBLIC_BURST"     envDefault:"20"`
+	RateLimitValkeyTimeout  time.Duration `env:"PITBOX_RL_VALKEY_TIMEOUT"   envDefault:"50ms"`
 
 	// The standard OpenTelemetry variables are read here only to validate them:
 	// the SDK reads them again itself. Tracing is off when neither is set.
@@ -188,6 +206,7 @@ func (c Config) Validate() error {
 		errs = append(errs, err)
 	}
 	errs = append(errs, c.validateAuth()...)
+	errs = append(errs, c.validateRateLimit()...)
 
 	// Telemetry must not travel in clear text outside local development.
 	if c.Env != EnvLocal {
@@ -230,6 +249,34 @@ func (c Config) validateClientIPMode() error {
 	return nil
 }
 
+func (c Config) validateRateLimit() []error {
+	var errs []error
+	for _, r := range []struct {
+		name, kind string
+		rps, burst int
+	}{
+		{"PITBOX_RL_USER_READ", "user read", c.RateLimitUserReadRPS, c.RateLimitUserReadBurst},
+		{"PITBOX_RL_USER_WRITE", "user write", c.RateLimitUserWriteRPS, c.RateLimitUserWriteBurst},
+		{"PITBOX_RL_TEAM_READ", "team read", c.RateLimitTeamReadRPS, c.RateLimitTeamReadBurst},
+		{"PITBOX_RL_TEAM_WRITE", "team write", c.RateLimitTeamWriteRPS, c.RateLimitTeamWriteBurst},
+		{"PITBOX_RL_PUBLIC", "public", c.RateLimitPublicRPS, c.RateLimitPublicBurst},
+	} {
+		if r.rps <= 0 || r.rps > MaxRateLimitRPS {
+			errs = append(errs, fmt.Errorf("%s_RPS: %s rate must be between 1 and %d", r.name, r.kind, MaxRateLimitRPS))
+		}
+		if r.burst <= 0 {
+			errs = append(errs, fmt.Errorf("%s_BURST: %s burst must be positive", r.name, r.kind))
+		}
+		if r.burst < r.rps {
+			errs = append(errs, fmt.Errorf("%s_BURST: %s burst (%d) must be at least the rate (%d)", r.name, r.kind, r.burst, r.rps))
+		}
+	}
+	if c.RateLimitValkeyTimeout <= 0 || c.RateLimitValkeyTimeout > 200*time.Millisecond {
+		errs = append(errs, fmt.Errorf("PITBOX_RL_VALKEY_TIMEOUT: %s is outside (0, 200ms]", c.RateLimitValkeyTimeout))
+	}
+	return errs
+}
+
 func validateAddr(addr string) error {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -262,6 +309,17 @@ func (c Config) LogValue() slog.Value {
 		slog.String("oidc_issuer", c.OIDCIssuer),
 		slog.Duration("session_idle_timeout", c.SessionIdleTimeout),
 		slog.Duration("session_absolute_timeout", c.SessionAbsoluteTimeout),
+		slog.Int("rl_user_read_rps", c.RateLimitUserReadRPS),
+		slog.Int("rl_user_read_burst", c.RateLimitUserReadBurst),
+		slog.Int("rl_user_write_rps", c.RateLimitUserWriteRPS),
+		slog.Int("rl_user_write_burst", c.RateLimitUserWriteBurst),
+		slog.Int("rl_team_read_rps", c.RateLimitTeamReadRPS),
+		slog.Int("rl_team_read_burst", c.RateLimitTeamReadBurst),
+		slog.Int("rl_team_write_rps", c.RateLimitTeamWriteRPS),
+		slog.Int("rl_team_write_burst", c.RateLimitTeamWriteBurst),
+		slog.Int("rl_public_rps", c.RateLimitPublicRPS),
+		slog.Int("rl_public_burst", c.RateLimitPublicBurst),
+		slog.Duration("rl_valkey_timeout", c.RateLimitValkeyTimeout),
 		slog.Bool("tracing_enabled", c.TracingEnabled()),
 	)
 }

@@ -159,7 +159,7 @@ Implementam-se como `connect.ServerInterceptor` (Connect v2, ADR 0012) e passam-
 3. Erros: mensagem pública fixa para erros internos e uma linha de log por RPC (dentro da recuperação, fora de tudo o resto, para apanhar as recusas dos passos 5 a 7)
 4. Limites: deadline (30 s nos unários, 55 min nos streams, configuráveis para baixo; o limite de **tamanho** é do transporte: 4 MiB por mensagem nos dois sentidos, também depois de descomprimir; 32 MiB só na ingestão de telemetria, que é outro processo)
 5. Autenticação: sessão do BFF (cookie) e construção do principal (F1-03)
-6. Rate limiting por utilizador e por equipa (F1-04b)
+6. Rate limiting por utilizador e por equipa (F1-04b, ADR 0014): três camadas — token bucket local em memória, GCRA atómico no Valkey e circuit breaker. Pedidos acima da quota são rejeitados antes da validação. Endpoints públicos falham fechados quando o Valkey não está disponível.
 7. Validação (protovalidate), com o validador compilado no arranque
 8. Contexto de auditoria nas escritas (`AuditMeta`: trace id, IP do peer e user agent); a linha em `audit.audit_log` escreve-se na transação do caso de uso
 

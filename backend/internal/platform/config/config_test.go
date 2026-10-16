@@ -170,6 +170,19 @@ func TestLoadFrom(t *testing.T) {
 		{name: "session idle below a minute", env: hosted("production", map[string]string{"PITBOX_SESSION_IDLE_TIMEOUT": "30s"}), wantErr: "PITBOX_SESSION_IDLE_TIMEOUT"},
 		{name: "session idle above absolute", env: hosted("production", map[string]string{"PITBOX_SESSION_IDLE_TIMEOUT": "100h", "PITBOX_SESSION_ABSOLUTE_TIMEOUT": "50h"}), wantErr: "must not exceed"},
 		{name: "session absolute above the zitadel limit", env: hosted("production", map[string]string{"PITBOX_SESSION_ABSOLUTE_TIMEOUT": "721h"}), wantErr: "PITBOX_SESSION_ABSOLUTE_TIMEOUT"},
+		// --- Rate limiting (F1-04b, ADR 0014) ---
+		{name: "rate limit user read rps zero", env: hosted("production", map[string]string{"PITBOX_RL_USER_READ_RPS": "0"}), wantErr: "PITBOX_RL_USER_READ_RPS"},
+		{name: "rate limit user read burst below rps", env: hosted("production", map[string]string{"PITBOX_RL_USER_READ_BURST": "10"}), wantErr: "PITBOX_RL_USER_READ_BURST"},
+		{name: "rate limit team write negative", env: hosted("production", map[string]string{"PITBOX_RL_TEAM_WRITE_RPS": "-1"}), wantErr: "PITBOX_RL_TEAM_WRITE_RPS"},
+		{name: "rate limit public burst zero", env: hosted("production", map[string]string{"PITBOX_RL_PUBLIC_BURST": "0"}), wantErr: "PITBOX_RL_PUBLIC_BURST"},
+		{name: "rate limit valkey timeout too high", env: hosted("production", map[string]string{"PITBOX_RL_VALKEY_TIMEOUT": "500ms"}), wantErr: "PITBOX_RL_VALKEY_TIMEOUT"},
+		{name: "rate limit valkey timeout zero", env: hosted("production", map[string]string{"PITBOX_RL_VALKEY_TIMEOUT": "0s"}), wantErr: "PITBOX_RL_VALKEY_TIMEOUT"},
+		{name: "rate limit above max rps", env: hosted("production", map[string]string{"PITBOX_RL_USER_READ_RPS": "1001"}), wantErr: "PITBOX_RL_USER_READ_RPS"},
+		{name: "rate limits customized", env: hosted("production", map[string]string{
+			"PITBOX_RL_USER_READ_RPS": "50", "PITBOX_RL_USER_READ_BURST": "100",
+			"PITBOX_RL_TEAM_WRITE_RPS": "50", "PITBOX_RL_TEAM_WRITE_BURST": "80",
+			"PITBOX_RL_VALKEY_TIMEOUT": "100ms",
+		})},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -260,6 +273,18 @@ func TestAuthDefaults(t *testing.T) {
 	}
 	if c.ValkeyUsername != "pitbox_api" {
 		t.Errorf("valkey user = %q, the API must not default to the default user", c.ValkeyUsername)
+	}
+	if c.RateLimitUserReadRPS != 20 || c.RateLimitUserReadBurst != 30 || c.RateLimitUserWriteRPS != 5 || c.RateLimitUserWriteBurst != 10 {
+		t.Errorf("unexpected user rate limit defaults: %+v", c)
+	}
+	if c.RateLimitTeamReadRPS != 100 || c.RateLimitTeamReadBurst != 150 || c.RateLimitTeamWriteRPS != 20 || c.RateLimitTeamWriteBurst != 40 {
+		t.Errorf("unexpected team rate limit defaults: %+v", c)
+	}
+	if c.RateLimitPublicRPS != 10 || c.RateLimitPublicBurst != 20 {
+		t.Errorf("unexpected public rate limit defaults: %+v", c)
+	}
+	if c.RateLimitValkeyTimeout != 50*time.Millisecond {
+		t.Errorf("unexpected valkey timeout default: %s", c.RateLimitValkeyTimeout)
 	}
 }
 

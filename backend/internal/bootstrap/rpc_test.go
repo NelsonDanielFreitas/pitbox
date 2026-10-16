@@ -77,6 +77,16 @@ func signedInAs(userID string) connect.ServerInterceptor {
 	}
 }
 
+// noOpRateLimit is a pass-through interceptor used in tests that exercise other parts of
+// the chain without rate limiting.
+func noOpRateLimit() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(ctx, spec, stream)
+		}
+	}
+}
+
 func newHarnessWithAuth(t *testing.T, env map[string]string, teams *fakeTeams, authn connect.ServerInterceptor, extra ...func(*connect.Server)) *harness {
 	t.Helper()
 	cfg, err := config.LoadFrom(env)
@@ -91,7 +101,7 @@ func newHarnessWithAuth(t *testing.T, env map[string]string, teams *fakeTeams, a
 	register := append([]func(*connect.Server){func(s *connect.Server) {
 		identityv1connect.RegisterTeamServiceHandler(s, teams)
 	}}, extra...)
-	api, err := newRPCServer(cfg, logger, tp, authn, register...)
+	api, err := newRPCServer(cfg, logger, tp, authn, noOpRateLimit(), register...)
 	if err != nil {
 		t.Fatalf("newRPCServer: %v", err)
 	}

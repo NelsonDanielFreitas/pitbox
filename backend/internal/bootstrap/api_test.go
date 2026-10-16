@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"net"
 	"net/http"
 	"strings"
@@ -10,13 +12,35 @@ import (
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
 )
+
+func localEnv(t *testing.T) map[string]string {
+	t.Helper()
+	vk := testutil.StartValkey(t)
+	pg := testutil.StartPostgres(t)
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatalf("random: %v", err)
+	}
+	return map[string]string{ //nolint:gosec // fake credentials
+		"PITBOX_PUBLIC_URL":         "http://localhost:8081",
+		"PITBOX_OIDC_ISSUER":        "http://127.0.0.1:1",
+		"PITBOX_OIDC_CLIENT_ID":     "client",
+		"PITBOX_OIDC_CLIENT_SECRET": "secret",
+		"PITBOX_AUTH_KEYS":          "k1:" + base64.StdEncoding.EncodeToString(key),
+		"PITBOX_VALKEY_ADDR":        vk.Addr,
+		"PITBOX_VALKEY_USERNAME":    vk.Username,
+		"PITBOX_VALKEY_PASSWORD":    vk.Password,
+		"PITBOX_DATABASE_URL":       pg.URL,
+	}
+}
 
 // The whole assembly: config → logger → telemetry (off) → server → clean shutdown.
 func TestRunAPIStartsServesAndShutsDownCleanly(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := config.LoadFrom(map[string]string{"PITBOX_HTTP_ADDR": "127.0.0.1:0"})
+	cfg, err := config.LoadFrom(localEnv(t))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
@@ -76,7 +100,9 @@ func TestRunAPIFailsWhenThePortIsBusy(t *testing.T) {
 	}
 	defer func() { _ = busy.Close() }()
 
-	cfg, err := config.LoadFrom(map[string]string{"PITBOX_HTTP_ADDR": busy.Addr().String()})
+	env := localEnv(t)
+	env["PITBOX_HTTP_ADDR"] = busy.Addr().String()
+	cfg, err := config.LoadFrom(env)
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}

@@ -421,3 +421,70 @@ func TestApplicationUserIsConfinedByTheACL(t *testing.T) {
 		t.Errorf("the outside key was modified: %q", v)
 	}
 }
+
+func TestListBySubject(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, time.Hour, 24*time.Hour)
+	_, a := h.create("alice", "sid-a")
+	_, b := h.create("alice", "sid-b")
+	_, _ = h.create("bob", "sid-c")
+
+	list, err := h.store.ListBySubject(context.Background(), "alice", a.Ref())
+	if err != nil {
+		t.Fatalf("ListBySubject: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("got %d sessions, want 2", len(list))
+	}
+	if !list[0].Current {
+		t.Errorf("first session should be the current one")
+	}
+	refs := map[string]bool{list[0].Ref: true, list[1].Ref: true}
+	if !refs[a.Ref()] || !refs[b.Ref()] {
+		t.Errorf("unexpected refs: %v", refs)
+	}
+}
+
+func TestDeleteByRef(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, time.Hour, 24*time.Hour)
+	_, a := h.create("alice", "sid-a")
+
+	if err := h.store.DeleteByRef(context.Background(), a.Ref()); err != nil {
+		t.Fatalf("DeleteByRef: %v", err)
+	}
+	_, err := h.store.GetByRef(context.Background(), a.Ref())
+	if !errors.Is(err, ErrNoSession) {
+		t.Errorf("after delete, GetByRef = %v, want ErrNoSession", err)
+	}
+}
+
+func TestDeleteByRefGoneIsNotAnError(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, time.Hour, 24*time.Hour)
+
+	if err := h.store.DeleteByRef(context.Background(), strings.Repeat("0", 64)); err != nil {
+		t.Errorf("DeleteByRef on missing session: %v", err)
+	}
+}
+
+func TestDeleteAllBySubject(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t, time.Hour, 24*time.Hour)
+	_, a := h.create("alice", "sid-a")
+	_, b := h.create("alice", "sid-b")
+	_, c := h.create("bob", "sid-c")
+
+	if err := h.store.DeleteAllBySubject(context.Background(), "alice"); err != nil {
+		t.Fatalf("DeleteAllBySubject: %v", err)
+	}
+	if _, err := h.store.GetByRef(context.Background(), a.Ref()); !errors.Is(err, ErrNoSession) {
+		t.Errorf("alice session a still exists")
+	}
+	if _, err := h.store.GetByRef(context.Background(), b.Ref()); !errors.Is(err, ErrNoSession) {
+		t.Errorf("alice session b still exists")
+	}
+	if _, err := h.store.GetByRef(context.Background(), c.Ref()); err != nil {
+		t.Errorf("bob session should remain: %v", err)
+	}
+}

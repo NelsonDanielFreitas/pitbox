@@ -22,6 +22,7 @@ func testOptions(t *testing.T) Options {
 		MaxUnaryTimeout: 30 * time.Second, MaxStreamDuration: 55 * time.Minute,
 		Auth:      func(next connect.ServerFunc) connect.ServerFunc { return next },
 		RateLimit: func(next connect.ServerFunc) connect.ServerFunc { return next },
+		StepUp:    func(next connect.ServerFunc) connect.ServerFunc { return next },
 	}
 }
 
@@ -31,6 +32,25 @@ func TestChainOrder(t *testing.T) {
 	t.Parallel()
 
 	steps, err := build(testOptions(t))
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	var names []string
+	for _, s := range steps {
+		names = append(names, s.name)
+	}
+	want := []string{"tracing", "recovery", "errors", "limits", "authentication", "ratelimit", "stepup", "validation", "audit"}
+	if !slices.Equal(names, want) {
+		t.Errorf("order = %v, want %v", names, want)
+	}
+}
+
+func TestChainOrderWithoutStepUp(t *testing.T) {
+	t.Parallel()
+
+	o := testOptions(t)
+	o.StepUp = nil
+	steps, err := build(o)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

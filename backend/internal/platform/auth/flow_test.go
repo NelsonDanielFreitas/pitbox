@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,16 +23,18 @@ import (
 	"github.com/valkey-io/valkey-go"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
 )
 
 const publicURL = "https://api.example.eu"
 
 type fakeDirectory struct {
-	mu    sync.Mutex
-	err   error
-	calls int
-	last  struct{ sub, email, name string }
+	mu     sync.Mutex
+	err    error
+	calls  int
+	owners map[string]bool
+	last   struct{ sub, email, name string }
 }
 
 func (d *fakeDirectory) ResolveLogin(_ context.Context, sub, email, name string) (string, error) {
@@ -43,6 +46,15 @@ func (d *fakeDirectory) ResolveLogin(_ context.Context, sub, email, name string)
 		return "", d.err
 	}
 	return "user-" + sub, nil
+}
+
+func (d *fakeDirectory) IsOwner(_ context.Context, userID string) (bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.err != nil {
+		return false, d.err
+	}
+	return d.owners[userID], nil
 }
 
 type fakeAudit struct {
@@ -142,13 +154,33 @@ func newFlowHarness(t *testing.T) *flowHarness {
 		}),
 		Store:        store,
 		LoginCookies: NewLoginCookies(sealer(t, PurposeLoginCookie, key("k1", 1)), clock),
-		Users:        f.dir, Audit: f.audit,
+		Users:        f.dir, RecoveryCodes: &fakeRecoveryStore{}, Audit: f.audit,
 		Log: slog.New(slog.NewJSONHandler(logs, nil)), Refusals: f.refusals,
 		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock,
 	}
 	f.h.Authn = &Authenticator{Provider: f.h.Provider, Store: store, Audit: f.audit, Log: f.h.Log, Now: clock}
 	f.h.Mount(f.mux)
 	return f
+}
+
+func (f *flowHarness) login(subject, sid string, amr []string) string {
+	f.t.Helper()
+	a := f.startLogin("")
+	code := f.idp.issueCode(subject, a.nonce, a.challenge)
+	f.idp.mutateClaims = func(m map[string]any) {
+		m["sid"] = sid
+		m["amr"] = amr
+	}
+	defer func() { f.idp.mutateClaims = nil }()
+	w := f.callback(a, code)
+	if w.Code != http.StatusOK {
+		f.t.Fatalf("login failed: status %d: %s", w.Code, w.Body.String())
+	}
+	ck := cookieNamed(w, SessionCookieName)
+	if ck == nil {
+		f.t.Fatal("login did not set session cookie")
+	}
+	return ck.Value
 }
 
 func (f *flowHarness) do(method, target string, cookies []*http.Cookie, hdr map[string]string) *httptest.ResponseRecorder {
@@ -863,4 +895,174 @@ func TestRefusalCounterBuildsOnAnyMeter(t *testing.T) {
 		t.Fatalf("NewRefusalCounter: %v", err)
 	}
 	c.Count(context.Background(), "no_login_state") // must not panic
+}
+
+func TestBackchannelLogoutBySID(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	_ = f.login("sub-alice", "sid-alice", []string{"user"})
+
+	tok := f.idp.logoutToken("sub-alice", "sid-alice", nil)
+	form := url.Values{"logout_token": {tok}}
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+BackChannelLogoutPath, strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	// The SID index is gone.
+	keys := f.adminKeys()
+	for _, k := range keys {
+		if strings.Contains(k, ":s:") {
+			t.Errorf("sid index still present: %s", k)
+		}
+	}
+}
+
+func TestBackchannelLogoutRejectsInvalidToken(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+
+	// Token with a nonce (must be rejected).
+	tok := f.idp.logoutToken("sub-alice", "sid-alice", func(p map[string]any) {
+		p["nonce"] = "nope"
+	})
+	form := url.Values{"logout_token": {tok}}
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+BackChannelLogoutPath, strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400", w.Code)
+	}
+}
+
+type fakeRecoveryStore struct {
+	mu     sync.Mutex
+	hashes map[string]map[string]struct{}
+	used   map[string]map[string]struct{}
+}
+
+func (r *fakeRecoveryStore) Replace(_ context.Context, userID string, codeHashes [][]byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.hashes == nil {
+		r.hashes = map[string]map[string]struct{}{}
+		r.used = map[string]map[string]struct{}{}
+	}
+	r.hashes[userID] = map[string]struct{}{}
+	r.used[userID] = map[string]struct{}{}
+	for _, h := range codeHashes {
+		r.hashes[userID][string(h)] = struct{}{}
+	}
+	return nil
+}
+
+func (r *fakeRecoveryStore) Consume(_ context.Context, userID string, codeHash []byte) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := string(codeHash)
+	if _, ok := r.hashes[userID][key]; !ok {
+		return false, nil
+	}
+	if _, ok := r.used[userID][key]; ok {
+		return false, nil
+	}
+	if r.used[userID] == nil {
+		r.used[userID] = map[string]struct{}{}
+	}
+	r.used[userID][key] = struct{}{}
+	return true, nil
+}
+
+func TestGenerateRecoveryCodesRequiresStrongFactor(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	f.h.RecoveryCodes = &fakeRecoveryStore{}
+	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
+	ck := &http.Cookie{Name: SessionCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+
+	w := f.do(http.MethodPost, RecoveryCodesPath, []*http.Cookie{ck}, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", w.Code)
+	}
+}
+
+func TestGenerateRecoveryCodes(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	fs := &fakeRecoveryStore{}
+	f.h.RecoveryCodes = fs
+	v := f.login("sub-bob", "sid-bob", []string{"user"})
+	ck := &http.Cookie{Name: SessionCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+
+	w := f.do(http.MethodPost, RecoveryCodesPath, []*http.Cookie{ck}, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Codes []string `json:"codes"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Codes) != 8 {
+		t.Fatalf("codes = %d, want 8", len(resp.Codes))
+	}
+	if len(fs.hashes["user-sub-bob"]) != 8 {
+		t.Fatalf("stored hashes = %d, want 8", len(fs.hashes["user-sub-bob"]))
+	}
+}
+
+func TestConsumeRecoveryCode(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	fs := &fakeRecoveryStore{}
+	f.h.RecoveryCodes = fs
+	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
+
+	codes, hashes, err := GenerateRecoveryCodes()
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if err := fs.Replace(context.Background(), "user-sub-bob", hashes); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+
+	// First consume succeeds and step-ups the session.
+	body := strings.NewReader(`{"code":"` + codes[0] + `"}`)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath, body)
+	r.Header.Set("Cookie", SessionCookieName+"="+v)
+	r.Header.Set("Content-Type", "application/json")
+	r.RemoteAddr = "203.0.113.7:40000"
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status %d, want 204", w.Code)
+	}
+
+	sess, err := f.store.Get(context.Background(), v)
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if !principal.IsStrongFactor(sess.AMR) {
+		t.Fatalf("amr = %v, expected a strong factor", sess.AMR)
+	}
+	if !slices.Contains(sess.AMR, "otp") {
+		t.Fatalf("amr = %v, expected otp", sess.AMR)
+	}
+
+	// Second consume of the same code is refused.
+	body = strings.NewReader(`{"code":"` + codes[0] + `"}`)
+	r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath, body)
+	r.Header.Set("Cookie", SessionCookieName+"="+v)
+	r.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", w.Code)
+	}
 }

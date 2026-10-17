@@ -1,8 +1,8 @@
 # 0013 — Sessões BFF e tratamento de tokens
 
-- **Estado:** Proposto (aguarda confirmação de Nelson)
+- **Estado:** Aceite
 - **Data:** 2026-10-13
-- **Cartão:** F1-03 (a: login e logout; b: utilizador no primeiro login)
+- **Cartão:** F1-03 (a: login e logout; b: utilizador no primeiro login; c: passkeys, MFA e sessões)
 - **Relacionado:** [ADR 0004](0004-zitadel-bff.md) (Zitadel e BFF), emendado em conjunto com este.
 
 ## Contexto
@@ -78,6 +78,41 @@ Sem este lock, dois pedidos em paralelo enviariam o mesmo refresh token rodado e
 
 `POST` com `Origin` verificado (nunca GET). Ordem: (1) revoga o refresh token no servidor (`/oauth/v2/revoke`, como cliente confidencial); (2) apaga a sessão e o cookie; (3) **303** para `end_session` com `id_token_hint` (o Zitadel aceita-o expirado) e `post_logout_redirect_uri` registado.
 
+### Step-up (F1-03c)
+
+Ações sensíveis (por exemplo gerir equipas ou códigos de recuperação) exigem um fator de autenticação forte recente. O interceptor `StepUp` corre no lugar 7 da cadeia, depois do rate limiting e antes da validação do pedido, e recusa com `PERMISSION_DENIED` quando `auth_time` é antigo demais ou `amr` não contém um fator forte.
+
+- Fator forte aceite: **`user`** (passkey / U2F) ou **`otp`** (TOTP). O valor genérico **`mfa`** do Zitadel **não é aceite** para step-up, porque inclui OTP por SMS/email, que o provisionamento desativa.
+- A reautenticação usa `/auth/login?step_up=true`. O cookie de sessão atual é exigido; o estado de login guarda a referência da sessão; o redirect para o IdP leva `prompt=login` e `max_age=0`.
+- No callback de step-up não há `userinfo`, nova sessão nem novo cookie: a sessão existente é atualizada com o novo `auth_time`, `amr` e `sid`. O `sub` tem de bater com o da sessão; se não bater, a tentativa é recusada.
+
+### MFA obrigatória para donos de equipa
+
+Um utilizador que seja dono de alguma equipa só consegue fazer login se o callback trazer um fator forte (`user` ou `otp`). A verificação corre depois de resolver o utilizador (`identity.is_owner`) e antes de criar a sessão: um login só com palavra-passe é recusado. A mensagem para o utilizador é genérica; a auditoria regista `owner_requires_mfa`.
+
+### Códigos de recuperação
+
+Alternativa para utilizadores que perderam o acesso ao TOTP/passkey. O BFF gera e consome os códigos; o Zitadel não os gere.
+
+- 8 códigos de uso único por geração, 8 bytes de entropia codificados em base32 (maiúsculas, sem separadores).
+- Na base só é guardado o **SHA-256** do código normalizado; o texto em claro é mostrado uma única vez.
+- A geração (`POST /auth/recovery-codes`) exige sessão com fator forte (step-up).
+- O consumo (`POST /auth/recovery-codes/consume`) valida o código, marca-o como usado e eleva a sessão atual a step-up (`amr` = `["otp"]`). Um código consumido é rejeitado na segunda tentativa.
+- A tabela `identity.recovery_code` tem RLS por utilizador e é acedida por funções `SECURITY DEFINER` (`replace_recovery_codes`, `consume_recovery_code`) porque o contexto do BFF pode não ter `app.user_id` definido.
+
+### Gestão de sessões
+
+- `GET /auth/sessions` lista as sessões ativas do utilizador (referência, `user_agent`, `ip`, `auth_time`), excluindo o cookie atual.
+- `DELETE /auth/sessions/{ref}` revoga uma sessão própria. O utilizador só pode revogar sessões do seu próprio `sub`; uma sessão inexistente devolve `404`. Revogar a sessão atual é equivalente a terminar sessão.
+
+### Back-channel logout (F1-03c)
+
+`POST /auth/backchannel-logout` recebe um *logout token* assinado pelo IdP. Não exige cookie: a validação da assinatura é a autenticação.
+
+- Verifica a assinatura com o mesmo `oidc.IDTokenVerifier` dos ID tokens.
+- Rejeita tokens que contenham `nonce` (um logout token nunca o leva) e exige o evento `http://schemas.openid.net/event/backchannel-logout`.
+- Apaga sessões pelo `sid` e/ou pelo `sub`; responde **200** mesmo quando a sessão já não existe, para evitar retentativas do IdP.
+
 ### Primeiro login (F1-03b)
 
 A RLS de `identity.user_account` bloqueia o `SELECT` por `idp_subject` e o `INSERT` antes de existir `app.user_id`. Uma função `identity.resolve_login(p_sub, p_email, p_display_name) RETURNS uuid`, `SECURITY DEFINER`, dona `pitbox_owner`, `search_path = pg_catalog, pg_temp`, nomes qualificados, `REVOKE ALL ... FROM PUBLIC`, `EXECUTE` só para `pitbox_app`:
@@ -115,6 +150,8 @@ Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a
 - O Valkey guarda segredos (TM-AUTH-06): em produção exige TLS e autenticação; ACL restrita desde já.
 - O Zitadel não revoga a família de refresh tokens: a spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06**. No BFF o risco é menor (o refresh token nunca sai do servidor).
 - A arquitetura §5.1 (principal e *step-up*) passa a ler `auth_time` e `amr` da sessão e não do token.
+- A app deve avisar os donos de equipa que precisam de passkey ou TOTP para fazer login; os códigos de recuperação são o plano B.
+- O endpoint de back-channel logout tem de estar registado no `post_logout_redirect_uri`/back-channel settings do Zitadel pelo script de provisionamento.
 - Novas variáveis: `PITBOX_OIDC_*`, Valkey, base de dados, chave mestra e durações da sessão.
 - **O fim de uma sessão por utilizador desativado depende da resposta do Zitadel.** Verificado na `v4.19.4` com `scripts/auth-smoke.py`: para um utilizador desativado o refresh falha com `invalid_request` e a descrição `Errors.User.NotActive` (não `invalid_grant`). A sessão acaba com `invalid_grant` e com `invalid_request` + `Errors.User.*`; qualquer outra recusa (cliente recusado, pedido mal formado, falha de rede) mantém a sessão (e `UNAVAILABLE` depois da graça). Uma versão do Zitadel que mude isto faz falhar o smoke.
 - `GET /auth/session` (identificadores apenas) existe para a app saber se está autenticada sem ler tokens; renova o access token se preciso.

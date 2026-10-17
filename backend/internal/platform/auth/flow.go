@@ -16,16 +16,22 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 )
 
 // Paths of the BFF endpoints (plain HTTP, outside the Connect interceptor chain).
 const (
-	LoginPath     = "/auth/login"
-	CallbackPath  = "/auth/callback"
-	LogoutPath    = "/auth/logout"
-	SignedOutPath = "/auth/signed-out"
-	SessionPath   = "/auth/session"
+	LoginPath               = "/auth/login"
+	CallbackPath            = "/auth/callback"
+	LogoutPath              = "/auth/logout"
+	SignedOutPath           = "/auth/signed-out"
+	SessionPath             = "/auth/session"
+	SessionsPath            = "/auth/sessions"
+	SessionRefPath          = "/auth/sessions/{ref}"
+	BackChannelLogoutPath   = "/auth/backchannel-logout"
+	RecoveryCodesPath       = "/auth/recovery-codes"
+	RecoveryCodeConsumePath = "/auth/recovery-codes/consume"
 )
 
 // Fixed, public messages. What went wrong goes to the log (a code) and the audit trail,
@@ -36,15 +42,20 @@ const (
 	msgUnavailable = "login temporarily unavailable"
 )
 
+// ErrStepUpRefused is returned by the step-up callback when the reauthenticated subject
+// does not match the existing session or the factor is not strong enough.
+var ErrStepUpRefused = errors.New("auth: step-up refused")
+
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
-	Provider     *Provider
-	Authn        *Authenticator // for /auth/session
-	Store        *Store
-	LoginCookies *LoginCookies
-	Users        UserDirectory
-	Audit        Auditor
-	Log          *slog.Logger
+	Provider      *Provider
+	Authn         *Authenticator // for /auth/session
+	Store         *Store
+	LoginCookies  *LoginCookies
+	Users         UserDirectory
+	RecoveryCodes RecoveryCodeStore
+	Audit         Auditor
+	Log           *slog.Logger
 	// Refusals counts callbacks refused before their state was validated (nil: not counted).
 	Refusals       RefusalCounter
 	PublicURL      string // origin the browser sees, without a trailing slash
@@ -61,6 +72,11 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+LogoutPath, h.logout)
 	mux.HandleFunc("GET "+SignedOutPath, h.signedOut)
 	mux.HandleFunc("GET "+SessionPath, h.sessionInfo)
+	mux.HandleFunc("GET "+SessionsPath, h.listSessions)
+	mux.HandleFunc("DELETE "+SessionRefPath, h.revokeSession)
+	mux.HandleFunc("POST "+BackChannelLogoutPath, h.backchannelLogout)
+	mux.HandleFunc("POST "+RecoveryCodesPath, h.generateRecoveryCodes)
+	mux.HandleFunc("POST "+RecoveryCodeConsumePath, h.consumeRecoveryCode)
 }
 
 func noStore(w http.ResponseWriter) {
@@ -75,26 +91,58 @@ func fail(w http.ResponseWriter, code int, msg string) {
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	prov, err := h.Provider.get()
 	if err != nil {
-		h.Log.WarnContext(r.Context(), "login unavailable", slog.String("reason", "provider_unavailable"))
+		h.Log.WarnContext(ctx, "login unavailable", slog.String("reason", "provider_unavailable"))
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
 		return
 	}
+
 	returnTo, _ := SafeReturnTo(r.URL.Query().Get("return_to"))
+	stepUp := r.URL.Query().Get("step_up") == "true"
+	var sessionRef string
+	if stepUp {
+		token := SessionTokenFromHeader(r.Header)
+		if token == "" {
+			h.refuseUnauthenticated(ctx, "stepup_no_cookie")
+			fail(w, http.StatusBadRequest, msgBadRequest)
+			return
+		}
+		sess, err := h.Store.Get(ctx, token)
+		if err != nil {
+			h.refuseUnauthenticated(ctx, "stepup_no_session")
+			fail(w, http.StatusUnauthorized, msgUnauthenticated)
+			return
+		}
+		sessionRef = sess.Ref()
+	}
+
 	st, err := NewLoginState(h.Now(), returnTo)
 	if err != nil {
-		h.Log.ErrorContext(r.Context(), "login state", slog.String("reason", "random"))
+		h.Log.ErrorContext(ctx, "login state", slog.String("reason", "random"))
 		fail(w, http.StatusInternalServerError, msgUnavailable)
 		return
 	}
+	st.StepUp = stepUp
+	st.SessionRef = sessionRef
+
 	if err := h.LoginCookies.Set(w, st); err != nil {
-		h.Log.ErrorContext(r.Context(), "login cookie", slog.String("reason", "seal"))
+		h.Log.ErrorContext(ctx, "login cookie", slog.String("reason", "seal"))
 		fail(w, http.StatusInternalServerError, msgUnavailable)
 		return
 	}
-	authURL := prov.oauth.AuthCodeURL(st.State,
-		oauth2.S256ChallengeOption(st.Verifier), oidc.Nonce(st.Nonce))
+
+	opts := []oauth2.AuthCodeOption{
+		oauth2.S256ChallengeOption(st.Verifier),
+		oidc.Nonce(st.Nonce),
+	}
+	if stepUp {
+		// Force the identity provider to reauthenticate the user. We use both prompt=login
+		// and max_age=0 because some providers honor one but not the other.
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	}
+	authURL := prov.oauth.AuthCodeURL(st.State, opts...)
 	noStore(w)
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
@@ -145,6 +193,24 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
 	}
+
+	// Step-up: reauthenticate an existing session. No userinfo, no new session, no login audit.
+	if st.StepUp {
+		if err := h.stepUp(ctx, w, r, st, claims, tok); err != nil {
+			switch {
+			case errors.Is(err, ErrUnauthenticated):
+				fail(w, http.StatusUnauthorized, msgUnauthenticated)
+			case errors.Is(err, ErrStepUpRefused):
+				h.failLogin(ctx, r, "stepup_refused", claims.Subject)
+				fail(w, http.StatusForbidden, msgNotAllowed)
+			default:
+				h.Log.ErrorContext(ctx, "step-up", slog.String("reason", "store"))
+				fail(w, http.StatusServiceUnavailable, msgUnavailable)
+			}
+		}
+		return
+	}
+
 	// Email and name come from the userinfo endpoint, called from here with the access token,
 	// not from the ID token: the ID token is the one that goes to the browser as id_token_hint
 	// at logout (history, logs), so it carries no personal data (ADR 0013).
@@ -183,6 +249,21 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3.1 Owners must authenticate with a strong factor (passkey or TOTP). This is checked
+	// after resolving the user so we can look up their team roles, and before creating the
+	// session so a password-only login is never accepted for an owner.
+	isOwner, err := h.Users.IsOwner(ctx, userID)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "check owner", slog.String("reason", "directory"))
+		fail(w, http.StatusServiceUnavailable, msgUnavailable)
+		return
+	}
+	if isOwner && !principal.IsStrongFactor(claims.AMR) {
+		h.failLogin(ctx, r, "owner_requires_mfa", claims.Subject)
+		fail(w, http.StatusForbidden, msgNotAllowed)
+		return
+	}
+
 	// 4. A new session, always with a new cookie value (no session fixation). The one the
 	// browser may already hold is removed.
 	if old := SessionTokenFromHeader(r.Header); old != "" {
@@ -190,10 +271,16 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 			_ = h.Store.Delete(ctx, s)
 		}
 	}
+	meta := interceptors.RequestMeta(r, h.ClientIPHeader)
+	sessIP := ""
+	if meta.IP.IsValid() {
+		sessIP = meta.IP.String()
+	}
 	token, err := h.Store.Create(ctx, Session{
 		UserID: userID, Subject: claims.Subject, SessionID: claims.SessionID, AMR: claims.AMR,
 		AuthTime: claims.authTime(), AccessExpires: accessExpiry(h.Now(), tok),
 		RefreshToken: tok.RefreshToken, IDToken: claims.Raw,
+		UserAgent: meta.UserAgent, IP: sessIP,
 	})
 	if err != nil {
 		h.Log.ErrorContext(ctx, "create session", slog.String("reason", "store"))
@@ -216,6 +303,52 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, token, h.SessionMaxAge)
 	h.landing(w, st.ReturnTo)
+}
+
+// stepUp updates the existing session with the fresh authentication data from the identity
+// provider. It refuses the request when the session is gone, the subject changed, or the new
+// authentication did not use a strong factor.
+func (h *Handler) stepUp(ctx context.Context, w http.ResponseWriter, r *http.Request, st LoginState, claims idClaims, tok *oauth2.Token) error {
+	if st.SessionRef == "" {
+		return ErrStepUpRefused
+	}
+	existing, err := h.Store.GetByRef(ctx, st.SessionRef)
+	if err != nil {
+		if errors.Is(err, ErrNoSession) {
+			return ErrUnauthenticated
+		}
+		return err
+	}
+	if subtle.ConstantTimeCompare([]byte(existing.Subject), []byte(claims.Subject)) != 1 {
+		return ErrStepUpRefused
+	}
+	if !principal.IsStrongFactor(claims.AMR) {
+		return ErrStepUpRefused
+	}
+
+	existing.AuthTime = claims.authTime()
+	existing.AMR = claims.AMR
+	existing.SessionID = claims.SessionID
+	existing.AccessExpires = accessExpiry(h.Now(), tok)
+	if claims.Raw != "" {
+		existing.IDToken = claims.Raw
+	}
+	if tok.RefreshToken != "" {
+		existing.RefreshToken = tok.RefreshToken
+	}
+
+	if err := h.Store.Update(ctx, existing); err != nil {
+		return err
+	}
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.step_up", ActorKind: ActorUser, ActorID: existing.UserID, SessionRef: existing.Ref(),
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit step-up", slog.String("reason", "audit"))
+		return err
+	}
+	h.landing(w, st.ReturnTo)
+	return nil
 }
 
 // landing answers 200 with a meta refresh to returnTo. A 302 here would be a redirect that
@@ -461,4 +594,324 @@ func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		AMR           []string  `json:"amr"`
 		AuthTime      time.Time `json:"auth_time"`
 	}{true, p.UserID, p.AMR, p.AuthTime})
+}
+
+// listSessions returns the active sessions of the authenticated user. It never includes
+// tokens or the full cookie value: only the session reference and metadata.
+func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+	w.Header().Set("Content-Type", "application/json")
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthenticated"}`))
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "list sessions", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	sessions, err := h.Store.ListBySubject(ctx, sess.Subject, sess.Ref())
+	if err != nil {
+		h.Log.ErrorContext(ctx, "list sessions", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+	_ = json.NewEncoder(w).Encode(struct {
+		Sessions []StoreSessionInfo `json:"sessions"`
+	}{sessions})
+}
+
+// StoreSessionInfo is an alias exported for JSON marshalling.
+type StoreSessionInfo = SessionInfo
+
+// revokeSession terminates a session of the authenticated user. A user can only revoke their
+// own sessions; the current session can be revoked, which is equivalent to signing out.
+func (h *Handler) revokeSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	ref := r.PathValue("ref")
+	if ref == "" || !validRef(ref) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Verify the target belongs to the same user before deleting.
+	target, err := h.Store.GetByRef(ctx, ref)
+	if err != nil {
+		if errors.Is(err, ErrNoSession) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(target.Subject), []byte(sess.Subject)) != 1 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if err := h.Store.DeleteByRef(ctx, ref); err != nil {
+		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.session_revoked", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: ref,
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit revoke session", slog.String("reason", "audit"))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// appendStrongAMR adds a strong factor to amr without duplicates, preserving any existing
+// strong factors (e.g. passkey) so that consuming a recovery code does not downgrade the
+// session's authentication record.
+func appendStrongAMR(amr []string, factor string) []string {
+	for _, v := range amr {
+		if v == factor {
+			return amr
+		}
+	}
+	return append(amr, factor)
+}
+
+// validRef is a cheap shape check for a session reference: hex SHA-256.
+func validRef(ref string) bool {
+	if len(ref) != 64 {
+		return false
+	}
+	for i := 0; i < len(ref); i++ {
+		c := ref[i]
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		if !isHex {
+			return false
+		}
+	}
+	return true
+}
+
+// generateRecoveryCodes creates a fresh set of single-use MFA recovery codes for the
+// authenticated user. The request must be step-up authenticated (strong factor); the plaintext
+// codes are returned exactly once and are never stored.
+func (h *Handler) generateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+	w.Header().Set("Content-Type", "application/json")
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthenticated"}`))
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	if !principal.IsStrongFactor(sess.AMR) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"step-up required"}`))
+		return
+	}
+
+	codes, hashes, err := GenerateRecoveryCodes()
+	if err != nil {
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "random"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	if err := h.RecoveryCodes.Replace(ctx, sess.UserID, hashes); err != nil {
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.recovery_codes_generated", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(),
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit recovery codes generated", slog.String("reason", "audit"))
+	}
+
+	_ = json.NewEncoder(w).Encode(struct {
+		Codes []string `json:"codes"`
+	}{codes})
+}
+
+// consumeRecoveryCode validates a single-use recovery code and, if valid, elevates the current
+// session to step-up level (AMR otp). This lets users who have lost their TOTP device access
+// owner-level actions with a recovery code.
+func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	code := NormalizeRecoveryCode(req.Code)
+	if code == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	ok, err := h.RecoveryCodes.Consume(ctx, sess.UserID, HashRecoveryCode(code))
+	if err != nil {
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// Elevate the session: a consumed recovery code is equivalent to a TOTP step-up.
+	sess.AMR = appendStrongAMR(sess.AMR, "otp")
+	sess.AuthTime = h.Now().UTC()
+	if err := h.Store.Update(ctx, sess); err != nil {
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.recovery_code_consumed", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(),
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit recovery code consumed", slog.String("reason", "audit"))
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// backchannelLogout receives a logout token from the identity provider and terminates the
+// matching session(s). It is not authenticated by a cookie: the signature of the logout token
+// is the proof. A 200 is returned even when the session is already gone, so the provider does
+// not retry indefinitely.
+func (h *Handler) backchannelLogout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	raw := r.PostFormValue("logout_token")
+	if raw == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	claims, err := h.verifyLogoutToken(ctx, raw)
+	if err != nil {
+		h.Log.WarnContext(ctx, "back-channel logout refused", slog.String("reason", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if claims.Subject != "" {
+		if err := h.Store.DeleteAllBySubject(ctx, claims.Subject); err != nil {
+			h.Log.ErrorContext(ctx, "back-channel logout", slog.String("reason", "store"))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+	}
+	if claims.SID != "" {
+		if err := h.Store.DeleteBySID(ctx, claims.SID); err != nil {
+			h.Log.ErrorContext(ctx, "back-channel logout", slog.String("reason", "store"))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+	}
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.backchannel_logout", ActorKind: ActorUser, ActorID: claims.Subject,
+		Reason: claims.SID, Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit back-channel logout", slog.String("reason", "audit"))
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// logoutTokenClaims is what we read from a valid logout token.
+type logoutTokenClaims struct {
+	Subject string         `json:"sub"`
+	SID     string         `json:"sid"`
+	Nonce   string         `json:"nonce"`
+	Events  map[string]any `json:"events"`
+}
+
+// verifyLogoutToken validates the JWT signature and the claims that make it a logout token.
+// It uses the same verifier as ID tokens but does not check a nonce: a logout token must not
+// contain one.
+func (h *Handler) verifyLogoutToken(ctx context.Context, raw string) (logoutTokenClaims, error) {
+	var empty logoutTokenClaims
+	prov, err := h.Provider.get()
+	if err != nil {
+		return empty, errors.New("provider_unavailable")
+	}
+	idt, err := prov.verifier.Verify(ctx, raw)
+	if err != nil {
+		return empty, errors.New("logout_token_invalid")
+	}
+	var c logoutTokenClaims
+	if err := idt.Claims(&c); err != nil {
+		return empty, errors.New("logout_token_invalid")
+	}
+	if c.Nonce != "" {
+		return empty, errors.New("logout_token_nonce")
+	}
+	if _, ok := c.Events["http://schemas.openid.net/event/backchannel-logout"]; !ok {
+		return empty, errors.New("logout_token_event")
+	}
+	if c.Subject == "" && c.SID == "" {
+		return empty, errors.New("logout_token_no_subject")
+	}
+	return c, nil
 }

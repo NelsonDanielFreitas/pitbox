@@ -35,3 +35,28 @@ func (d *LoginDirectory) ResolveLogin(ctx context.Context, subject, email, displ
 	}
 	return id, err
 }
+
+// IsOwner reports whether the user owns any team.
+func (d *LoginDirectory) IsOwner(ctx context.Context, userID string) (bool, error) {
+	return d.logins.IsOwner(ctx, userID)
+}
+
+// RecoveryCodeDirectory is the auth.RecoveryCodeStore backed by the identity module.
+type RecoveryCodeDirectory struct{ codes *store.RecoveryCodes }
+
+// NewRecoveryCodeDirectory takes the pool of the application role.
+func NewRecoveryCodeDirectory(db store.Querier) *RecoveryCodeDirectory {
+	return &RecoveryCodeDirectory{codes: store.NewRecoveryCodes(db)}
+}
+
+var _ auth.RecoveryCodeStore = (*RecoveryCodeDirectory)(nil)
+
+// Replace deletes all unused codes for the user and inserts the new hashes atomically.
+func (d *RecoveryCodeDirectory) Replace(ctx context.Context, userID string, codeHashes [][]byte) error {
+	return d.codes.Replace(ctx, userID, codeHashes)
+}
+
+// Consume marks one code as used if it exists and is unused for the user.
+func (d *RecoveryCodeDirectory) Consume(ctx context.Context, userID string, codeHash []byte) (bool, error) {
+	return d.codes.Consume(ctx, userID, codeHash)
+}

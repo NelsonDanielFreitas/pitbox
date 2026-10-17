@@ -21,6 +21,18 @@ var (
 // The identity module implements it with identity.resolve_login.
 type UserDirectory interface {
 	ResolveLogin(ctx context.Context, subject, email, displayName string) (userID string, err error)
+	// IsOwner reports whether the user owns any team. It is used to enforce MFA for owners
+	// at login time (F1-03c).
+	IsOwner(ctx context.Context, userID string) (bool, error)
+}
+
+// RecoveryCodeStore persists and consumes single-use recovery codes for MFA bypass. The auth
+// package defines the interface; the identity module implements it.
+type RecoveryCodeStore interface {
+	// Replace deletes all unused codes for the user and inserts the new hashes atomically.
+	Replace(ctx context.Context, userID string, codeHashes [][]byte) error
+	// Consume marks one code as used if it exists and is unused for the user.
+	Consume(ctx context.Context, userID string, codeHash []byte) (bool, error)
 }
 
 // ActorKind mirrors the actor_kind column of audit.audit_log.

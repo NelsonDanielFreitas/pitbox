@@ -31,6 +31,9 @@ type Options struct {
 	// RateLimit enforces per-user, per-team and public-procedure quotas (F1-04b).
 	// Required: the chain refuses to build without it.
 	RateLimit connect.ServerInterceptor
+	// StepUp refuses sensitive RPCs when the caller has not reauthenticated recently
+	// with a strong factor (F1-03c). Optional: if nil, no procedure is protected.
+	StepUp connect.ServerInterceptor
 }
 
 type step struct {
@@ -65,8 +68,9 @@ func Server(o Options) ([]connect.ServerInterceptor, error) {
 //     user). Default deny: only procedures listed as public pass without a session.
 //  6. rate limiting: per user and per team (peek of team_id) before validation, so
 //     requests above quota are rejected before spending CPU.
-//  7. validation: before the service implementation runs.
-//  8. audit: metadata for the use cases that write.
+//  7. step-up: sensitive RPCs require recent reauthentication with a strong factor.
+//  8. validation: before the service implementation runs.
+//  9. audit: metadata for the use cases that write.
 //
 // The message size limit is not an interceptor: it belongs to the transport
 // (httpserver.MountRPC), which enforces it before and after decompression.
@@ -82,14 +86,20 @@ func build(o Options) ([]step, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []step{
+	steps := []step{
 		{"tracing", tracing},
 		{"recovery", Recovery(o.Logger)},
 		{"errors", Errors(o.Logger)},
 		{"limits", limits},
 		{"authentication", o.Auth},
 		{"ratelimit", o.RateLimit},
-		{"validation", Validation(o.Validator)},
-		{"audit", Audit(o.ClientIPHeader)},
-	}, nil
+	}
+	if o.StepUp != nil {
+		steps = append(steps, step{"stepup", o.StepUp})
+	}
+	steps = append(steps,
+		step{"validation", Validation(o.Validator)},
+		step{"audit", Audit(o.ClientIPHeader)},
+	)
+	return steps, nil
 }

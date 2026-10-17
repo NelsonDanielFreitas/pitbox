@@ -16,6 +16,7 @@ import (
 // Querier is what the store needs from a pool.
 type Querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
 // Logins resolves the OIDC subject to the user, creating it on the first login, through
@@ -48,4 +49,16 @@ func (l *Logins) ResolveLogin(ctx context.Context, subject, email, displayName s
 		}
 	}
 	return "", fmt.Errorf("resolve login: %w", err)
+}
+
+// IsOwner reports whether the user owns any team.
+func (l *Logins) IsOwner(ctx context.Context, userID string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var isOwner bool
+	err := l.db.QueryRow(ctx, `SELECT identity.is_owner($1)::boolean`, userID).Scan(&isOwner)
+	if err != nil {
+		return false, fmt.Errorf("is owner: %w", err)
+	}
+	return isOwner, nil
 }

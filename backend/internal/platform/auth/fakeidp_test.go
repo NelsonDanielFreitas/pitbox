@@ -245,6 +245,24 @@ func (f *fakeIdP) idToken(subject, nonce string) string {
 	return f.sign(header, payload)
 }
 
+func (f *fakeIdP) logoutToken(subject, sid string, mutate func(map[string]any)) string {
+	header := map[string]any{"alg": f.idTokenAlg, "typ": "JWT", "kid": f.kid}
+	payload := map[string]any{
+		"iss":    f.srv.URL,
+		"sub":    subject,
+		"aud":    f.clientID,
+		"iat":    f.now().Unix(),
+		"exp":    f.now().Add(time.Hour).Unix(),
+		"jti":    randomHexT(f.t),
+		"sid":    sid,
+		"events": map[string]any{"http://schemas.openid.net/event/backchannel-logout": map[string]any{}},
+	}
+	if mutate != nil {
+		mutate(payload)
+	}
+	return f.sign(header, payload)
+}
+
 // sign builds a compact JWS with ES256 (r||s, 32 bytes each).
 func (f *fakeIdP) sign(header, payload map[string]any) string {
 	h, _ := json.Marshal(header)

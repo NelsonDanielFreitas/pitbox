@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -46,6 +47,8 @@ type Session struct {
 	AccessExpires time.Time
 	RefreshToken  string // plaintext in memory, sealed in the store
 	IDToken       string // kept for id_token_hint at logout; sealed in the store
+	UserAgent     string // for the user's list of sessions; personal data
+	IP            string // for the user's list of sessions; personal data
 
 	ref        string // hex sha256 of the cookie value: the key suffix
 	generation uint64
@@ -67,6 +70,8 @@ type record struct {
 	AccessExpires time.Time `json:"ae"`
 	SealedRefresh string    `json:"rt,omitempty"` // refresh token, sealed
 	SealedID      string    `json:"id,omitempty"` // ID token, sealed
+	UserAgent     string    `json:"ua,omitempty"`
+	IP            string    `json:"ip,omitempty"`
 }
 
 // Store keeps sessions in Valkey.
@@ -151,7 +156,7 @@ func (s *Store) Create(ctx context.Context, sess Session) (token string, err err
 	data, err := json.Marshal(record{
 		V: 1, UserID: sess.UserID, Subject: sess.Subject, SessionID: sess.SessionID, AMR: sess.AMR,
 		AuthTime: sess.AuthTime, CreatedAt: now, AccessExpires: sess.AccessExpires,
-		SealedRefresh: sealedRT, SealedID: sealedID,
+		SealedRefresh: sealedRT, SealedID: sealedID, UserAgent: sess.UserAgent, IP: sess.IP,
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal session: %w", err)
@@ -199,7 +204,13 @@ func (s *Store) Get(ctx context.Context, token string) (Session, error) {
 	if !validToken(token) {
 		return Session{}, ErrNoSession
 	}
-	ref := hashHex(token)
+	return s.GetByRef(ctx, hashHex(token))
+}
+
+// GetByRef returns the session for a reference (SHA-256 of the cookie value). It is used by
+// step-up, where the callback carries the session ref in the sealed login cookie but not the
+// cookie value itself.
+func (s *Store) GetByRef(ctx context.Context, ref string) (Session, error) {
 	key := sessPrefix + ref
 	res := s.c.DoMulti(ctx,
 		s.c.B().Hgetall().Key(key).Build(),
@@ -227,6 +238,7 @@ func (s *Store) Get(ctx context.Context, token string) (Session, error) {
 	sess := Session{
 		UserID: rec.UserID, Subject: rec.Subject, SessionID: rec.SessionID, AMR: rec.AMR,
 		AuthTime: rec.AuthTime, CreatedAt: rec.CreatedAt, AccessExpires: rec.AccessExpires,
+		UserAgent: rec.UserAgent, IP: rec.IP,
 		ref: ref, generation: gen,
 	}
 
@@ -270,7 +282,7 @@ func (s *Store) Update(ctx context.Context, sess Session) error {
 	data, err := json.Marshal(record{
 		V: 1, UserID: sess.UserID, Subject: sess.Subject, SessionID: sess.SessionID, AMR: sess.AMR,
 		AuthTime: sess.AuthTime, CreatedAt: sess.CreatedAt, AccessExpires: sess.AccessExpires,
-		SealedRefresh: sealedRT, SealedID: sealedID,
+		SealedRefresh: sealedRT, SealedID: sealedID, UserAgent: sess.UserAgent, IP: sess.IP,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
@@ -292,6 +304,103 @@ func (s *Store) Delete(ctx context.Context, sess Session) error {
 	k, u, sid := s.keys(sess.ref, sess.Subject, sess.SessionID)
 	if err := deleteScript.Exec(ctx, s.c, []string{k, u, sid}, []string{sess.ref}).Error(); err != nil {
 		return fmt.Errorf("delete session: %w", err)
+	}
+	return nil
+}
+
+// SessionInfo is the public view of a session for the user's session list.
+type SessionInfo struct {
+	Ref       string
+	UserID    string
+	AuthTime  time.Time
+	CreatedAt time.Time
+	UserAgent string
+	IP        string
+	Current   bool // true if this is the session that asked for the list
+}
+
+// ListBySubject returns the active sessions of a user. The excludeRef session is marked
+// Current; pass "" to mark none.
+func (s *Store) ListBySubject(ctx context.Context, sub, excludeRef string) ([]SessionInfo, error) {
+	_, u, _ := s.keys("", sub, "")
+	refs, err := s.c.Do(ctx, s.c.B().Smembers().Key(u).Build()).AsStrSlice()
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	out := make([]SessionInfo, 0, len(refs))
+	for _, ref := range refs {
+		sess, err := s.GetByRef(ctx, ref)
+		if err != nil {
+			if errors.Is(err, ErrNoSession) {
+				continue // stale index entry
+			}
+			return nil, fmt.Errorf("read session %s: %w", ref, err)
+		}
+		out = append(out, SessionInfo{
+			Ref:       ref,
+			UserID:    sess.UserID,
+			AuthTime:  sess.AuthTime,
+			CreatedAt: sess.CreatedAt,
+			UserAgent: sess.UserAgent,
+			IP:        sess.IP,
+			Current:   ref == excludeRef,
+		})
+	}
+	// Deterministic order for tests and stable UI.
+	slices.SortFunc(out, func(a, b SessionInfo) int {
+		if a.Current != b.Current {
+			if a.Current {
+				return -1
+			}
+			return 1
+		}
+		return a.CreatedAt.Compare(b.CreatedAt)
+	})
+	return out, nil
+}
+
+// DeleteByRef removes a session by its reference. It reads the session first to know the
+// subject and clean up the user index.
+func (s *Store) DeleteByRef(ctx context.Context, ref string) error {
+	sess, err := s.GetByRef(ctx, ref)
+	if err != nil {
+		if errors.Is(err, ErrNoSession) {
+			return nil
+		}
+		return err
+	}
+	return s.Delete(ctx, sess)
+}
+
+// DeleteBySID removes sessions by their OIDC session id (sid). The sid index is a single-key
+// mapping (pitbox:sess:s:<hash>) because Zitadel sends one logout token per RP session.
+func (s *Store) DeleteBySID(ctx context.Context, sid string) error {
+	if sid == "" {
+		return nil
+	}
+	key := sessPrefix + "s:" + hashHex(sid)
+	ref, err := s.c.Do(ctx, s.c.B().Get().Key(key).Build()).ToString()
+	if err != nil {
+		if valkey.IsValkeyNil(err) {
+			return nil
+		}
+		return fmt.Errorf("get session by sid: %w", err)
+	}
+	return s.DeleteByRef(ctx, ref)
+}
+
+// DeleteAllBySubject removes every session of a user. It is used after account recovery or
+// by global sign-out.
+func (s *Store) DeleteAllBySubject(ctx context.Context, sub string) error {
+	_, u, _ := s.keys("", sub, "")
+	refs, err := s.c.Do(ctx, s.c.B().Smembers().Key(u).Build()).AsStrSlice()
+	if err != nil {
+		return fmt.Errorf("list sessions for delete: %w", err)
+	}
+	for _, ref := range refs {
+		if err := s.DeleteByRef(ctx, ref); err != nil {
+			return err
+		}
 	}
 	return nil
 }

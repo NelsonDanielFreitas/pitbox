@@ -14,6 +14,11 @@ func NewRecoveryCodes(db Querier) *RecoveryCodes { return &RecoveryCodes{db: db}
 
 // Replace deletes all unused codes for the user and inserts the new hashes atomically.
 func (r *RecoveryCodes) Replace(ctx context.Context, userID string, codeHashes [][]byte) error {
+	for i, h := range codeHashes {
+		if len(h) != 32 {
+			return fmt.Errorf("replace recovery codes: hash %d has length %d, want 32", i, len(h))
+		}
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	_, err := r.db.Exec(ctx, `SELECT identity.replace_recovery_codes($1::uuid, $2)`, userID, codeHashes)

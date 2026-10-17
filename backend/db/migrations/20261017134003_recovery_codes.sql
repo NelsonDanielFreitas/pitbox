@@ -17,17 +17,27 @@ CREATE POLICY own_rows ON identity.recovery_code
 -- Substitui os códigos não usados do utilizador (SECURITY DEFINER, sem contexto de app.user_id).
 CREATE OR REPLACE FUNCTION identity.replace_recovery_codes(p_user_id uuid, p_code_hashes bytea[])
   RETURNS void
-  LANGUAGE sql
+  LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = pg_catalog, pg_temp
 AS $$
+DECLARE
+  invalid int;
+BEGIN
+  SELECT count(*) INTO invalid
+  FROM unnest(p_code_hashes) AS h
+  WHERE length(h) != 32;
+  IF invalid > 0 THEN
+    RAISE EXCEPTION 'replace_recovery_codes: invalid hash length' USING ERRCODE = '22023';
+  END IF;
+
   DELETE FROM identity.recovery_code
   WHERE user_id = p_user_id AND used_at IS NULL;
 
   INSERT INTO identity.recovery_code (user_id, code_hash)
   SELECT p_user_id, h
-  FROM unnest(p_code_hashes) AS h
-  WHERE length(h) = 32;
+  FROM unnest(p_code_hashes) AS h;
+END
 $$;
 
 REVOKE ALL ON FUNCTION identity.replace_recovery_codes(uuid, bytea[]) FROM PUBLIC;

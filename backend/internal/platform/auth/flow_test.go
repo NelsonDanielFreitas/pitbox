@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
 )
 
@@ -1046,8 +1048,11 @@ func TestConsumeRecoveryCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get session: %v", err)
 	}
-	if len(sess.AMR) != 1 || sess.AMR[0] != "otp" {
-		t.Fatalf("amr = %v, want [otp]", sess.AMR)
+	if !principal.IsStrongFactor(sess.AMR) {
+		t.Fatalf("amr = %v, expected a strong factor", sess.AMR)
+	}
+	if !slices.Contains(sess.AMR, "otp") {
+		t.Fatalf("amr = %v, expected otp", sess.AMR)
 	}
 
 	// Second consume of the same code is refused.

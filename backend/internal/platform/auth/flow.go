@@ -686,6 +686,18 @@ func (h *Handler) revokeSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// appendStrongAMR adds a strong factor to amr without duplicates, preserving any existing
+// strong factors (e.g. passkey) so that consuming a recovery code does not downgrade the
+// session's authentication record.
+func appendStrongAMR(amr []string, factor string) []string {
+	for _, v := range amr {
+		if v == factor {
+			return amr
+		}
+	}
+	return append(amr, factor)
+}
+
 // validRef is a cheap shape check for a session reference: hex SHA-256.
 func validRef(ref string) bool {
 	if len(ref) != 64 {
@@ -801,7 +813,7 @@ func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Elevate the session: a consumed recovery code is equivalent to a TOTP step-up.
-	sess.AMR = []string{"otp"}
+	sess.AMR = appendStrongAMR(sess.AMR, "otp")
 	sess.AuthTime = h.Now().UTC()
 	if err := h.Store.Update(ctx, sess); err != nil {
 		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
@@ -882,24 +894,24 @@ func (h *Handler) verifyLogoutToken(ctx context.Context, raw string) (logoutToke
 	var empty logoutTokenClaims
 	prov, err := h.Provider.get()
 	if err != nil {
-		return empty, err
+		return empty, errors.New("provider_unavailable")
 	}
 	idt, err := prov.verifier.Verify(ctx, raw)
 	if err != nil {
-		return empty, err
+		return empty, errors.New("logout_token_invalid")
 	}
 	var c logoutTokenClaims
 	if err := idt.Claims(&c); err != nil {
-		return empty, err
+		return empty, errors.New("logout_token_invalid")
 	}
 	if c.Nonce != "" {
-		return empty, errors.New("logout token must not contain a nonce")
+		return empty, errors.New("logout_token_nonce")
 	}
 	if _, ok := c.Events["http://schemas.openid.net/event/backchannel-logout"]; !ok {
-		return empty, errors.New("missing backchannel-logout event")
+		return empty, errors.New("logout_token_event")
 	}
 	if c.Subject == "" && c.SID == "" {
-		return empty, errors.New("logout token has no sub nor sid")
+		return empty, errors.New("logout_token_no_subject")
 	}
 	return c, nil
 }

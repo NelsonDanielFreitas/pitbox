@@ -152,7 +152,7 @@ func newFlowHarness(t *testing.T) *flowHarness {
 		}),
 		Store:        store,
 		LoginCookies: NewLoginCookies(sealer(t, PurposeLoginCookie, key("k1", 1)), clock),
-		Users:        f.dir, Audit: f.audit,
+		Users:        f.dir, RecoveryCodes: &fakeRecoveryStore{}, Audit: f.audit,
 		Log: slog.New(slog.NewJSONHandler(logs, nil)), Refusals: f.refusals,
 		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock,
 	}
@@ -935,5 +935,129 @@ func TestBackchannelLogoutRejectsInvalidToken(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400", w.Code)
+	}
+}
+
+type fakeRecoveryStore struct {
+	mu     sync.Mutex
+	hashes map[string]map[string]struct{}
+	used   map[string]map[string]struct{}
+}
+
+func (r *fakeRecoveryStore) Replace(_ context.Context, userID string, codeHashes [][]byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.hashes == nil {
+		r.hashes = map[string]map[string]struct{}{}
+		r.used = map[string]map[string]struct{}{}
+	}
+	r.hashes[userID] = map[string]struct{}{}
+	r.used[userID] = map[string]struct{}{}
+	for _, h := range codeHashes {
+		r.hashes[userID][string(h)] = struct{}{}
+	}
+	return nil
+}
+
+func (r *fakeRecoveryStore) Consume(_ context.Context, userID string, codeHash []byte) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := string(codeHash)
+	if _, ok := r.hashes[userID][key]; !ok {
+		return false, nil
+	}
+	if _, ok := r.used[userID][key]; ok {
+		return false, nil
+	}
+	if r.used[userID] == nil {
+		r.used[userID] = map[string]struct{}{}
+	}
+	r.used[userID][key] = struct{}{}
+	return true, nil
+}
+
+func TestGenerateRecoveryCodesRequiresStrongFactor(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	f.h.RecoveryCodes = &fakeRecoveryStore{}
+	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
+	ck := &http.Cookie{Name: SessionCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+
+	w := f.do(http.MethodPost, RecoveryCodesPath, []*http.Cookie{ck}, nil)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", w.Code)
+	}
+}
+
+func TestGenerateRecoveryCodes(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	fs := &fakeRecoveryStore{}
+	f.h.RecoveryCodes = fs
+	v := f.login("sub-bob", "sid-bob", []string{"user"})
+	ck := &http.Cookie{Name: SessionCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+
+	w := f.do(http.MethodPost, RecoveryCodesPath, []*http.Cookie{ck}, nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Codes []string `json:"codes"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Codes) != 8 {
+		t.Fatalf("codes = %d, want 8", len(resp.Codes))
+	}
+	if len(fs.hashes["user-sub-bob"]) != 8 {
+		t.Fatalf("stored hashes = %d, want 8", len(fs.hashes["user-sub-bob"]))
+	}
+}
+
+func TestConsumeRecoveryCode(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	fs := &fakeRecoveryStore{}
+	f.h.RecoveryCodes = fs
+	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
+
+	codes, hashes, err := GenerateRecoveryCodes()
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if err := fs.Replace(context.Background(), "user-sub-bob", hashes); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+
+	// First consume succeeds and step-ups the session.
+	body := strings.NewReader(`{"code":"` + codes[0] + `"}`)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath, body)
+	r.Header.Set("Cookie", SessionCookieName+"="+v)
+	r.Header.Set("Content-Type", "application/json")
+	r.RemoteAddr = "203.0.113.7:40000"
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status %d, want 204", w.Code)
+	}
+
+	sess, err := f.store.Get(context.Background(), v)
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if len(sess.AMR) != 1 || sess.AMR[0] != "otp" {
+		t.Fatalf("amr = %v, want [otp]", sess.AMR)
+	}
+
+	// Second consume of the same code is refused.
+	body = strings.NewReader(`{"code":"` + codes[0] + `"}`)
+	r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath, body)
+	r.Header.Set("Cookie", SessionCookieName+"="+v)
+	r.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status %d, want 403", w.Code)
 	}
 }

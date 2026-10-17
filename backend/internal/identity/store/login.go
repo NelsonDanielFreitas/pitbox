@@ -16,6 +16,7 @@ import (
 // Querier is what the store needs from a pool.
 type Querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
 // Logins resolves the OIDC subject to the user, creating it on the first login, through

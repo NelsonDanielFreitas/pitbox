@@ -20,6 +20,9 @@ func (r failingRow) Scan(...any) error { return r.err }
 type fakeDB struct{ err error }
 
 func (f fakeDB) QueryRow(context.Context, string, ...any) pgx.Row { return failingRow(f) }
+func (f fakeDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, f.err
+}
 
 func TestLoginDirectoryMapsTheFunctionErrors(t *testing.T) {
 	t.Parallel()

@@ -22,14 +22,16 @@ import (
 
 // Paths of the BFF endpoints (plain HTTP, outside the Connect interceptor chain).
 const (
-	LoginPath             = "/auth/login"
-	CallbackPath          = "/auth/callback"
-	LogoutPath            = "/auth/logout"
-	SignedOutPath         = "/auth/signed-out"
-	SessionPath           = "/auth/session"
-	SessionsPath          = "/auth/sessions"
-	SessionRefPath        = "/auth/sessions/{ref}"
-	BackChannelLogoutPath = "/auth/backchannel-logout"
+	LoginPath               = "/auth/login"
+	CallbackPath            = "/auth/callback"
+	LogoutPath              = "/auth/logout"
+	SignedOutPath           = "/auth/signed-out"
+	SessionPath             = "/auth/session"
+	SessionsPath            = "/auth/sessions"
+	SessionRefPath          = "/auth/sessions/{ref}"
+	BackChannelLogoutPath   = "/auth/backchannel-logout"
+	RecoveryCodesPath       = "/auth/recovery-codes"
+	RecoveryCodeConsumePath = "/auth/recovery-codes/consume"
 )
 
 // Fixed, public messages. What went wrong goes to the log (a code) and the audit trail,
@@ -46,13 +48,14 @@ var ErrStepUpRefused = errors.New("auth: step-up refused")
 
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
-	Provider     *Provider
-	Authn        *Authenticator // for /auth/session
-	Store        *Store
-	LoginCookies *LoginCookies
-	Users        UserDirectory
-	Audit        Auditor
-	Log          *slog.Logger
+	Provider      *Provider
+	Authn         *Authenticator // for /auth/session
+	Store         *Store
+	LoginCookies  *LoginCookies
+	Users         UserDirectory
+	RecoveryCodes RecoveryCodeStore
+	Audit         Auditor
+	Log           *slog.Logger
 	// Refusals counts callbacks refused before their state was validated (nil: not counted).
 	Refusals       RefusalCounter
 	PublicURL      string // origin the browser sees, without a trailing slash
@@ -72,6 +75,8 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+SessionsPath, h.listSessions)
 	mux.HandleFunc("DELETE "+SessionRefPath, h.revokeSession)
 	mux.HandleFunc("POST "+BackChannelLogoutPath, h.backchannelLogout)
+	mux.HandleFunc("POST "+RecoveryCodesPath, h.generateRecoveryCodes)
+	mux.HandleFunc("POST "+RecoveryCodeConsumePath, h.consumeRecoveryCode)
 }
 
 func noStore(w http.ResponseWriter) {
@@ -694,6 +699,124 @@ func validRef(ref string) bool {
 		}
 	}
 	return true
+}
+
+// generateRecoveryCodes creates a fresh set of single-use MFA recovery codes for the
+// authenticated user. The request must be step-up authenticated (strong factor); the plaintext
+// codes are returned exactly once and are never stored.
+func (h *Handler) generateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+	w.Header().Set("Content-Type", "application/json")
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthenticated"}`))
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	if !principal.IsStrongFactor(sess.AMR) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"step-up required"}`))
+		return
+	}
+
+	codes, hashes, err := GenerateRecoveryCodes()
+	if err != nil {
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "random"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	if err := h.RecoveryCodes.Replace(ctx, sess.UserID, hashes); err != nil {
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.recovery_codes_generated", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(),
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit recovery codes generated", slog.String("reason", "audit"))
+	}
+
+	_ = json.NewEncoder(w).Encode(struct {
+		Codes []string `json:"codes"`
+	}{codes})
+}
+
+// consumeRecoveryCode validates a single-use recovery code and, if valid, elevates the current
+// session to step-up level (AMR otp). This lets users who have lost their TOTP device access
+// owner-level actions with a recovery code.
+func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	code := NormalizeRecoveryCode(req.Code)
+	if code == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	ok, err := h.RecoveryCodes.Consume(ctx, sess.UserID, HashRecoveryCode(code))
+	if err != nil {
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	// Elevate the session: a consumed recovery code is equivalent to a TOTP step-up.
+	sess.AMR = []string{"otp"}
+	sess.AuthTime = h.Now().UTC()
+	if err := h.Store.Update(ctx, sess); err != nil {
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.recovery_code_consumed", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(),
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit recovery code consumed", slog.String("reason", "audit"))
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // backchannelLogout receives a logout token from the identity provider and terminates the

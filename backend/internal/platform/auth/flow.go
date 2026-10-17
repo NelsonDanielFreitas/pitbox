@@ -22,11 +22,13 @@ import (
 
 // Paths of the BFF endpoints (plain HTTP, outside the Connect interceptor chain).
 const (
-	LoginPath     = "/auth/login"
-	CallbackPath  = "/auth/callback"
-	LogoutPath    = "/auth/logout"
-	SignedOutPath = "/auth/signed-out"
-	SessionPath   = "/auth/session"
+	LoginPath      = "/auth/login"
+	CallbackPath   = "/auth/callback"
+	LogoutPath     = "/auth/logout"
+	SignedOutPath  = "/auth/signed-out"
+	SessionPath    = "/auth/session"
+	SessionsPath   = "/auth/sessions"
+	SessionRefPath = "/auth/sessions/{ref}"
 )
 
 // Fixed, public messages. What went wrong goes to the log (a code) and the audit trail,
@@ -66,6 +68,8 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+LogoutPath, h.logout)
 	mux.HandleFunc("GET "+SignedOutPath, h.signedOut)
 	mux.HandleFunc("GET "+SessionPath, h.sessionInfo)
+	mux.HandleFunc("GET "+SessionsPath, h.listSessions)
+	mux.HandleFunc("DELETE "+SessionRefPath, h.revokeSession)
 }
 
 func noStore(w http.ResponseWriter) {
@@ -260,10 +264,16 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 			_ = h.Store.Delete(ctx, s)
 		}
 	}
+	meta := interceptors.RequestMeta(r, h.ClientIPHeader)
+	sessIP := ""
+	if meta.IP.IsValid() {
+		sessIP = meta.IP.String()
+	}
 	token, err := h.Store.Create(ctx, Session{
 		UserID: userID, Subject: claims.Subject, SessionID: claims.SessionID, AMR: claims.AMR,
 		AuthTime: claims.authTime(), AccessExpires: accessExpiry(h.Now(), tok),
 		RefreshToken: tok.RefreshToken, IDToken: claims.Raw,
+		UserAgent: meta.UserAgent, IP: sessIP,
 	})
 	if err != nil {
 		h.Log.ErrorContext(ctx, "create session", slog.String("reason", "store"))
@@ -577,4 +587,109 @@ func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		AMR           []string  `json:"amr"`
 		AuthTime      time.Time `json:"auth_time"`
 	}{true, p.UserID, p.AMR, p.AuthTime})
+}
+
+// listSessions returns the active sessions of the authenticated user. It never includes
+// tokens or the full cookie value: only the session reference and metadata.
+func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+	w.Header().Set("Content-Type", "application/json")
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthenticated"}`))
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "list sessions", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	sessions, err := h.Store.ListBySubject(ctx, sess.Subject, sess.Ref())
+	if err != nil {
+		h.Log.ErrorContext(ctx, "list sessions", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+	_ = json.NewEncoder(w).Encode(struct {
+		Sessions []StoreSessionInfo `json:"sessions"`
+	}{sessions})
+}
+
+// StoreSessionInfo is an alias exported for JSON marshalling.
+type StoreSessionInfo = SessionInfo
+
+// revokeSession terminates a session of the authenticated user. A user can only revoke their
+// own sessions; the current session can be revoked, which is equivalent to signing out.
+func (h *Handler) revokeSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+
+	token := SessionTokenFromHeader(r.Header)
+	sess, err := h.Store.Get(ctx, token)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	case err != nil:
+		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
+	ref := r.PathValue("ref")
+	if ref == "" || !validRef(ref) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Verify the target belongs to the same user before deleting.
+	target, err := h.Store.GetByRef(ctx, ref)
+	if err != nil {
+		if errors.Is(err, ErrNoSession) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(target.Subject), []byte(sess.Subject)) != 1 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if err := h.Store.DeleteByRef(ctx, ref); err != nil {
+		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.session_revoked", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: ref,
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit revoke session", slog.String("reason", "audit"))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// validRef is a cheap shape check for a session reference: hex SHA-256.
+func validRef(ref string) bool {
+	if len(ref) != 64 {
+		return false
+	}
+	for i := 0; i < len(ref); i++ {
+		c := ref[i]
+		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		if !isHex {
+			return false
+		}
+	}
+	return true
 }

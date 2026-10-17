@@ -73,6 +73,7 @@ def desired_oidc_config(public_url: str) -> dict:
     return {
         "redirectUris": [f"{base}/auth/callback"],
         "postLogoutRedirectUris": [f"{base}/auth/signed-out"],
+        "backChannelLogoutUri": f"{base}/auth/backchannel-logout",
         "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
         "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
         "applicationType": "OIDC_APP_TYPE_WEB",

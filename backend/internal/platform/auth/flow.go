@@ -22,13 +22,14 @@ import (
 
 // Paths of the BFF endpoints (plain HTTP, outside the Connect interceptor chain).
 const (
-	LoginPath      = "/auth/login"
-	CallbackPath   = "/auth/callback"
-	LogoutPath     = "/auth/logout"
-	SignedOutPath  = "/auth/signed-out"
-	SessionPath    = "/auth/session"
-	SessionsPath   = "/auth/sessions"
-	SessionRefPath = "/auth/sessions/{ref}"
+	LoginPath             = "/auth/login"
+	CallbackPath          = "/auth/callback"
+	LogoutPath            = "/auth/logout"
+	SignedOutPath         = "/auth/signed-out"
+	SessionPath           = "/auth/session"
+	SessionsPath          = "/auth/sessions"
+	SessionRefPath        = "/auth/sessions/{ref}"
+	BackChannelLogoutPath = "/auth/backchannel-logout"
 )
 
 // Fixed, public messages. What went wrong goes to the log (a code) and the audit trail,
@@ -70,6 +71,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+SessionPath, h.sessionInfo)
 	mux.HandleFunc("GET "+SessionsPath, h.listSessions)
 	mux.HandleFunc("DELETE "+SessionRefPath, h.revokeSession)
+	mux.HandleFunc("POST "+BackChannelLogoutPath, h.backchannelLogout)
 }
 
 func noStore(w http.ResponseWriter) {
@@ -692,4 +694,89 @@ func validRef(ref string) bool {
 		}
 	}
 	return true
+}
+
+// backchannelLogout receives a logout token from the identity provider and terminates the
+// matching session(s). It is not authenticated by a cookie: the signature of the logout token
+// is the proof. A 200 is returned even when the session is already gone, so the provider does
+// not retry indefinitely.
+func (h *Handler) backchannelLogout(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+
+	if err := r.ParseForm(); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	raw := r.PostFormValue("logout_token")
+	if raw == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	claims, err := h.verifyLogoutToken(ctx, raw)
+	if err != nil {
+		h.Log.WarnContext(ctx, "back-channel logout refused", slog.String("reason", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if claims.Subject != "" {
+		if err := h.Store.DeleteAllBySubject(ctx, claims.Subject); err != nil {
+			h.Log.ErrorContext(ctx, "back-channel logout", slog.String("reason", "store"))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+	}
+	if claims.SID != "" {
+		if err := h.Store.DeleteBySID(ctx, claims.SID); err != nil {
+			h.Log.ErrorContext(ctx, "back-channel logout", slog.String("reason", "store"))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+	}
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.backchannel_logout", ActorKind: ActorUser, ActorID: claims.Subject,
+		Reason: claims.SID, Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit back-channel logout", slog.String("reason", "audit"))
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// logoutTokenClaims is what we read from a valid logout token.
+type logoutTokenClaims struct {
+	Subject string         `json:"sub"`
+	SID     string         `json:"sid"`
+	Nonce   string         `json:"nonce"`
+	Events  map[string]any `json:"events"`
+}
+
+// verifyLogoutToken validates the JWT signature and the claims that make it a logout token.
+// It uses the same verifier as ID tokens but does not check a nonce: a logout token must not
+// contain one.
+func (h *Handler) verifyLogoutToken(ctx context.Context, raw string) (logoutTokenClaims, error) {
+	var empty logoutTokenClaims
+	prov, err := h.Provider.get()
+	if err != nil {
+		return empty, err
+	}
+	idt, err := prov.verifier.Verify(ctx, raw)
+	if err != nil {
+		return empty, err
+	}
+	var c logoutTokenClaims
+	if err := idt.Claims(&c); err != nil {
+		return empty, err
+	}
+	if c.Nonce != "" {
+		return empty, errors.New("logout token must not contain a nonce")
+	}
+	if _, ok := c.Events["http://schemas.openid.net/event/backchannel-logout"]; !ok {
+		return empty, errors.New("missing backchannel-logout event")
+	}
+	if c.Subject == "" && c.SID == "" {
+		return empty, errors.New("logout token has no sub nor sid")
+	}
+	return c, nil
 }

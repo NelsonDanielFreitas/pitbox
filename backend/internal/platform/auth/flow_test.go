@@ -161,6 +161,26 @@ func newFlowHarness(t *testing.T) *flowHarness {
 	return f
 }
 
+func (f *flowHarness) login(subject, sid string, amr []string) string {
+	f.t.Helper()
+	a := f.startLogin("")
+	code := f.idp.issueCode(subject, a.nonce, a.challenge)
+	f.idp.mutateClaims = func(m map[string]any) {
+		m["sid"] = sid
+		m["amr"] = amr
+	}
+	defer func() { f.idp.mutateClaims = nil }()
+	w := f.callback(a, code)
+	if w.Code != http.StatusOK {
+		f.t.Fatalf("login failed: status %d: %s", w.Code, w.Body.String())
+	}
+	ck := cookieNamed(w, SessionCookieName)
+	if ck == nil {
+		f.t.Fatal("login did not set session cookie")
+	}
+	return ck.Value
+}
+
 func (f *flowHarness) do(method, target string, cookies []*http.Cookie, hdr map[string]string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	r := httptest.NewRequestWithContext(context.Background(), method, publicURL+target, nil)
@@ -873,4 +893,47 @@ func TestRefusalCounterBuildsOnAnyMeter(t *testing.T) {
 		t.Fatalf("NewRefusalCounter: %v", err)
 	}
 	c.Count(context.Background(), "no_login_state") // must not panic
+}
+
+func TestBackchannelLogoutBySID(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	_ = f.login("sub-alice", "sid-alice", []string{"user"})
+
+	tok := f.idp.logoutToken("sub-alice", "sid-alice", nil)
+	form := url.Values{"logout_token": {tok}}
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+BackChannelLogoutPath, strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	// The SID index is gone.
+	keys := f.adminKeys()
+	for _, k := range keys {
+		if strings.Contains(k, ":s:") {
+			t.Errorf("sid index still present: %s", k)
+		}
+	}
+}
+
+func TestBackchannelLogoutRejectsInvalidToken(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+
+	// Token with a nonce (must be rejected).
+	tok := f.idp.logoutToken("sub-alice", "sid-alice", func(p map[string]any) {
+		p["nonce"] = "nope"
+	})
+	form := url.Values{"logout_token": {tok}}
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+BackChannelLogoutPath, strings.NewReader(form.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400", w.Code)
+	}
 }

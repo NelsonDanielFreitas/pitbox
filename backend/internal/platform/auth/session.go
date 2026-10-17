@@ -372,6 +372,23 @@ func (s *Store) DeleteByRef(ctx context.Context, ref string) error {
 	return s.Delete(ctx, sess)
 }
 
+// DeleteBySID removes sessions by their OIDC session id (sid). The sid index is a single-key
+// mapping (pitbox:sess:s:<hash>) because Zitadel sends one logout token per RP session.
+func (s *Store) DeleteBySID(ctx context.Context, sid string) error {
+	if sid == "" {
+		return nil
+	}
+	key := sessPrefix + "s:" + hashHex(sid)
+	ref, err := s.c.Do(ctx, s.c.B().Get().Key(key).Build()).ToString()
+	if err != nil {
+		if valkey.IsValkeyNil(err) {
+			return nil
+		}
+		return fmt.Errorf("get session by sid: %w", err)
+	}
+	return s.DeleteByRef(ctx, ref)
+}
+
 // DeleteAllBySubject removes every session of a user. It is used after account recovery or
 // by global sign-out.
 func (s *Store) DeleteAllBySubject(ctx context.Context, sub string) error {

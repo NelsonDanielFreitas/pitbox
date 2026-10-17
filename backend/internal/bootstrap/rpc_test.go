@@ -101,7 +101,7 @@ func newHarnessWithAuth(t *testing.T, env map[string]string, teams *fakeTeams, a
 	register := append([]func(*connect.Server){func(s *connect.Server) {
 		identityv1connect.RegisterTeamServiceHandler(s, teams)
 	}}, extra...)
-	api, err := newRPCServer(cfg, logger, tp, authn, noOpRateLimit(), register...)
+	api, err := newRPCServer(cfg, logger, tp, authn, noOpRateLimit(), nil, register...)
 	if err != nil {
 		t.Fatalf("newRPCServer: %v", err)
 	}

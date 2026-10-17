@@ -35,3 +35,8 @@ func (d *LoginDirectory) ResolveLogin(ctx context.Context, subject, email, displ
 	}
 	return id, err
 }
+
+// IsOwner reports whether the user owns any team.
+func (d *LoginDirectory) IsOwner(ctx context.Context, userID string) (bool, error) {
+	return d.logins.IsOwner(ctx, userID)
+}

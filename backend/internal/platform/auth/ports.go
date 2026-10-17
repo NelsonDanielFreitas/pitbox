@@ -21,6 +21,9 @@ var (
 // The identity module implements it with identity.resolve_login.
 type UserDirectory interface {
 	ResolveLogin(ctx context.Context, subject, email, displayName string) (userID string, err error)
+	// IsOwner reports whether the user owns any team. It is used to enforce MFA for owners
+	// at login time (F1-03c).
+	IsOwner(ctx context.Context, userID string) (bool, error)
 }
 
 // ActorKind mirrors the actor_kind column of audit.audit_log.

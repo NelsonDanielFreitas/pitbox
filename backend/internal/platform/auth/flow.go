@@ -16,6 +16,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 )
 
@@ -35,6 +36,10 @@ const (
 	msgNotAllowed  = "login not allowed"
 	msgUnavailable = "login temporarily unavailable"
 )
+
+// ErrStepUpRefused is returned by the step-up callback when the reauthenticated subject
+// does not match the existing session or the factor is not strong enough.
+var ErrStepUpRefused = errors.New("auth: step-up refused")
 
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
@@ -75,26 +80,58 @@ func fail(w http.ResponseWriter, code int, msg string) {
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	prov, err := h.Provider.get()
 	if err != nil {
-		h.Log.WarnContext(r.Context(), "login unavailable", slog.String("reason", "provider_unavailable"))
+		h.Log.WarnContext(ctx, "login unavailable", slog.String("reason", "provider_unavailable"))
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
 		return
 	}
+
 	returnTo, _ := SafeReturnTo(r.URL.Query().Get("return_to"))
+	stepUp := r.URL.Query().Get("step_up") == "true"
+	var sessionRef string
+	if stepUp {
+		token := SessionTokenFromHeader(r.Header)
+		if token == "" {
+			h.refuseUnauthenticated(ctx, "stepup_no_cookie")
+			fail(w, http.StatusBadRequest, msgBadRequest)
+			return
+		}
+		sess, err := h.Store.Get(ctx, token)
+		if err != nil {
+			h.refuseUnauthenticated(ctx, "stepup_no_session")
+			fail(w, http.StatusUnauthorized, msgUnauthenticated)
+			return
+		}
+		sessionRef = sess.Ref()
+	}
+
 	st, err := NewLoginState(h.Now(), returnTo)
 	if err != nil {
-		h.Log.ErrorContext(r.Context(), "login state", slog.String("reason", "random"))
+		h.Log.ErrorContext(ctx, "login state", slog.String("reason", "random"))
 		fail(w, http.StatusInternalServerError, msgUnavailable)
 		return
 	}
+	st.StepUp = stepUp
+	st.SessionRef = sessionRef
+
 	if err := h.LoginCookies.Set(w, st); err != nil {
-		h.Log.ErrorContext(r.Context(), "login cookie", slog.String("reason", "seal"))
+		h.Log.ErrorContext(ctx, "login cookie", slog.String("reason", "seal"))
 		fail(w, http.StatusInternalServerError, msgUnavailable)
 		return
 	}
-	authURL := prov.oauth.AuthCodeURL(st.State,
-		oauth2.S256ChallengeOption(st.Verifier), oidc.Nonce(st.Nonce))
+
+	opts := []oauth2.AuthCodeOption{
+		oauth2.S256ChallengeOption(st.Verifier),
+		oidc.Nonce(st.Nonce),
+	}
+	if stepUp {
+		// Force the identity provider to reauthenticate the user. We use both prompt=login
+		// and max_age=0 because some providers honor one but not the other.
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	}
+	authURL := prov.oauth.AuthCodeURL(st.State, opts...)
 	noStore(w)
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
@@ -145,6 +182,24 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
 	}
+
+	// Step-up: reauthenticate an existing session. No userinfo, no new session, no login audit.
+	if st.StepUp {
+		if err := h.stepUp(ctx, w, r, st, claims, tok); err != nil {
+			switch {
+			case errors.Is(err, ErrUnauthenticated):
+				fail(w, http.StatusUnauthorized, msgUnauthenticated)
+			case errors.Is(err, ErrStepUpRefused):
+				h.failLogin(ctx, r, "stepup_refused", claims.Subject)
+				fail(w, http.StatusForbidden, msgNotAllowed)
+			default:
+				h.Log.ErrorContext(ctx, "step-up", slog.String("reason", "store"))
+				fail(w, http.StatusServiceUnavailable, msgUnavailable)
+			}
+		}
+		return
+	}
+
 	// Email and name come from the userinfo endpoint, called from here with the access token,
 	// not from the ID token: the ID token is the one that goes to the browser as id_token_hint
 	// at logout (history, logs), so it carries no personal data (ADR 0013).
@@ -183,6 +238,21 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 3.1 Owners must authenticate with a strong factor (passkey or TOTP). This is checked
+	// after resolving the user so we can look up their team roles, and before creating the
+	// session so a password-only login is never accepted for an owner.
+	isOwner, err := h.Users.IsOwner(ctx, userID)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "check owner", slog.String("reason", "directory"))
+		fail(w, http.StatusServiceUnavailable, msgUnavailable)
+		return
+	}
+	if isOwner && !principal.IsStrongFactor(claims.AMR) {
+		h.failLogin(ctx, r, "owner_requires_mfa", claims.Subject)
+		fail(w, http.StatusForbidden, msgNotAllowed)
+		return
+	}
+
 	// 4. A new session, always with a new cookie value (no session fixation). The one the
 	// browser may already hold is removed.
 	if old := SessionTokenFromHeader(r.Header); old != "" {
@@ -216,6 +286,52 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, token, h.SessionMaxAge)
 	h.landing(w, st.ReturnTo)
+}
+
+// stepUp updates the existing session with the fresh authentication data from the identity
+// provider. It refuses the request when the session is gone, the subject changed, or the new
+// authentication did not use a strong factor.
+func (h *Handler) stepUp(ctx context.Context, w http.ResponseWriter, r *http.Request, st LoginState, claims idClaims, tok *oauth2.Token) error {
+	if st.SessionRef == "" {
+		return ErrStepUpRefused
+	}
+	existing, err := h.Store.GetByRef(ctx, st.SessionRef)
+	if err != nil {
+		if errors.Is(err, ErrNoSession) {
+			return ErrUnauthenticated
+		}
+		return err
+	}
+	if subtle.ConstantTimeCompare([]byte(existing.Subject), []byte(claims.Subject)) != 1 {
+		return ErrStepUpRefused
+	}
+	if !principal.IsStrongFactor(claims.AMR) {
+		return ErrStepUpRefused
+	}
+
+	existing.AuthTime = claims.authTime()
+	existing.AMR = claims.AMR
+	existing.SessionID = claims.SessionID
+	existing.AccessExpires = accessExpiry(h.Now(), tok)
+	if claims.Raw != "" {
+		existing.IDToken = claims.Raw
+	}
+	if tok.RefreshToken != "" {
+		existing.RefreshToken = tok.RefreshToken
+	}
+
+	if err := h.Store.Update(ctx, existing); err != nil {
+		return err
+	}
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.step_up", ActorKind: ActorUser, ActorID: existing.UserID, SessionRef: existing.Ref(),
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit step-up", slog.String("reason", "audit"))
+		return err
+	}
+	h.landing(w, st.ReturnTo)
+	return nil
 }
 
 // landing answers 200 with a meta refresh to returnTo. A 302 here would be a redirect that

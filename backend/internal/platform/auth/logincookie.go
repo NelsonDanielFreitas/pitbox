@@ -30,11 +30,13 @@ var ErrNoLoginState = errors.New("auth: no valid login state")
 // travels in a sealed cookie, so the server keeps no state before the user is signed in
 // (a flood of /auth/login costs memory in nobody).
 type LoginState struct {
-	State    string    `json:"s"`
-	Nonce    string    `json:"n"`
-	Verifier string    `json:"v"` // PKCE code_verifier
-	ReturnTo string    `json:"r"`
-	Expires  time.Time `json:"e"`
+	State      string    `json:"s"`
+	Nonce      string    `json:"n"`
+	Verifier   string    `json:"v"` // PKCE code_verifier
+	ReturnTo   string    `json:"r"`
+	Expires    time.Time `json:"e"`
+	StepUp     bool      `json:"su,omitempty"` // true when reauthenticating for step-up
+	SessionRef string    `json:"sr,omitempty"` // existing session ref when StepUp is true
 }
 
 // NewLoginState creates the random values of one login attempt. returnTo must already have

@@ -1559,6 +1559,27 @@ GRANT EXECUTE ON FUNCTION identity.resolve_login(text, citext, text) TO pitbox_a
 COMMENT ON FUNCTION identity.resolve_login(text, citext, text) IS
   'Primeiro login: devolve o id do utilizador do "sub" do IdP, criando-o se não existir. SECURITY DEFINER, só pitbox_app.';
 
+-- identity.is_owner — verifica se um utilizador é dono de alguma equipa (F1-03c).
+-- Necessita de SECURITY DEFINER porque a verificação não tem contexto de equipa.
+CREATE OR REPLACE FUNCTION identity.is_owner(p_user_id uuid)
+  RETURNS boolean
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM identity.membership
+    WHERE user_id = p_user_id AND role = 'owner'
+  );
+END
+$$;
+
+REVOKE ALL ON FUNCTION identity.is_owner(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION identity.is_owner(uuid) TO pitbox_app;
+COMMENT ON FUNCTION identity.is_owner(uuid) IS
+  'Verifica se o utilizador é dono de alguma equipa. SECURITY DEFINER, só pitbox_app.';
+
 -- =============================================================================
 -- TimescaleDB: hypertable e retenção da telemetria
 -- =============================================================================

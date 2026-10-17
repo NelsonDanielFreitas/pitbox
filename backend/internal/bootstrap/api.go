@@ -73,7 +73,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up rate limiting: %w", err)
 	}
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter))
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), nil)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

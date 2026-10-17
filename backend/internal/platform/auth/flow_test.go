@@ -28,10 +28,11 @@ import (
 const publicURL = "https://api.example.eu"
 
 type fakeDirectory struct {
-	mu    sync.Mutex
-	err   error
-	calls int
-	last  struct{ sub, email, name string }
+	mu     sync.Mutex
+	err    error
+	calls  int
+	owners map[string]bool
+	last   struct{ sub, email, name string }
 }
 
 func (d *fakeDirectory) ResolveLogin(_ context.Context, sub, email, name string) (string, error) {
@@ -43,6 +44,15 @@ func (d *fakeDirectory) ResolveLogin(_ context.Context, sub, email, name string)
 		return "", d.err
 	}
 	return "user-" + sub, nil
+}
+
+func (d *fakeDirectory) IsOwner(_ context.Context, userID string) (bool, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.err != nil {
+		return false, d.err
+	}
+	return d.owners[userID], nil
 }
 
 type fakeAudit struct {

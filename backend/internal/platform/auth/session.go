@@ -199,7 +199,13 @@ func (s *Store) Get(ctx context.Context, token string) (Session, error) {
 	if !validToken(token) {
 		return Session{}, ErrNoSession
 	}
-	ref := hashHex(token)
+	return s.GetByRef(ctx, hashHex(token))
+}
+
+// GetByRef returns the session for a reference (SHA-256 of the cookie value). It is used by
+// step-up, where the callback carries the session ref in the sealed login cookie but not the
+// cookie value itself.
+func (s *Store) GetByRef(ctx context.Context, ref string) (Session, error) {
 	key := sessPrefix + ref
 	res := s.c.DoMulti(ctx,
 		s.c.B().Hgetall().Key(key).Build(),

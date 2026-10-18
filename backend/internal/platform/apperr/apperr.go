@@ -15,3 +15,8 @@ var ErrNotFound = errors.New("not found")
 // accepts). The errors interceptor answers INVALID_ARGUMENT with a fixed message; wrap it with
 // context for the log and never put the value in the text.
 var ErrInvalidArgument = errors.New("invalid argument")
+
+// ErrPermissionDenied means the caller is authenticated but not authorized for the
+// requested action. The errors interceptor answers PERMISSION_DENIED with a fixed message;
+// wrap it with context for the log and never put the resource id in the text.
+var ErrPermissionDenied = errors.New("permission denied")

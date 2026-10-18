@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api smoke-auth zitadel-provision test-scripts
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -122,6 +122,9 @@ run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger; com l
 zitadel-provision: ## Projeto, app OIDC, tempos dos tokens e política de login do Zitadel local (idempotente; precisa de make up)
 	python3 -I scripts/zitadel-provision.py $(ARGS)
 
+openfga-provision: ## Cria a store e o modelo OpenFGA local e guarda os ids no .env (idempotente; precisa de make up)
+	python3 -I scripts/openfga-provision.py
+
 smoke-auth: ## Prova o login ponta a ponta contra o Zitadel local, sem browser (precisa de make up e make zitadel-provision)
 	python3 -I scripts/auth-smoke.py
 
@@ -152,7 +155,10 @@ db-migrate: ## Aplica as migrações ao Postgres do compose (make up) como pitbo
 	DATABASE_URL="postgres://pitbox_migrator:$$PITBOX_MIGRATOR_PASSWORD@127.0.0.1:$${POSTGRES_PORT:-5432}/pitbox?sslmode=disable" \
 	atlas migrate apply --env local --allow-dirty
 
-ci: lint test gen-check app-typecheck secrets vuln workflows db-test ## Corre localmente o mesmo que o CI
+authz-test: ## Asserções do modelo OpenFGA
+	fga model test --tests backend/authz/model.fga.yaml
+
+ci: lint test gen-check app-typecheck secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
 
 hooks: ## Ativa os hooks de .githooks (pre-push: gitleaks antes de cada push)
 	git config core.hooksPath .githooks

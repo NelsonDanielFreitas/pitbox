@@ -17,15 +17,18 @@ const testKey = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
 // mandatory there. The extras override or add to them.
 func hosted(env string, extra map[string]string) map[string]string {
 	m := map[string]string{ //nolint:gosec // fake credentials
-		"PITBOX_ENV":                env,
-		"PITBOX_PUBLIC_URL":         "https://api.example.eu",
-		"PITBOX_OIDC_ISSUER":        "https://auth.example.eu",
-		"PITBOX_OIDC_CLIENT_ID":     "client-id",
-		"PITBOX_OIDC_CLIENT_SECRET": "client-secret", //nolint:gosec // fake value
-		"PITBOX_AUTH_KEYS":          "k1:" + testKey,
-		"PITBOX_VALKEY_PASSWORD":    "valkey-password", //nolint:gosec // fake value
-		"PITBOX_VALKEY_TLS":         "true",
-		"PITBOX_DATABASE_URL":       "postgres://pitbox_api:db-password@db.example.eu:5432/pitbox?sslmode=verify-full", //nolint:gosec // fake value
+		"PITBOX_ENV":                   env,
+		"PITBOX_PUBLIC_URL":            "https://api.example.eu",
+		"PITBOX_OIDC_ISSUER":           "https://auth.example.eu",
+		"PITBOX_OIDC_CLIENT_ID":        "client-id",
+		"PITBOX_OIDC_CLIENT_SECRET":    "client-secret", //nolint:gosec // fake value
+		"PITBOX_AUTH_KEYS":             "k1:" + testKey,
+		"PITBOX_VALKEY_PASSWORD":       "valkey-password", //nolint:gosec // fake value
+		"PITBOX_VALKEY_TLS":            "true",
+		"PITBOX_DATABASE_URL":          "postgres://pitbox_api:db-password@db.example.eu:5432/pitbox?sslmode=verify-full", //nolint:gosec // fake value
+		"PITBOX_OPENFGA_TLS":           "true",
+		"PITBOX_OPENFGA_PRESHARED_KEY": "openfga-psk", //nolint:gosec // fake value
+		"PITBOX_OPENFGA_STORE_ID":      "01JABCD0123456789ABCDEFGH",
 	}
 	for k, v := range extra {
 		m[k] = v
@@ -183,6 +186,14 @@ func TestLoadFrom(t *testing.T) {
 			"PITBOX_RL_TEAM_WRITE_RPS": "50", "PITBOX_RL_TEAM_WRITE_BURST": "80",
 			"PITBOX_RL_VALKEY_TIMEOUT": "100ms",
 		})},
+		// --- Authorization (F1-05, ADR 0005) ---
+		{name: "openfga defaults local", env: map[string]string{}, wantErr: ""},
+		{name: "openfga timeout too low", env: hosted("production", map[string]string{"PITBOX_OPENFGA_TIMEOUT": "40ms"}), wantErr: "PITBOX_OPENFGA_TIMEOUT"},
+		{name: "openfga timeout too high", env: hosted("production", map[string]string{"PITBOX_OPENFGA_TIMEOUT": "2s"}), wantErr: "PITBOX_OPENFGA_TIMEOUT"},
+		{name: "openfga address without port", env: hosted("production", map[string]string{"PITBOX_OPENFGA_ADDR": "openfga.example.eu"}), wantErr: "PITBOX_OPENFGA_ADDR"},
+		{name: "openfga tls required outside local", env: hosted("production", map[string]string{"PITBOX_OPENFGA_TLS": "false"}), wantErr: "PITBOX_OPENFGA_TLS"},
+		{name: "openfga preshared key required outside local", env: hosted("production", map[string]string{"PITBOX_OPENFGA_PRESHARED_KEY": ""}), wantErr: "PITBOX_OPENFGA_PRESHARED_KEY"},
+		{name: "openfga store id required outside local", env: hosted("production", map[string]string{"PITBOX_OPENFGA_STORE_ID": ""}), wantErr: "PITBOX_OPENFGA_STORE_ID"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -286,6 +297,9 @@ func TestAuthDefaults(t *testing.T) {
 	if c.RateLimitValkeyTimeout != 50*time.Millisecond {
 		t.Errorf("unexpected valkey timeout default: %s", c.RateLimitValkeyTimeout)
 	}
+	if c.OpenFGAAddr != "127.0.0.1:8091" || c.OpenFGATLSEnabled || c.OpenFGATimeout != 200*time.Millisecond {
+		t.Errorf("unexpected openfga defaults: %+v", c)
+	}
 }
 
 func TestAuthKeyring(t *testing.T) {
@@ -316,10 +330,12 @@ func TestSecretsNeverLeak(t *testing.T) {
 		dbPassword   = "very-secret-database-value" //nolint:gosec // fake value
 		clientSecret = "very-secret-client-value"   //nolint:gosec // fake value
 		valkeyPass   = "very-secret-valkey-value"   //nolint:gosec // fake value
+		openfgaPSK   = "very-secret-openfga-value"  //nolint:gosec // fake value
 	)
 	c, err := LoadFrom(hosted("production", map[string]string{
 		"PITBOX_OIDC_CLIENT_SECRET": clientSecret, "PITBOX_VALKEY_PASSWORD": valkeyPass,
-		"PITBOX_DATABASE_URL": "postgres://pitbox_api:" + dbPassword + "@db.example.eu/pitbox?sslmode=verify-full",
+		"PITBOX_OPENFGA_PRESHARED_KEY": openfgaPSK,
+		"PITBOX_DATABASE_URL":          "postgres://pitbox_api:" + dbPassword + "@db.example.eu/pitbox?sslmode=verify-full",
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
@@ -330,7 +346,7 @@ func TestSecretsNeverLeak(t *testing.T) {
 		buf.String(), fmt.Sprintf("%v", c), fmt.Sprintf("%+v", c), fmt.Sprintf("%#v", c), fmt.Sprint(c), c.String(),
 	}
 	for _, out := range outputs {
-		for _, secret := range []string{clientSecret, valkeyPass, dbPassword, testKey, "client-id"} {
+		for _, secret := range []string{clientSecret, valkeyPass, openfgaPSK, dbPassword, testKey, "client-id"} {
 			if strings.Contains(out, secret) {
 				t.Errorf("output leaks %q: %s", secret, out)
 			}

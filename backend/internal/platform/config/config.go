@@ -132,6 +132,16 @@ type Config struct {
 	RateLimitPublicBurst    int           `env:"PITBOX_RL_PUBLIC_BURST"     envDefault:"20"`
 	RateLimitValkeyTimeout  time.Duration `env:"PITBOX_RL_VALKEY_TIMEOUT"   envDefault:"50ms"`
 
+	// Authorization (F1-05, ADR 0005). OpenFGA is the primary authorization decision point
+	// before RLS enforces isolation in Postgres. Outside local development, TLS and a
+	// pre-shared key are mandatory; the store and model IDs should be explicit.
+	OpenFGAAddr         string        `env:"PITBOX_OPENFGA_ADDR"          envDefault:"127.0.0.1:8091"`
+	OpenFGAPresharedKey string        `env:"PITBOX_OPENFGA_PRESHARED_KEY"`
+	OpenFGATLSEnabled   bool          `env:"PITBOX_OPENFGA_TLS"           envDefault:"false"`
+	OpenFGATimeout      time.Duration `env:"PITBOX_OPENFGA_TIMEOUT"       envDefault:"200ms"`
+	OpenFGAStoreID      string        `env:"PITBOX_OPENFGA_STORE_ID"`
+	OpenFGAModelID      string        `env:"PITBOX_OPENFGA_MODEL_ID"`
+
 	// The standard OpenTelemetry variables are read here only to validate them:
 	// the SDK reads them again itself. Tracing is off when neither is set.
 	OTLPEndpoint       string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
@@ -207,6 +217,7 @@ func (c Config) Validate() error {
 	}
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateRateLimit()...)
+	errs = append(errs, c.validateOpenFGA()...)
 
 	// Telemetry must not travel in clear text outside local development.
 	if c.Env != EnvLocal {
@@ -277,6 +288,28 @@ func (c Config) validateRateLimit() []error {
 	return errs
 }
 
+func (c Config) validateOpenFGA() []error {
+	var errs []error
+	if err := validateAddr(c.OpenFGAAddr); err != nil {
+		errs = append(errs, fmt.Errorf("PITBOX_OPENFGA_ADDR: %w", err))
+	}
+	if c.OpenFGATimeout < 50*time.Millisecond || c.OpenFGATimeout > time.Second {
+		errs = append(errs, fmt.Errorf("PITBOX_OPENFGA_TIMEOUT: %s is outside 50ms..1s", c.OpenFGATimeout))
+	}
+	if c.Env != EnvLocal {
+		if !c.OpenFGATLSEnabled {
+			errs = append(errs, errors.New("PITBOX_OPENFGA_TLS: required outside local development"))
+		}
+		if c.OpenFGAPresharedKey == "" {
+			errs = append(errs, errors.New("PITBOX_OPENFGA_PRESHARED_KEY: required outside local development"))
+		}
+		if c.OpenFGAStoreID == "" {
+			errs = append(errs, errors.New("PITBOX_OPENFGA_STORE_ID: required outside local development"))
+		}
+	}
+	return errs
+}
+
 func validateAddr(addr string) error {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -320,6 +353,11 @@ func (c Config) LogValue() slog.Value {
 		slog.Int("rl_public_rps", c.RateLimitPublicRPS),
 		slog.Int("rl_public_burst", c.RateLimitPublicBurst),
 		slog.Duration("rl_valkey_timeout", c.RateLimitValkeyTimeout),
+		slog.String("openfga_addr", c.OpenFGAAddr),
+		slog.Bool("openfga_tls", c.OpenFGATLSEnabled),
+		slog.Duration("openfga_timeout", c.OpenFGATimeout),
+		slog.Bool("openfga_store_id_set", c.OpenFGAStoreID != ""),
+		slog.Bool("openfga_model_id_set", c.OpenFGAModelID != ""),
 		slog.Bool("tracing_enabled", c.TracingEnabled()),
 	)
 }

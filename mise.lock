@@ -33,6 +33,17 @@ url = "https://github.com/bufbuild/buf/releases/download/v1.73.0/buf-Linux-x86_6
 url_api = "https://api.github.com/repos/bufbuild/buf/releases/assets/557280270"
 provenance = "minisign"
 
+[[tools."github:openfga/cli"]]
+version = "0.8.1"
+backend = "github:openfga/cli"
+specifiers = ["0.8.1"]
+
+[tools."github:openfga/cli"."platforms.linux-x64"]
+checksum = "sha256:e0414ad70850f8070540ad1be7a1e2e861edd6d6e73f6ed2b959c3277f98a54c"
+url = "https://github.com/openfga/cli/releases/download/v0.8.1/fga_0.8.1_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/openfga/cli/releases/assets/585078168"
+provenance = "github-attestations"
+
 [[tools."github:sqlc-dev/sqlc"]]
 version = "1.31.1"
 backend = "github:sqlc-dev/sqlc"

@@ -25,6 +25,13 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
   export PITBOX_VALKEY_PASSWORD="$(get VALKEY_API_PASSWORD)"
   port="$(get POSTGRES_PORT)"; port="${port:-5432}"
   export PITBOX_DATABASE_URL="postgres://pitbox_api:$(get PITBOX_API_PASSWORD)@127.0.0.1:${port}/pitbox?sslmode=disable"
+  if [ -n "$(get PITBOX_OPENFGA_STORE_ID)" ]; then
+    export PITBOX_OPENFGA_ADDR="$(get PITBOX_OPENFGA_ADDR)"; PITBOX_OPENFGA_ADDR="${PITBOX_OPENFGA_ADDR:-127.0.0.1:8090}"
+    export PITBOX_OPENFGA_PRESHARED_KEY="$(get OPENFGA_PRESHARED_KEY)"
+    export PITBOX_OPENFGA_STORE_ID="$(get PITBOX_OPENFGA_STORE_ID)"
+    export PITBOX_OPENFGA_MODEL_ID="$(get PITBOX_OPENFGA_MODEL_ID)"
+    echo "run-api: openfga ligado (store $(get PITBOX_OPENFGA_STORE_ID))" >&2
+  fi
   echo "run-api: login ligado (issuer $PITBOX_OIDC_ISSUER)" >&2
 else
   echo "run-api: sem login (corre 'make zitadel-provision' para o ligar); os RPC são todos recusados" >&2

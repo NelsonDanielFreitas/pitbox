@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	identityv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
@@ -31,7 +32,9 @@ func requestMessages() []proto.Message {
 // newRPCServer builds the Connect server with the interceptor chain and lets the caller
 // register the services. No service is registered in production yet: the modules bring
 // theirs (F1-06 onwards).
-func newRPCServer(cfg config.Config, logger *slog.Logger, tp trace.TracerProvider, authn, rateLimit, stepUp connect.ServerInterceptor, register ...func(*connect.Server)) (*connect.Server, error) {
+func newRPCServer(cfg config.Config, logger *slog.Logger, tp trace.TracerProvider, authn, rateLimit, stepUp connect.ServerInterceptor, authzClient *authz.Client, register ...func(*connect.Server)) (*connect.Server, error) {
+	// authzClient is reserved for service constructors from F1-06 onwards.
+	_ = authzClient
 	validator, err := interceptors.NewValidator(requestMessages()...)
 	if err != nil {
 		return nil, err

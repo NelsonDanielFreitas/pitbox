@@ -19,20 +19,25 @@ func localEnv(t *testing.T) map[string]string {
 	t.Helper()
 	vk := testutil.StartValkey(t)
 	pg := testutil.StartPostgres(t)
+	ofga := testutil.StartOpenFGA(t)
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		t.Fatalf("random: %v", err)
 	}
 	return map[string]string{ //nolint:gosec // fake credentials
-		"PITBOX_PUBLIC_URL":         "http://localhost:8081",
-		"PITBOX_OIDC_ISSUER":        "http://127.0.0.1:1",
-		"PITBOX_OIDC_CLIENT_ID":     "client",
-		"PITBOX_OIDC_CLIENT_SECRET": "secret",
-		"PITBOX_AUTH_KEYS":          "k1:" + base64.StdEncoding.EncodeToString(key),
-		"PITBOX_VALKEY_ADDR":        vk.Addr,
-		"PITBOX_VALKEY_USERNAME":    vk.Username,
-		"PITBOX_VALKEY_PASSWORD":    vk.Password,
-		"PITBOX_DATABASE_URL":       pg.URL,
+		"PITBOX_PUBLIC_URL":            "http://localhost:8081",
+		"PITBOX_OIDC_ISSUER":           "http://127.0.0.1:1",
+		"PITBOX_OIDC_CLIENT_ID":        "client",
+		"PITBOX_OIDC_CLIENT_SECRET":    "secret",
+		"PITBOX_AUTH_KEYS":             "k1:" + base64.StdEncoding.EncodeToString(key),
+		"PITBOX_VALKEY_ADDR":           vk.Addr,
+		"PITBOX_VALKEY_USERNAME":       vk.Username,
+		"PITBOX_VALKEY_PASSWORD":       vk.Password,
+		"PITBOX_DATABASE_URL":          pg.URL,
+		"PITBOX_OPENFGA_ADDR":          ofga.HTTPAddr,
+		"PITBOX_OPENFGA_STORE_ID":      ofga.StoreID,
+		"PITBOX_OPENFGA_MODEL_ID":      ofga.ModelID,
+		"PITBOX_OPENFGA_PRESHARED_KEY": ofga.PresharedKey,
 	}
 }
 

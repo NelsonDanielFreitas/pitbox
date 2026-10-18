@@ -86,7 +86,7 @@ func TestAuthStackWiring(t *testing.T) {
 		}
 		return &identityv1.CreateTeamResponse{}, nil
 	}}
-	api, err := newRPCServer(cfg, logger, noop.NewTracerProvider(), stack.interceptor, noOpRateLimit(), nil, func(s *connect.Server) {
+	api, err := newRPCServer(cfg, logger, noop.NewTracerProvider(), stack.interceptor, noOpRateLimit(), nil, nil, func(s *connect.Server) {
 		identityv1connect.RegisterTeamServiceHandler(s, teams)
 	})
 	if err != nil {

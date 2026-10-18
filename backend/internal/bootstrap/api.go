@@ -73,12 +73,18 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up rate limiting: %w", err)
 	}
 
+	authzClient, err := newAuthzClient(ctx, cfg, logger)
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up authorization: %w", err)
+	}
+
 	// StepUp is wired with an empty sensitive-procedure list: no RPCs are registered yet
 	// (modules bring their services from F1-06 onwards). Each sensitive procedure must be
 	// added here when it is introduced.
 	stepUp := interceptors.StepUp(clock.Real())
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp)
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

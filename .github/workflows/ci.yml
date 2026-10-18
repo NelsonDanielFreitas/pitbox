@@ -109,6 +109,27 @@ jobs:
       - name: govulncheck
         run: make vuln
 
+  authz:
+    name: authz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools (mise.toml / mise.lock)
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
+
+      - name: OpenFGA model assertions
+        run: make authz-test
+
   secrets:
     name: secrets
     runs-on: ubuntu-24.04
@@ -192,7 +213,7 @@ jobs:
     # always(): sem isto, se um job falhar o ci-ok fica "skipped" e um check
     # obrigatório "skipped" conta como passado.
     if: always()
-    needs: [contracts, backend, secrets, workflows, database]
+    needs: [contracts, backend, authz, secrets, workflows, database]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions: {}

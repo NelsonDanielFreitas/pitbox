@@ -1,0 +1,114 @@
+model_file: ./model.fga
+
+tuples:
+  # Team Alpha
+  - user: user:alice
+    relation: owner
+    object: team:alpha
+  - user: user:bob
+    relation: mechanic
+    object: team:alpha
+  - user: user:charlie
+    relation: pilot
+    object: team:alpha
+
+  # Team Beta
+  - user: user:david
+    relation: owner
+    object: team:beta
+
+  # Car and setup belonging to Alpha
+  - user: team:alpha
+    relation: team
+    object: car:mustang
+  - user: team:alpha
+    relation: team
+    object: setup:race1
+
+  # Setup shared with an external user
+  - user: user:eve
+    relation: shared_with
+    object: setup:race1
+
+  # Public share (any authenticated user)
+  - user: user:*
+    relation: shared_with
+    object: setup:public
+
+tests:
+  - name: team roles can view and edit cars
+    check:
+      - user: user:alice
+        object: car:mustang
+        assertions:
+          viewer: true
+          editor: true
+      - user: user:bob
+        object: car:mustang
+        assertions:
+          viewer: true
+          editor: true
+      - user: user:charlie
+        object: car:mustang
+        assertions:
+          viewer: true
+          editor: false
+
+  - name: users from other teams cannot access resources
+    check:
+      - user: user:david
+        object: car:mustang
+        assertions:
+          viewer: false
+          editor: false
+      - user: user:david
+        object: setup:race1
+        assertions:
+          viewer: false
+          editor: false
+          annotator: false
+
+  - name: setup editor and annotator permissions
+    check:
+      - user: user:alice
+        object: setup:race1
+        assertions:
+          viewer: true
+          editor: true
+          annotator: true
+      - user: user:bob
+        object: setup:race1
+        assertions:
+          viewer: true
+          editor: true
+          annotator: true
+      - user: user:charlie
+        object: setup:race1
+        assertions:
+          viewer: true
+          editor: false
+          annotator: true
+
+  - name: shared setups are viewable but not editable
+    check:
+      - user: user:eve
+        object: setup:race1
+        assertions:
+          viewer: true
+          editor: false
+          annotator: false
+      - user: user:david
+        object: setup:race1
+        assertions:
+          viewer: false
+          editor: false
+          annotator: false
+
+  - name: public share allows any authenticated user to view
+    check:
+      - user: user:anyone
+        object: setup:public
+        assertions:
+          viewer: true
+          editor: false
+          annotator: false

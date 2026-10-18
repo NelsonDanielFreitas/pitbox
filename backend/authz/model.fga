@@ -1,0 +1,25 @@
+model
+  schema 1.1
+
+type user
+
+type team
+  relations
+    define owner: [user]
+    define mechanic: [user] or owner
+    define pilot: [user]
+    define member: mechanic or pilot
+
+type car
+  relations
+    define team: [team]
+    define viewer: member from team
+    define editor: mechanic from team
+
+type setup
+  relations
+    define team: [team]
+    define shared_with: [user, user:*]
+    define viewer: member from team or shared_with
+    define editor: mechanic from team
+    define annotator: member from team

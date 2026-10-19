@@ -5,15 +5,15 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file pitbox/identity/v1/team_service.proto.
  */
 export const file_pitbox_identity_v1_team_service: GenFile = /*@__PURE__*/
-  fileDesc("CiVwaXRib3gvaWRlbnRpdHkvdjEvdGVhbV9zZXJ2aWNlLnByb3RvEhJwaXRib3guaWRlbnRpdHkudjEilAEKBFRlYW0SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIQCghjYXRlZ29yeRgDIAEoCRIRCgRjbHViGAQgASgJSACIAQESFAoMY291bnRyeV9jb2RlGAUgASgJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgcKBV9jbHViImQKDlRlYW1NZW1iZXJzaGlwEiYKBHRlYW0YASABKAsyGC5waXRib3guaWRlbnRpdHkudjEuVGVhbRIqCgRyb2xlGAIgASgOMhwucGl0Ym94LmlkZW50aXR5LnYxLlRlYW1Sb2xlIrUBChFDcmVhdGVUZWFtUmVxdWVzdBIcCgpyZXF1ZXN0X2lkGAEgASgJQgi6SAVyA7ABARIXCgRuYW1lGAIgASgJQgm6SAZyBBABGFASGQoIY2F0ZWdvcnkYAyABKAlCB7pIBHICGCgSHAoEY2x1YhgEIAEoCUIJukgGcgQQARhQSACIAQESJwoMY291bnRyeV9jb2RlGAUgASgJQhG6SA5yDDIKXltBLVpdezJ9JEIHCgVfY2x1YiI8ChJDcmVhdGVUZWFtUmVzcG9uc2USJgoEdGVhbRgBIAEoCzIYLnBpdGJveC5pZGVudGl0eS52MS5UZWFtIlEKEkxpc3RNeVRlYW1zUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGMgBKAASHAoKcGFnZV90b2tlbhgCIAEoCUIIukgFcgMYgAQiYQoTTGlzdE15VGVhbXNSZXNwb25zZRIxCgV0ZWFtcxgBIAMoCzIiLnBpdGJveC5pZGVudGl0eS52MS5UZWFtTWVtYmVyc2hpcBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkqfAoIVGVhbVJvbGUSGQoVVEVBTV9ST0xFX1VOU1BFQ0lGSUVEEAASEwoPVEVBTV9ST0xFX09XTkVSEAESFgoSVEVBTV9ST0xFX01FQ0hBTklDEAISEwoPVEVBTV9ST0xFX1BJTE9UEAMSEwoPVEVBTV9ST0xFX0dVRVNUEAQyygEKC1RlYW1TZXJ2aWNlElsKCkNyZWF0ZVRlYW0SJS5waXRib3guaWRlbnRpdHkudjEuQ3JlYXRlVGVhbVJlcXVlc3QaJi5waXRib3guaWRlbnRpdHkudjEuQ3JlYXRlVGVhbVJlc3BvbnNlEl4KC0xpc3RNeVRlYW1zEiYucGl0Ym94LmlkZW50aXR5LnYxLkxpc3RNeVRlYW1zUmVxdWVzdBonLnBpdGJveC5pZGVudGl0eS52MS5MaXN0TXlUZWFtc1Jlc3BvbnNlQuUBChZjb20ucGl0Ym94LmlkZW50aXR5LnYxQhBUZWFtU2VydmljZVByb3RvUAFaT2dpdGh1Yi5jb20vTmVsc29uRGFuaWVsRnJlaXRhcy9waXRib3gvYmFja2VuZC9nZW4vcGl0Ym94L2lkZW50aXR5L3YxO2lkZW50aXR5djGiAgNQSViqAhJQaXRib3guSWRlbnRpdHkuVjHKAhJQaXRib3hcSWRlbnRpdHlcVjHiAh5QaXRib3hcSWRlbnRpdHlcVjFcR1BCTWV0YWRhdGHqAhRQaXRib3g6OklkZW50aXR5OjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_timestamp]);
+  fileDesc("CiVwaXRib3gvaWRlbnRpdHkvdjEvdGVhbV9zZXJ2aWNlLnByb3RvEhJwaXRib3guaWRlbnRpdHkudjEi5gEKBFRlYW0SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIQCghjYXRlZ29yeRgDIAEoCRIRCgRjbHViGAQgASgJSACIAQESFAoMY291bnRyeV9jb2RlGAUgASgJEi4KCmNyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3ZlcnNpb24YByABKAUSPwoQcGVuZGluZ190cmFuc2ZlchgIIAEoCzIlLnBpdGJveC5pZGVudGl0eS52MS5Pd25lcnNoaXBUcmFuc2ZlckIHCgVfY2x1YiKpAQoRT3duZXJzaGlwVHJhbnNmZXISCgoCaWQYASABKAkSFAoMZnJvbV91c2VyX2lkGAIgASgJEhIKCnRvX3VzZXJfaWQYAyABKAkSLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiZAoOVGVhbU1lbWJlcnNoaXASJgoEdGVhbRgBIAEoCzIYLnBpdGJveC5pZGVudGl0eS52MS5UZWFtEioKBHJvbGUYAiABKA4yHC5waXRib3guaWRlbnRpdHkudjEuVGVhbVJvbGUitQEKEUNyZWF0ZVRlYW1SZXF1ZXN0EhwKCnJlcXVlc3RfaWQYASABKAlCCLpIBXIDsAEBEhcKBG5hbWUYAiABKAlCCbpIBnIEEAEYUBIZCghjYXRlZ29yeRgDIAEoCUIHukgEcgIYKBIcCgRjbHViGAQgASgJQgm6SAZyBBABGFBIAIgBARInCgxjb3VudHJ5X2NvZGUYBSABKAlCEbpIDnIMMgpeW0EtWl17Mn0kQgcKBV9jbHViIjwKEkNyZWF0ZVRlYW1SZXNwb25zZRImCgR0ZWFtGAEgASgLMhgucGl0Ym94LmlkZW50aXR5LnYxLlRlYW0iUQoSTGlzdE15VGVhbXNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUYyAEoABIcCgpwYWdlX3Rva2VuGAIgASgJQgi6SAVyAxiABCJhChNMaXN0TXlUZWFtc1Jlc3BvbnNlEjEKBXRlYW1zGAEgAygLMiIucGl0Ym94LmlkZW50aXR5LnYxLlRlYW1NZW1iZXJzaGlwEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSIrCg5HZXRUZWFtUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABASI5Cg9HZXRUZWFtUmVzcG9uc2USJgoEdGVhbRgBIAEoCzIYLnBpdGJveC5pZGVudGl0eS52MS5UZWFtItkCChFVcGRhdGVUZWFtUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIcCgpyZXF1ZXN0X2lkGAIgASgJQgi6SAVyA7ABARIYCgd2ZXJzaW9uGAMgASgFQge6SAQaAigBEjcKC3VwZGF0ZV9tYXNrGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLkZpZWxkTWFza0IGukgDyAEBEhwKBG5hbWUYBSABKAlCCbpIBnIEEAEYUEgAiAEBEh4KCGNhdGVnb3J5GAYgASgJQge6SARyAhgoSAGIAQESHAoEY2x1YhgHIAEoCUIJukgGcgQQARhQSAKIAQESLAoMY291bnRyeV9jb2RlGAggASgJQhG6SA5yDDIKXltBLVpdezJ9JEgDiAEBQgcKBV9uYW1lQgsKCV9jYXRlZ29yeUIHCgVfY2x1YkIPCg1fY291bnRyeV9jb2RlIjwKElVwZGF0ZVRlYW1SZXNwb25zZRImCgR0ZWFtGAEgASgLMhgucGl0Ym94LmlkZW50aXR5LnYxLlRlYW0qfAoIVGVhbVJvbGUSGQoVVEVBTV9ST0xFX1VOU1BFQ0lGSUVEEAASEwoPVEVBTV9ST0xFX09XTkVSEAESFgoSVEVBTV9ST0xFX01FQ0hBTklDEAISEwoPVEVBTV9ST0xFX1BJTE9UEAMSEwoPVEVBTV9ST0xFX0dVRVNUEAQygAMKC1RlYW1TZXJ2aWNlElsKCkNyZWF0ZVRlYW0SJS5waXRib3guaWRlbnRpdHkudjEuQ3JlYXRlVGVhbVJlcXVlc3QaJi5waXRib3guaWRlbnRpdHkudjEuQ3JlYXRlVGVhbVJlc3BvbnNlEl4KC0xpc3RNeVRlYW1zEiYucGl0Ym94LmlkZW50aXR5LnYxLkxpc3RNeVRlYW1zUmVxdWVzdBonLnBpdGJveC5pZGVudGl0eS52MS5MaXN0TXlUZWFtc1Jlc3BvbnNlElcKB0dldFRlYW0SIi5waXRib3guaWRlbnRpdHkudjEuR2V0VGVhbVJlcXVlc3QaIy5waXRib3guaWRlbnRpdHkudjEuR2V0VGVhbVJlc3BvbnNlIgOQAgESWwoKVXBkYXRlVGVhbRIlLnBpdGJveC5pZGVudGl0eS52MS5VcGRhdGVUZWFtUmVxdWVzdBomLnBpdGJveC5pZGVudGl0eS52MS5VcGRhdGVUZWFtUmVzcG9uc2VC5QEKFmNvbS5waXRib3guaWRlbnRpdHkudjFCEFRlYW1TZXJ2aWNlUHJvdG9QAVpPZ2l0aHViLmNvbS9OZWxzb25EYW5pZWxGcmVpdGFzL3BpdGJveC9iYWNrZW5kL2dlbi9waXRib3gvaWRlbnRpdHkvdjE7aWRlbnRpdHl2MaICA1BJWKoCElBpdGJveC5JZGVudGl0eS5WMcoCElBpdGJveFxJZGVudGl0eVxWMeICHlBpdGJveFxJZGVudGl0eVxWMVxHUEJNZXRhZGF0YeoCFFBpdGJveDo6SWRlbnRpdHk6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
  * Team is a racing team (the unit of data isolation).
@@ -54,6 +54,21 @@ export type Team = Message<"pitbox.identity.v1.Team"> & {
    * @generated from field: google.protobuf.Timestamp created_at = 6;
    */
   createdAt?: Timestamp | undefined;
+
+  /**
+   * Optimistic concurrency version for UpdateTeam.
+   *
+   * @generated from field: int32 version = 7;
+   */
+  version: number;
+
+  /**
+   * Set while an ownership transfer is pending. The recipient uses
+   * AcceptTransfer to become the new owner.
+   *
+   * @generated from field: pitbox.identity.v1.OwnershipTransfer pending_transfer = 8;
+   */
+  pendingTransfer?: OwnershipTransfer | undefined;
 };
 
 /**
@@ -62,6 +77,47 @@ export type Team = Message<"pitbox.identity.v1.Team"> & {
  */
 export const TeamSchema: GenMessage<Team> = /*@__PURE__*/
   messageDesc(file_pitbox_identity_v1_team_service, 0);
+
+/**
+ * OwnershipTransfer is a pending two-sided ownership transfer.
+ *
+ * @generated from message pitbox.identity.v1.OwnershipTransfer
+ */
+export type OwnershipTransfer = Message<"pitbox.identity.v1.OwnershipTransfer"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string from_user_id = 2;
+   */
+  fromUserId: string;
+
+  /**
+   * @generated from field: string to_user_id = 3;
+   */
+  toUserId: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 4;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * After this instant the transfer can no longer be accepted.
+   *
+   * @generated from field: google.protobuf.Timestamp expires_at = 5;
+   */
+  expiresAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message pitbox.identity.v1.OwnershipTransfer.
+ * Use `create(OwnershipTransferSchema)` to create a new message.
+ */
+export const OwnershipTransferSchema: GenMessage<OwnershipTransfer> = /*@__PURE__*/
+  messageDesc(file_pitbox_identity_v1_team_service, 1);
 
 /**
  * TeamMembership is a team together with the caller's role in it.
@@ -85,7 +141,7 @@ export type TeamMembership = Message<"pitbox.identity.v1.TeamMembership"> & {
  * Use `create(TeamMembershipSchema)` to create a new message.
  */
 export const TeamMembershipSchema: GenMessage<TeamMembership> = /*@__PURE__*/
-  messageDesc(file_pitbox_identity_v1_team_service, 1);
+  messageDesc(file_pitbox_identity_v1_team_service, 2);
 
 /**
  * @generated from message pitbox.identity.v1.CreateTeamRequest
@@ -133,7 +189,7 @@ export type CreateTeamRequest = Message<"pitbox.identity.v1.CreateTeamRequest"> 
  * Use `create(CreateTeamRequestSchema)` to create a new message.
  */
 export const CreateTeamRequestSchema: GenMessage<CreateTeamRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_identity_v1_team_service, 2);
+  messageDesc(file_pitbox_identity_v1_team_service, 3);
 
 /**
  * @generated from message pitbox.identity.v1.CreateTeamResponse
@@ -150,7 +206,7 @@ export type CreateTeamResponse = Message<"pitbox.identity.v1.CreateTeamResponse"
  * Use `create(CreateTeamResponseSchema)` to create a new message.
  */
 export const CreateTeamResponseSchema: GenMessage<CreateTeamResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_identity_v1_team_service, 3);
+  messageDesc(file_pitbox_identity_v1_team_service, 4);
 
 /**
  * @generated from message pitbox.identity.v1.ListMyTeamsRequest
@@ -177,7 +233,7 @@ export type ListMyTeamsRequest = Message<"pitbox.identity.v1.ListMyTeamsRequest"
  * Use `create(ListMyTeamsRequestSchema)` to create a new message.
  */
 export const ListMyTeamsRequestSchema: GenMessage<ListMyTeamsRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_identity_v1_team_service, 4);
+  messageDesc(file_pitbox_identity_v1_team_service, 5);
 
 /**
  * @generated from message pitbox.identity.v1.ListMyTeamsResponse
@@ -201,7 +257,118 @@ export type ListMyTeamsResponse = Message<"pitbox.identity.v1.ListMyTeamsRespons
  * Use `create(ListMyTeamsResponseSchema)` to create a new message.
  */
 export const ListMyTeamsResponseSchema: GenMessage<ListMyTeamsResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_identity_v1_team_service, 5);
+  messageDesc(file_pitbox_identity_v1_team_service, 6);
+
+/**
+ * @generated from message pitbox.identity.v1.GetTeamRequest
+ */
+export type GetTeamRequest = Message<"pitbox.identity.v1.GetTeamRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+};
+
+/**
+ * Describes the message pitbox.identity.v1.GetTeamRequest.
+ * Use `create(GetTeamRequestSchema)` to create a new message.
+ */
+export const GetTeamRequestSchema: GenMessage<GetTeamRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_identity_v1_team_service, 7);
+
+/**
+ * @generated from message pitbox.identity.v1.GetTeamResponse
+ */
+export type GetTeamResponse = Message<"pitbox.identity.v1.GetTeamResponse"> & {
+  /**
+   * @generated from field: pitbox.identity.v1.Team team = 1;
+   */
+  team?: Team | undefined;
+};
+
+/**
+ * Describes the message pitbox.identity.v1.GetTeamResponse.
+ * Use `create(GetTeamResponseSchema)` to create a new message.
+ */
+export const GetTeamResponseSchema: GenMessage<GetTeamResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_identity_v1_team_service, 8);
+
+/**
+ * @generated from message pitbox.identity.v1.UpdateTeamRequest
+ */
+export type UpdateTeamRequest = Message<"pitbox.identity.v1.UpdateTeamRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * Idempotency key; kept with the audit entry of the change.
+   *
+   * @generated from field: string request_id = 2;
+   */
+  requestId: string;
+
+  /**
+   * Version read by the client. A stale version is ABORTED.
+   *
+   * @generated from field: int32 version = 3;
+   */
+  version: number;
+
+  /**
+   * Paths to update. Only name, category, club and country_code are allowed.
+   * A path in the mask with the field absent in the request clears the field;
+   * only club may be cleared (the others are required).
+   *
+   * @generated from field: google.protobuf.FieldMask update_mask = 4;
+   */
+  updateMask?: FieldMask | undefined;
+
+  /**
+   * @generated from field: optional string name = 5;
+   */
+  name?: string | undefined;
+
+  /**
+   * @generated from field: optional string category = 6;
+   */
+  category?: string | undefined;
+
+  /**
+   * @generated from field: optional string club = 7;
+   */
+  club?: string | undefined;
+
+  /**
+   * @generated from field: optional string country_code = 8;
+   */
+  countryCode?: string | undefined;
+};
+
+/**
+ * Describes the message pitbox.identity.v1.UpdateTeamRequest.
+ * Use `create(UpdateTeamRequestSchema)` to create a new message.
+ */
+export const UpdateTeamRequestSchema: GenMessage<UpdateTeamRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_identity_v1_team_service, 9);
+
+/**
+ * @generated from message pitbox.identity.v1.UpdateTeamResponse
+ */
+export type UpdateTeamResponse = Message<"pitbox.identity.v1.UpdateTeamResponse"> & {
+  /**
+   * @generated from field: pitbox.identity.v1.Team team = 1;
+   */
+  team?: Team | undefined;
+};
+
+/**
+ * Describes the message pitbox.identity.v1.UpdateTeamResponse.
+ * Use `create(UpdateTeamResponseSchema)` to create a new message.
+ */
+export const UpdateTeamResponseSchema: GenMessage<UpdateTeamResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_identity_v1_team_service, 10);
 
 /**
  * TeamRole is the role of a user inside a team. Mirrors identity.team_role.
@@ -249,14 +416,16 @@ export const TeamRoleSchema: GenEnum<TeamRole> = /*@__PURE__*/
  * Authorization: every RPC runs as the authenticated principal; the caller's
  * identity never travels in a request message. A team the caller is not a
  * member of is reported as NOT_FOUND, never PERMISSION_DENIED, so team ids
- * cannot be probed.
+ * cannot be probed. A member without the role gets PERMISSION_DENIED; a stale
+ * version is ABORTED and the last-owner/limit rules are FAILED_PRECONDITION.
  *
  * @generated from service pitbox.identity.v1.TeamService
  */
 export const TeamService: GenService<{
   /**
    * CreateTeam creates a team and makes the caller its owner.
-   * Idempotent per request_id.
+   * Idempotent per request_id. Requires a strong authentication factor
+   * (passkey or TOTP), even when the session is recent.
    *
    * @generated from rpc pitbox.identity.v1.TeamService.CreateTeam
    */
@@ -275,6 +444,29 @@ export const TeamService: GenService<{
     methodKind: "unary";
     input: typeof ListMyTeamsRequestSchema;
     output: typeof ListMyTeamsResponseSchema;
+  },
+  /**
+   * GetTeam returns one team the caller belongs to. A guest gets NOT_FOUND:
+   * team data is only visible to members.
+   *
+   * @generated from rpc pitbox.identity.v1.TeamService.GetTeam
+   */
+  getTeam: {
+    methodKind: "unary";
+    input: typeof GetTeamRequestSchema;
+    output: typeof GetTeamResponseSchema;
+  },
+  /**
+   * UpdateTeam changes the team's name, category, club or country. Only the
+   * owner may call it. The version is the one returned by GetTeam/ListMyTeams;
+   * a stale version is ABORTED.
+   *
+   * @generated from rpc pitbox.identity.v1.TeamService.UpdateTeam
+   */
+  updateTeam: {
+    methodKind: "unary";
+    input: typeof UpdateTeamRequestSchema;
+    output: typeof UpdateTeamResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_pitbox_identity_v1_team_service, 0);

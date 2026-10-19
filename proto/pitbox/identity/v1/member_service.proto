@@ -1,0 +1,233 @@
+syntax = "proto3";
+
+package pitbox.identity.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pitbox/identity/v1/team_service.proto";
+
+// MemberService manages a team's members, invitations and ownership.
+//
+// Authorization: the caller's identity never travels in a request message. A
+// team the caller is not a member of is reported as NOT_FOUND. A member without
+// the required role gets PERMISSION_DENIED (for example a mechanic trying to
+// invite). Guests do not see team data: ListMembers and ListInvitations answer
+// NOT_FOUND to them. A stale version is ABORTED; the last-owner rule, the
+// invitation limit and invalid transfers are FAILED_PRECONDITION; every
+// invitation refusal (missing, expired, revoked, used, tampered) is NOT_FOUND
+// with the same message.
+service MemberService {
+  // ListMembers lists the members of a team. Any member may call it.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListInvitations lists the pending invitations of a team. Any member may
+  // call it; a guest gets NOT_FOUND.
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // InviteMember creates an invitation by email or by link (no email).
+  // Only the owner may invite, and the role can never be owner.
+  //
+  // This RPC is NOT idempotent: every call creates a new invitation and a new
+  // token. The plaintext token is returned exactly once, in the response, and is
+  // never stored (only its SHA-256 is).
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse);
+
+  // AcceptInvitation consumes an invitation. The team comes from the token, not
+  // from the request. The response is the same for an invitation that does not
+  // exist, expired, revoked, already used or tampered with.
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse);
+
+  // ChangeMemberRole changes a member's role. Only the owner may call it.
+  // A role of owner is refused: ownership changes only through a transfer.
+  rpc ChangeMemberRole(ChangeMemberRoleRequest) returns (ChangeMemberRoleResponse);
+
+  // RemoveMember removes a member. Only the owner may call it; the last owner
+  // cannot be removed.
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+
+  // LeaveTeam removes the caller's own membership. It is authorized by the
+  // membership itself (a guest may leave); the last owner cannot leave.
+  rpc LeaveTeam(LeaveTeamRequest) returns (LeaveTeamResponse);
+
+  // RevokeInvitation revokes a pending invitation. Only the owner may call it.
+  rpc RevokeInvitation(RevokeInvitationRequest) returns (RevokeInvitationResponse);
+
+  // InitiateTransfer starts a two-sided ownership transfer to a mechanic or
+  // pilot. Only the owner may call it, with step-up.
+  rpc InitiateTransfer(InitiateTransferRequest) returns (InitiateTransferResponse);
+
+  // AcceptTransfer confirms a pending transfer. Only its recipient may call it,
+  // with step-up; the previous owner becomes a mechanic.
+  rpc AcceptTransfer(AcceptTransferRequest) returns (AcceptTransferResponse);
+
+  // CancelTransfer cancels a pending transfer. The owner or the recipient may
+  // call it.
+  rpc CancelTransfer(CancelTransferRequest) returns (CancelTransferResponse);
+}
+
+// Member is a user in a team. The email is deliberately absent.
+message Member {
+  string user_id = 1;
+  string display_name = 2;
+  TeamRole role = 3;
+  google.protobuf.Timestamp joined_at = 4;
+  // Optimistic concurrency version for ChangeMemberRole/RemoveMember.
+  int32 version = 5;
+}
+
+// Invitation is a pending invitation. The token and its hash are never
+// returned here.
+message Invitation {
+  string id = 1;
+  // Absent for a link invitation.
+  optional string email = 2;
+  TeamRole role = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  optional google.protobuf.Timestamp accepted_at = 5;
+  optional google.protobuf.Timestamp revoked_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message ListMembersRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListMembersResponse {
+  repeated Member members = 1;
+  string next_page_token = 2;
+}
+
+message ListInvitationsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListInvitationsResponse {
+  repeated Invitation invitations = 1;
+  string next_page_token = 2;
+}
+
+message InviteMemberRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+
+  // Never TEAM_ROLE_OWNER: ownership changes only through a transfer.
+  TeamRole role = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [
+      0,
+      1
+    ]
+  }];
+
+  // Absent means a link invitation. The email is only used to bind the
+  // invitation to an account; it is never logged.
+  optional string email = 4 [
+    (buf.validate.field).string.email = true,
+    (buf.validate.field).string.max_len = 320
+  ];
+}
+
+message InviteMemberResponse {
+  Invitation invitation = 1;
+  // Plaintext token, returned exactly once. The client puts it in the URL
+  // fragment of the invite link (/convite#t=<token>), never in the query string.
+  string token = 2;
+}
+
+message AcceptInvitationRequest {
+  string request_id = 1 [(buf.validate.field).string.uuid = true];
+  // 32 random bytes, base64url without padding (43 characters).
+  string token = 2 [(buf.validate.field).string = {
+    len: 43
+    pattern: "^[A-Za-z0-9_-]{43}$"
+  }];
+}
+
+message AcceptInvitationResponse {
+  TeamMembership membership = 1;
+}
+
+message ChangeMemberRoleRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string user_id = 3 [(buf.validate.field).string.uuid = true];
+  // Never TEAM_ROLE_OWNER.
+  TeamRole role = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [
+      0,
+      1
+    ]
+  }];
+  int32 version = 5 [(buf.validate.field).int32.gte = 1];
+}
+
+message ChangeMemberRoleResponse {
+  Member member = 1;
+}
+
+message RemoveMemberRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string user_id = 3 [(buf.validate.field).string.uuid = true];
+  int32 version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message RemoveMemberResponse {}
+
+message LeaveTeamRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message LeaveTeamResponse {}
+
+message RevokeInvitationRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string invitation_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeInvitationResponse {}
+
+message InitiateTransferRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string to_user_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message InitiateTransferResponse {
+  OwnershipTransfer transfer = 1;
+}
+
+message AcceptTransferRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string transfer_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message AcceptTransferResponse {
+  TeamMembership membership = 1;
+}
+
+message CancelTransferRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string transfer_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message CancelTransferResponse {}

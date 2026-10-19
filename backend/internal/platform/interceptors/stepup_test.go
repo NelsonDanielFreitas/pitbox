@@ -100,3 +100,33 @@ func TestStepUpRejectsMissingPrincipal(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
+
+func TestStrongFactorNeedsMFANotARecentLogin(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	const create = "/pitbox.identity.v1.TeamService/CreateTeam"
+	i := StepUpWithOptions(clock.NewFake(now), StepUpOptions{StrongFactor: []string{create}})
+
+	// A fresh password session must still be refused: it has no MFA.
+	weak := principal.With(context.Background(), principal.Principal{
+		UserID: "u1", AuthTime: now.Add(-30 * time.Second), AMR: []string{"pwd"},
+	})
+	err := callStepUp(t, i, weak, connect.Spec{Procedure: create},
+		func(context.Context, connect.Spec, connect.ServerStream) error { return nil })
+	require.Error(t, err)
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+
+	// A strong factor is enough even when the login is old: no recency window.
+	strong := principal.With(context.Background(), principal.Principal{
+		UserID: "u1", AuthTime: now.Add(-24 * time.Hour), AMR: []string{"user"},
+	})
+	called := false
+	err = callStepUp(t, i, strong, connect.Spec{Procedure: create},
+		func(context.Context, connect.Spec, connect.ServerStream) error {
+			called = true
+			return nil
+		})
+	require.NoError(t, err)
+	require.True(t, called)
+}

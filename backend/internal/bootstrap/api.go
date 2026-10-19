@@ -12,8 +12,11 @@ import (
 	"net/http"
 	"runtime"
 
+	identityv1connect "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
@@ -82,12 +85,28 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up authorization: %w", err)
 	}
 
-	// StepUp is wired with an empty sensitive-procedure list: no RPCs are registered yet
-	// (modules bring their services from F1-06 onwards). Each sensitive procedure must be
-	// added here when it is introduced.
-	stepUp := interceptors.StepUp(clock.Real())
+	identityModule, err := identity.New(identity.Deps{
+		DB: db.New(authn.pool), Authz: authzClient, Clock: clock.Real(), Log: logger,
+	})
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up identity: %w", err)
+	}
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient)
+	// Step-up: transfers need a recent strong authentication; CreateTeam needs a
+	// strong factor (MFA) but no recency, so a password-only session cannot make
+	// the caller an owner. The lists are part of the security surface.
+	stepUp := interceptors.StepUpWithOptions(clock.Real(), interceptors.StepUpOptions{
+		Sensitive: []string{
+			identityv1connect.MemberServiceInitiateTransferProcedure,
+			identityv1connect.MemberServiceAcceptTransferProcedure,
+		},
+		StrongFactor: []string{
+			identityv1connect.TeamServiceCreateTeamProcedure,
+		},
+	})
+
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, identityModule.Register)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

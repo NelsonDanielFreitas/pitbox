@@ -41,6 +41,10 @@ make run-worker          # local
 
 ## 3. Recuperação
 
+0. **Migração do índice**: se `CREATE INDEX CONCURRENTLY outbox_unpublished_key_idx`
+   falhar a meio, o Postgres deixa o índice `INVALID` e o `IF NOT EXISTS` salta-o na
+   tentativa seguinte. Correr `DROP INDEX CONCURRENTLY outbox_unpublished_key_idx;` e
+   voltar a aplicar a migração.
 1. **Não apagar nem editar eventos da outbox.** Os eventos são de estado: a correção é produzir o estado atual outra vez (nova linha), não alterar a história.
 2. Corrigir a causa (OpenFGA, credenciais, rede) e deixar o backoff expirar. O teto é 5 min.
 3. Para forçar uma tentativa imediata de um evento específico, depois de corrigida a causa:

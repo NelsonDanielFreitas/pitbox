@@ -42,7 +42,7 @@ flowchart TB
   subgraph Cloud["CLOUD NA UE · contentores geridos"]
     CF --> API["pitbox-api<br/>Go · Connect · BFF"]
     ING["pitbox-ingest<br/>telemetria"]
-    WRK["pitbox-worker<br/>River · outbox · conectores"]
+    WRK["pitbox-worker<br/>poller da outbox (ADR 0015) · conectores"]
     API --> IDP["Zitadel (IdP)"]
     API --> FGA["OpenFGA"]
     API --> SEC["Secret Manager + KMS"]
@@ -67,7 +67,7 @@ A app é o centro: recebe a telemetria do recetor por BLE, trabalha na base loca
 | Módulo no carro | Rust, ESP32-S3 | Aquisição e gravação de telemetria |
 | Recetor na box | Rust, ESP32-S3 + SX1262 | Recebe LoRa e entrega à app por BLE |
 | pitbox-api | Go, Connect | API, BFF web, regras de negócio, sync |
-| pitbox-worker | Go, River | Tarefas assíncronas, eventos, conectores de timing |
+| pitbox-worker | Go, poller próprio da outbox (ADR 0015); River a partir do F2-04 | Tarefas assíncronas, eventos, conectores de timing |
 | pitbox-ingest | Go | Processamento de ficheiros de telemetria |
 | Zitadel | Serviço gerido | Identidade dos utilizadores |
 | OpenFGA | Go (open-source) | Decisões de autorização |
@@ -130,7 +130,7 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 | sync | `SyncService` | `sync` | Receber filas de alterações e devolver alterações desde um cursor |
 
 - Regra de isolamento: um módulo só acede às suas tabelas; para dados de outro módulo usa a interface Go desse módulo ou um evento. O CI falha se um pacote importar o `internal/` de outro módulo (verificação com go-arch-lint)
-- Comunicação assíncrona entre módulos por eventos de domínio gravados numa tabela outbox na mesma transação e processados pelo `pitbox-worker` (River, fila sobre Postgres); sem broker externo na fase 1
+- Comunicação assíncrona entre módulos por eventos de domínio gravados numa tabela outbox na mesma transação e processados pelo `pitbox-worker` (poller próprio sobre Postgres até ao F2-04, ADR 0015; River a partir do F2-04); sem broker externo na fase 1
 
 ### 4.2 Camadas dentro de cada módulo
 
@@ -172,7 +172,7 @@ Os RPCs são traçados só pelo `otelconnect`, que não confia no `traceparent` 
 | API | connectrpc.com/connect/v2 (+ `connecthttp`), validate, otelconnect, grpchealth/v2, grpcreflect/v2 (ADR 0012) |
 | Postgres | jackc/pgx v5 + sqlc |
 | Migrações | Atlas Community: SQL escrito à mão, `atlas.sum`, teste de desvio contra `schema.sql` e lint por script (ADR 0010) |
-| Fila de tarefas | riverqueue/river |
+| Fila de tarefas | outbox + poller próprio (F1-05b, ADR 0015); `riverqueue/river` no F2-04 |
 | OIDC | coreos/go-oidc v3 + golang.org/x/oauth2 (login e ID token). `lestrrat-go/jwx` só se o F2-06 (Bearer) o exigir (ADR 0013) |
 | Valkey | valkey-io/valkey-go (sessões BFF, locks, rate limiting; sem `valkeylock`) |
 | Autorização | OpenFGA Go SDK (secção 6) |

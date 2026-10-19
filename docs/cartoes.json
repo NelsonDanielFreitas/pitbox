@@ -537,7 +537,7 @@
       ],
       "done_when_raw": "Fluxo completo testado; convite expirado ou reutilizado falha",
       "doc_references": [],
-      "suggested_branch": "f1-06-equipas-e-convites",
+      "suggested_branch": "f1-06-equipas-convites",
       "issue_title": "F1-06 — Equipas e convites",
       "labels": [
         "fase-1",

@@ -19,7 +19,7 @@ import (
 // RunWorker runs pitbox-worker until ctx is cancelled. It returns nil after a
 // clean shutdown. Logs go to logOut as JSON.
 func RunWorker(ctx context.Context, logOut io.Writer) error {
-	cfg, err := config.Load()
+	cfg, err := config.LoadWorker()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -27,7 +27,7 @@ func RunWorker(ctx context.Context, logOut io.Writer) error {
 	return runWorker(ctx, cfg, logger)
 }
 
-func runWorker(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
+func runWorker(ctx context.Context, cfg config.WorkerConfig, logger *slog.Logger) error {
 	logger.InfoContext(ctx, "starting",
 		slog.String("service", "pitbox-worker"),
 		slog.String("go_version", runtime.Version()),
@@ -46,7 +46,10 @@ func runWorker(ctx context.Context, cfg config.Config, logger *slog.Logger) erro
 	}
 	defer pool.Close()
 
-	authzClient, err := newAuthzClient(ctx, cfg, logger)
+	authzClient, err := newAuthzClient(ctx, openFGAConfig(
+		cfg.OpenFGAAddr, cfg.OpenFGAStoreID, cfg.OpenFGAModelID,
+		cfg.OpenFGAPresharedKey, cfg.OpenFGATLSEnabled, cfg.OpenFGATimeout,
+	), logger)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("set up authorization: %w", err)
@@ -57,6 +60,7 @@ func runWorker(ctx context.Context, cfg config.Config, logger *slog.Logger) erro
 	opts.Lease = cfg.OutboxLease
 	opts.MaxBackoff = cfg.OutboxMaxBackoff
 	opts.PollInterval = cfg.OutboxPollInterval
+	opts.RoleTimeout = cfg.OpenFGATimeout
 	opts.AlertAfter = cfg.OutboxAlertAttempts
 
 	proc, err := outbox.NewProcessor(pool, authzClient, opts, logger, otel.GetMeterProvider(), tel.TracerProvider)

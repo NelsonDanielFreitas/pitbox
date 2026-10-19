@@ -9,7 +9,7 @@ VALUES ($1, $2, $3, $4, $5, $6);
 -- Um evento com backoff continua a bloquear os seguintes da mesma chave, mas não as outras.
 UPDATE platform.outbox o
 SET locked_until = now() + make_interval(secs => sqlc.arg(lease_seconds)::double precision),
-    attempts = o.attempts + 1
+    attempts = LEAST(o.attempts + 1, 32767)
 WHERE o.id IN (
     SELECT o2.id
       FROM platform.outbox o2

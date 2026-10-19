@@ -121,6 +121,33 @@ func TestWorkerKeepsOrderPerKey(t *testing.T) {
 	// reverse the order); the assertion above is the regression test.
 }
 
+func TestClaimCapsAttemptsAtSmallintMax(t *testing.T) {
+	pg := testutil.StartPostgres(t)
+	pool := openPool(t, pg.URL)
+	ctx := context.Background()
+
+	teamA := uuid.Must(uuid.NewV7())
+	userA := uuid.Must(uuid.NewV7())
+	teamB := uuid.Must(uuid.NewV7())
+	userB := uuid.Must(uuid.NewV7())
+
+	insert(t, pool, teamA, userA, ptr("owner"))
+	insert(t, pool, teamB, userB, ptr("owner"))
+	_, err := pool.Exec(ctx, `UPDATE platform.outbox SET attempts = 32767 WHERE aggregate_id = $1`, userA)
+	require.NoError(t, err)
+
+	roles := &recordingRoles{}
+	proc := newProcessor(t, pool, roles)
+	require.NoError(t, proc.ProcessBatch(ctx))
+	require.Len(t, roles.snapshot(), 2, "the poisoned row must not block the other key")
+	require.True(t, roles.called(subject(userA), object(teamA), "owner"))
+	require.True(t, roles.called(subject(userB), object(teamB), "owner"))
+
+	var attempts int16
+	require.NoError(t, pool.QueryRow(ctx, `SELECT attempts FROM platform.outbox WHERE aggregate_id = $1`, userA).Scan(&attempts))
+	require.Equal(t, int16(32767), attempts)
+}
+
 func TestTwoInstancesDoNotClaimTheSameEvent(t *testing.T) {
 	pg := testutil.StartPostgres(t)
 	pool := openPool(t, pg.URL)

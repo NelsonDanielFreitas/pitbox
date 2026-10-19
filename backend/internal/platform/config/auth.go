@@ -101,7 +101,7 @@ func (c Config) validateAuth() []error {
 	if _, err := parseAuthKeys(c.AuthKeys); err != nil {
 		errs = append(errs, err)
 	}
-	if err := c.validateDatabaseURL(); err != nil {
+	if err := validateDatabaseURL(c.Env, c.DatabaseURL); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -178,15 +178,15 @@ func (c Config) validateOrigin(name, raw string, allowPath bool) error {
 
 // validateDatabaseURL checks the shape of PITBOX_DATABASE_URL without ever echoing it: it
 // holds the password, and url.Parse puts the whole input in its error.
-func (c Config) validateDatabaseURL() error {
-	if c.DatabaseURL == "" {
+func validateDatabaseURL(env, databaseURL string) error {
+	if databaseURL == "" {
 		return nil // "missing" is reported by the all-or-nothing rule
 	}
-	u, err := url.Parse(c.DatabaseURL)
+	u, err := url.Parse(databaseURL)
 	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" || u.User == nil || u.User.Username() == "" {
 		return errors.New("PITBOX_DATABASE_URL: not a postgres://user:password@host:port/database URL")
 	}
-	if c.Env != EnvLocal {
+	if env != EnvLocal {
 		// verify-full, not require: "require" encrypts but accepts any certificate, so a machine in
 		// the middle can read and change everything; "verify-ca" does not check the host name.
 		if u.Query().Get("sslmode") != "verify-full" {

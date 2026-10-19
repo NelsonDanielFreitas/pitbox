@@ -14,7 +14,7 @@ import (
 const claimOutbox = `-- name: ClaimOutbox :many
 UPDATE platform.outbox o
 SET locked_until = now() + make_interval(secs => $1::double precision),
-    attempts = o.attempts + 1
+    attempts = LEAST(o.attempts + 1, 32767)
 WHERE o.id IN (
     SELECT o2.id
       FROM platform.outbox o2

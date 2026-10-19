@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox/sqlcgen"
 )
 
@@ -53,6 +54,10 @@ type Options struct {
 	MaxBackoff   time.Duration
 	PollInterval time.Duration
 	AlertAfter   int
+	// RoleTimeout bounds one SetTeamRole call. The lease must cover a whole batch
+	// with it, otherwise another instance could claim an event while this one is
+	// still applying the batch and reorder a key (see NewProcessor).
+	RoleTimeout time.Duration
 }
 
 // DefaultOptions returns the values of ADR 0015.
@@ -64,6 +69,7 @@ func DefaultOptions() Options {
 		MaxBackoff:   5 * time.Minute,
 		PollInterval: time.Second,
 		AlertAfter:   5,
+		RoleTimeout:  200 * time.Millisecond,
 	}
 }
 
@@ -100,6 +106,15 @@ func NewProcessor(db Querier, roles RoleWriter, opts Options, log *slog.Logger, 
 	}
 	if opts.AlertAfter < 1 {
 		return nil, errors.New("outbox: alert threshold must be positive")
+	}
+	if opts.RoleTimeout <= 0 {
+		return nil, errors.New("outbox: OpenFGA role timeout must be positive")
+	}
+	// The whole claimed batch is applied in series. If the lease expired mid-batch,
+	// another instance could claim an event and apply a later event of the same key
+	// first; the old event would then be applied at the end and could restore access.
+	if opts.Lease < 2*time.Duration(opts.BatchSize)*opts.RoleTimeout {
+		return nil, fmt.Errorf("outbox: lease %s must be at least 2 × batch (%d) × OpenFGA timeout (%s)", opts.Lease, opts.BatchSize, opts.RoleTimeout)
 	}
 	if mp == nil {
 		mp = otel.GetMeterProvider()
@@ -265,7 +280,7 @@ func reason(err error) string {
 	switch {
 	case errors.Is(err, errUnknownEvent):
 		return "unknown event"
-	case errors.Is(err, errPayloadBroken):
+	case errors.Is(err, errPayloadBroken), errors.Is(err, authz.ErrInvalidRole):
 		return "invalid payload"
 	default:
 		return "apply failed"

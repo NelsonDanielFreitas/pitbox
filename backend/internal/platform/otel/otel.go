@@ -22,8 +22,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
-
-	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 )
 
 // DefaultServiceName is used unless OTEL_SERVICE_NAME overrides it.
@@ -37,10 +35,18 @@ type Telemetry struct {
 	Shutdown func(context.Context) error
 }
 
+// Settings is the part of the process configuration telemetry needs. Both the API
+// and the worker satisfy it; the worker's configuration deliberately has no
+// authentication secrets.
+type Settings interface {
+	TracingEnabled() bool
+	Environment() string
+}
+
 // Setup configures the global propagator and, if an OTLP endpoint is set, the
 // tracer provider. The exporter is the OTLP/HTTP one, so the process does not
 // link the gRPC stack just for tracing.
-func Setup(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Telemetry, error) {
+func Setup(ctx context.Context, cfg Settings, logger *slog.Logger) (*Telemetry, error) {
 	// Only W3C trace context travels. Baggage is deliberately not enabled: on a
 	// public endpoint it is arbitrary client data entering the system.
 	otel.SetTextMapPropagator(propagation.TraceContext{})
@@ -58,7 +64,7 @@ func Setup(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Teleme
 		}, nil
 	}
 
-	res, err := newResource(ctx, cfg.Env)
+	res, err := newResource(ctx, cfg.Environment())
 	if err != nil {
 		return nil, fmt.Errorf("build otel resource: %w", err)
 	}

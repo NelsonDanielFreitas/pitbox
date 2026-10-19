@@ -11,3 +11,4 @@ sql:
         out: internal/platform/outbox/sqlcgen
         sql_package: pgx/v5
         emit_json_tags: false
+        omit_unused_structs: true

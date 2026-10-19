@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox/sqlcgen"
 )
@@ -134,6 +135,11 @@ func TestRecordRejectsInvalidEvents(t *testing.T) {
 	}
 }
 
+func TestReasonMapsAnInvalidRoleToInvalidPayload(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "invalid payload", reason(authz.ErrInvalidRole))
+}
+
 func TestMembershipChangedCarriesState(t *testing.T) {
 	t.Parallel()
 	team := uuid.Must(uuid.NewV7())
@@ -181,6 +187,14 @@ func TestNewProcessorValidatesOptions(t *testing.T) {
 	opts.Lease = 0
 	_, err = NewProcessor(&fakeDB{}, fakeRoles{}, opts, log, nil, nil)
 	require.Error(t, err)
+
+	// The lease must cover a whole batch of SetTeamRole calls (ADR 0015).
+	opts = DefaultOptions()
+	opts.BatchSize = 200
+	opts.Lease = time.Second
+	opts.RoleTimeout = 200 * time.Millisecond
+	_, err = NewProcessor(&fakeDB{}, fakeRoles{}, opts, log, nil, nil)
+	require.ErrorContains(t, err, "lease")
 
 	_, err = NewProcessor(nil, fakeRoles{}, DefaultOptions(), log, nil, nil)
 	require.Error(t, err)

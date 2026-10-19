@@ -100,12 +100,16 @@ func touchesContext(text string) bool {
 		}
 	}
 	spaced := whitespace.ReplaceAllString(strings.NewReplacer("'", " ", `"`, " ", "||", " ").Replace(lower), " ")
-	return setStatements.MatchString(spaced)
+	// SET ROLE <name> (not the "SET role = ..." of an UPDATE), SET LOCAL/SESSION,
+	// and RESET ROLE/ALL/SESSION. The role assignment in an UPDATE is ordinary SQL.
+	return setRole.MatchString(spaced) || setTransaction.MatchString(spaced) || resetStatements.MatchString(spaced)
 }
 
 var (
-	whitespace    = regexp.MustCompile(`\s+`)
-	setStatements = regexp.MustCompile(`\bset\b.{0,40}?\b(local|session|role)\b|\breset\b.{0,40}?\b(role|all|session)\b`)
+	whitespace      = regexp.MustCompile(`\s+`)
+	setRole         = regexp.MustCompile(`\bset\b.{0,40}?\brole\s+[a-z_][a-z0-9_]*`)
+	setTransaction  = regexp.MustCompile(`\bset\b.{0,40}?\b(local|session)\b`)
+	resetStatements = regexp.MustCompile(`\breset\b.{0,40}?\b(role|all|session)\b`)
 )
 
 // layerDir matches the directories of a module that must not import the database driver.
@@ -183,6 +187,8 @@ func checkSource(path, src string, consts constTable) ([]string, error) {
 			}
 		case pkg == connectName && fn == "Errorf":
 			report(call.Pos(), "connect.Errorf formats text for the client: use connect.NewError with a fixed message and WithCause (ADR 0012)")
+		case (fn == "WithNewTeamTx" || fn == "WithJoinTeamTx") && !strings.HasPrefix(slashPath, "internal/identity/app/"):
+			report(call.Pos(), "%s only from internal/identity/app: a team context without a membership is a reviewed exception (F1-06)", fn)
 		case pkg == connecthttpName && (fn == "WithReadMaxBytes" || fn == "WithSendMaxBytes"):
 			if filepath.ToSlash(path) != limitsFile {
 				report(call.Pos(), "connecthttp.%s only in %s (zero means unlimited; ADR 0012)", fn, limitsFile)

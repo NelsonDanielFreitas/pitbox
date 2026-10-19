@@ -118,6 +118,10 @@ func TestRLSContextAndTransactionRules(t *testing.T) {
 
 		// Rule 4: transactions and pools in one place.
 		{name: "Begin outside db", path: "internal/garage/store/cars.go", wantHit: "Begin only in", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},
+		{name: "WithNewTeamTx outside identity/app", path: "internal/garage/app/cars.go", wantHit: "internal/identity/app", src: "package p\nfunc f(db interface{ WithNewTeamTx(int) }) { db.WithNewTeamTx(1) }\n"},
+		{name: "WithJoinTeamTx outside identity/app", path: "internal/garage/app/cars.go", wantHit: "internal/identity/app", src: "package p\nfunc f(db interface{ WithJoinTeamTx(int) }) { db.WithJoinTeamTx(1) }\n"},
+		{name: "WithNewTeamTx in identity/app", path: "internal/identity/app/team.go", src: "package p\nfunc f(db interface{ WithNewTeamTx(int) }) { db.WithNewTeamTx(1) }\n"},
+		{name: "WithJoinTeamTx in identity/app", path: "internal/identity/app/member.go", src: "package p\nfunc f(db interface{ WithJoinTeamTx(int) }) { db.WithJoinTeamTx(1) }\n"},
 		{name: "BeginTx on a field", path: "internal/garage/app/x.go", wantHit: "BeginTx only in", src: "package p\ntype s struct{ pool interface{ BeginTx(int) } }\nfunc (x s) f() { x.pool.BeginTx(1) }\n"},
 		{name: "Begin inside db", path: "internal/platform/db/tx.go", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},
 		{name: "pgxpool in a module", path: "internal/garage/store/cars.go", wantHit: "pgxpool only in", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n"},

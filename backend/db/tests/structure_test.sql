@@ -50,8 +50,8 @@ DO $$ DECLARE bad text; BEGIN
   ) q;
   ASSERT bad IS NULL, 'objetos com dono errado: ' || bad;
   ASSERT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 56,
-    'esperadas 56 tabelas (hypertable incluída)';
+          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 57,
+    'esperadas 57 tabelas (hypertable incluída)';
 END $$;
 
 -- 5. Papéis: nenhum com privilégios de administração; os de grupo não fazem login.
@@ -124,7 +124,7 @@ DO $$ DECLARE got text; bad text; BEGIN
   SELECT string_agg(p.oid::regprocedure::text, ', ' ORDER BY p.oid::regprocedure::text) INTO got
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit');
-  ASSERT got = 'identity.consume_recovery_code(uuid,bytea), identity.is_owner(uuid), identity.replace_recovery_codes(uuid,bytea[]), identity.resolve_login(text,citext,text)', format('funções SECURITY DEFINER: %s', got);
+  ASSERT got = 'identity.accept_invitation(bytea), identity.consume_recovery_code(uuid,bytea), identity.is_owner(uuid), identity.replace_recovery_codes(uuid,bytea[]), identity.resolve_login(text,citext,text)', format('funções SECURITY DEFINER: %s', got);
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit')

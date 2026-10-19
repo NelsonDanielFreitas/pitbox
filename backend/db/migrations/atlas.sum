@@ -1,6 +1,9 @@
-h1:HyFQ6L8nJ02IxgxhNP3BIusr7Snn3Gn6ln/3SjFw4O4=
+h1:rFooI1KTn8LAyERrb4MFQJANrfOE7yxhZnYkKsiTcpM=
 20261012181718_initial.sql h1:Tiv1ABbDQmkD6Y/HZoE8Z7u2and+3cHSOASf5Ogdb20=
 20261013194110_resolve_login.sql h1:nx80NCYa8Lts3HZCs9dUb7AxcEm9oXjjk1T1UPCW4bY=
 20261017121627_is_owner_function.sql h1:hKUyQprD/UjKM6c29rubP068LbtDWgQMzJxrEA9Ss3Y=
 20261017134003_recovery_codes.sql h1:5WUN+FV6PCw7WW9z0PifeWQHa4nAyEwoB6y+dIut/44=
 20261019162346_outbox-lease.sql h1:QVIeNVnUWukqXnIqlqUW3FeFFCerlSCPKP2t1wtswPg=
+20261019214050_f1-06-invitation.sql h1:YEcRUklv5X6U8qCaSquHJkVlzxMKFn3rhxnINiKPIfM=
+20261019214051_f1-06-ownership-transfer.sql h1:lEZW7sQpm0Uovpjd6MqQR55KUu5zHvKgrTkaXUSHSOQ=
+20261019214052_f1-06-one-owner.sql h1:6Po7CaeWLjvfw0nvahUlCpjQ/cIjpjMVws2lqUtMo38=

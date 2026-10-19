@@ -21,7 +21,7 @@ func TestCheck(t *testing.T) {
 
 	owner := userID()
 	team := fmt.Sprintf("team:%s", uuid.NewString())
-	require.NoError(t, c.WriteTuple(ctx, owner, "owner", team))
+	require.NoError(t, c.SetTeamRole(ctx, owner, team, rolePtr("owner")))
 
 	require.NoError(t, c.Check(ctx, owner, "owner", team), "owner should own the team")
 	require.NoError(t, c.Check(ctx, owner, "mechanic", team), "owner is also mechanic")
@@ -52,8 +52,8 @@ func TestListObjects(t *testing.T) {
 	owner := userID()
 	teamA := fmt.Sprintf("team:%s", uuid.NewString())
 	teamB := fmt.Sprintf("team:%s", uuid.NewString())
-	require.NoError(t, c.WriteTuple(ctx, owner, "owner", teamA))
-	require.NoError(t, c.WriteTuple(ctx, owner, "owner", teamB))
+	require.NoError(t, c.SetTeamRole(ctx, owner, teamA, rolePtr("owner")))
+	require.NoError(t, c.SetTeamRole(ctx, owner, teamB, rolePtr("owner")))
 
 	objects, err := c.ListObjects(ctx, owner, "owner", "team")
 	require.NoError(t, err)
@@ -66,7 +66,7 @@ func TestListObjects(t *testing.T) {
 	require.Empty(t, objects)
 }
 
-func TestDeleteTuple(t *testing.T) {
+func TestSetTeamRoleRemovesAccess(t *testing.T) {
 	t.Parallel()
 	ofga := testutil.StartOpenFGA(t)
 	ctx := context.Background()
@@ -74,11 +74,64 @@ func TestDeleteTuple(t *testing.T) {
 
 	owner := userID()
 	team := fmt.Sprintf("team:%s", uuid.NewString())
-	require.NoError(t, c.WriteTuple(ctx, owner, "owner", team))
+	require.NoError(t, c.SetTeamRole(ctx, owner, team, rolePtr("owner")))
 	require.NoError(t, c.Check(ctx, owner, "owner", team))
 
-	require.NoError(t, c.DeleteTuple(ctx, owner, "owner", team))
+	require.NoError(t, c.SetTeamRole(ctx, owner, team, nil))
 	require.ErrorIs(t, c.Check(ctx, owner, "owner", team), authz.ErrDenied)
+	require.ErrorIs(t, c.Check(ctx, owner, "member", team), authz.ErrDenied)
+}
+
+func TestSetTeamRoleTransitions(t *testing.T) {
+	t.Parallel()
+	ofga := testutil.StartOpenFGA(t)
+	ctx := context.Background()
+	c := newClient(t, ctx, ofga)
+
+	user := userID()
+	team := fmt.Sprintf("team:%s", uuid.NewString())
+	steps := []struct {
+		role       string
+		want       []string
+		wantAbsent []string
+	}{
+		{"owner", []string{"owner", "mechanic", "member"}, nil},
+		{"mechanic", []string{"mechanic", "member"}, []string{"owner"}},
+		{"pilot", []string{"member"}, []string{"owner", "mechanic"}},
+		{"guest", nil, []string{"owner", "mechanic", "member"}},
+	}
+	for _, s := range steps {
+		require.NoError(t, c.SetTeamRole(ctx, user, team, rolePtr(s.role)))
+		for _, relation := range s.want {
+			require.NoError(t, c.Check(ctx, user, relation, team), "role %s should have %s", s.role, relation)
+		}
+		for _, relation := range s.wantAbsent {
+			require.ErrorIs(t, c.Check(ctx, user, relation, team), authz.ErrDenied, "role %s should not have %s", s.role, relation)
+		}
+	}
+}
+
+func TestSetTeamRoleIsIdempotent(t *testing.T) {
+	t.Parallel()
+	ofga := testutil.StartOpenFGA(t)
+	ctx := context.Background()
+	c := newClient(t, ctx, ofga)
+
+	user := userID()
+	team := fmt.Sprintf("team:%s", uuid.NewString())
+	require.NoError(t, c.SetTeamRole(ctx, user, team, rolePtr("mechanic")))
+	require.NoError(t, c.SetTeamRole(ctx, user, team, rolePtr("mechanic")))
+	require.NoError(t, c.Check(ctx, user, "mechanic", team))
+}
+
+func TestSetTeamRoleRejectsAnUnknownRole(t *testing.T) {
+	t.Parallel()
+	ofga := testutil.StartOpenFGA(t)
+	ctx := context.Background()
+	c := newClient(t, ctx, ofga)
+
+	err := c.SetTeamRole(ctx, userID(), fmt.Sprintf("team:%s", uuid.NewString()), rolePtr("admin"))
+	require.ErrorIs(t, err, authz.ErrInvalidRole)
 }
 
 func TestClientDiscoversLatestModelWhenNotConfigured(t *testing.T) {
@@ -96,7 +149,7 @@ func TestClientDiscoversLatestModelWhenNotConfigured(t *testing.T) {
 
 	owner := userID()
 	team := fmt.Sprintf("team:%s", uuid.NewString())
-	require.NoError(t, c.WriteTuple(ctx, owner, "owner", team))
+	require.NoError(t, c.SetTeamRole(ctx, owner, team, rolePtr("owner")))
 	require.NoError(t, c.Check(ctx, owner, "owner", team))
 }
 
@@ -132,3 +185,5 @@ func newClient(t testing.TB, ctx context.Context, ofga testutil.OpenFGA) *authz.
 func userID() string {
 	return fmt.Sprintf("user:%s", uuid.NewString())
 }
+
+func rolePtr(s string) *string { return &s }

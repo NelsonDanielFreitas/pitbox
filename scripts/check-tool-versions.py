@@ -16,6 +16,9 @@ from pathlib import Path
 PAIRS = [
     ("protoc-gen-go", "google.golang.org/protobuf"),
     ("go:connectrpc.com/connect/v2/cmd/protoc-gen-connect-go", "connectrpc.com/connect/v2"),
+    # `sqlc` is a Go tool in backend/go.mod (directive `tool`); the mise install is
+    # only for interactive use. The two must be the same version.
+    ("github:sqlc-dev/sqlc", "github.com/sqlc-dev/sqlc"),
 ]
 
 

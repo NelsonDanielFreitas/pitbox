@@ -73,7 +73,10 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up rate limiting: %w", err)
 	}
 
-	authzClient, err := newAuthzClient(ctx, cfg, logger)
+	authzClient, err := newAuthzClient(ctx, openFGAConfig(
+		cfg.OpenFGAAddr, cfg.OpenFGAStoreID, cfg.OpenFGAModelID,
+		cfg.OpenFGAPresharedKey, cfg.OpenFGATLSEnabled, cfg.OpenFGATimeout,
+	), logger)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("set up authorization: %w", err)

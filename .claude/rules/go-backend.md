@@ -24,6 +24,7 @@ paths:
 - `app/`: casos de uso. Ordem fixa: validar → `authz.Check` → `db.WithTeamTx` → chamar domínio e repositório → gravar eventos na outbox na mesma transação → auditoria (`audit.RecordTeam`, também dentro da transação).
 - `app/ports.go`: interfaces dos repositórios, definidas por quem as usa.
 - `store/`: implementação com sqlc; queries em `store/queries/*.sql`; código gerado em `store/sqlcgen/`.
+- As queries da plataforma vivem em `platform/<pacote>/queries/*.sql` (ex.: `platform/outbox/queries/`), com código gerado ao lado; o `internal/archtest` lê esses `.sql` para a regra do contexto de RLS.
 - `transport/`: handlers Connect finos; mapeamento proto ⇄ domínio em `mapping.go`.
 - `module.go`: `New(deps) (*Module, error)` regista handlers; `api.go` expõe a interface pública do módulo.
 

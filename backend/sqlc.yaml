@@ -1,0 +1,14 @@
+version: "2"
+# SQL gerado a partir do estado desejado (schema.sql), nunca das migrações.
+# As queries da plataforma vivem em platform/<pacote>/queries (regra do backend).
+sql:
+  - engine: postgresql
+    schema: db/schema/schema.sql
+    queries: internal/platform/outbox/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/platform/outbox/sqlcgen
+        sql_package: pgx/v5
+        emit_json_tags: false
+        omit_unused_structs: true

@@ -1,11 +1,16 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
 # Data de validade do PAT do utilizador de provisionamento do Zitadel (30 dias). Só conta no
 # primeiro arranque do volume; o compose exige-a, por isso passa sempre pelo make.
-export ZITADEL_PROVISIONER_PAT_EXPIRATION ?= $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
+# := e não ?=: com export, o $(shell ...) de um ?= volta a expandir a variável exportada dentro
+# do próprio shell (recursão); com nomes longos isso estoura a stack do make (SIGSEGV no push).
+ifeq ($(origin ZITADEL_PROVISIONER_PAT_EXPIRATION), undefined)
+ZITADEL_PROVISIONER_PAT_EXPIRATION := $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
+endif
+export ZITADEL_PROVISIONER_PAT_EXPIRATION
 COMPOSE     := docker compose --project-directory $(COMPOSE_DIR) --env-file $(ENV_FILE) -f $(COMPOSE_DIR)/docker-compose.yml
 
 help: ## Mostra os alvos disponíveis
@@ -72,10 +77,12 @@ health: ## Estado dos serviços e sonda ao Jaeger (sem health check no contentor
 s3-smoke: ## Cria bucket, faz upload e descarrega por URL pré-assinado (SeaweedFS)
 	@set -a; . ./$(ENV_FILE); set +a; python3 -I scripts/s3-smoke.py
 
-gen: ## Regenera o código dos contratos (backend/gen, app/src/gen). O sqlc entra com o F1
+gen: ## Regenera o código dos contratos (backend/gen, app/src/gen) e o SQL (sqlc)
 	@test -x app/node_modules/.bin/protoc-gen-es || (cd app && pnpm install --frozen-lockfile)
 	@find backend/gen app/src/gen -type f \( -name '*.pb.go' -o -name '*.connect.go' -o -name '*_pb.ts' \) -delete
 	buf generate
+	@find backend/internal -path '*/sqlcgen/*' -type f -name '*.go' -delete
+	cd backend && go tool sqlc generate
 
 check-tool-versions: ## Os geradores de mise.toml têm de coincidir com as bibliotecas de backend/go.mod
 	python3 -I scripts/check-tool-versions.py
@@ -83,6 +90,11 @@ check-tool-versions: ## Os geradores de mise.toml têm de coincidir com as bibli
 gen-check: check-tool-versions gen ## Falha se os geradores não coincidirem com go.mod ou o código gerado não estiver commitado
 	@test -z "$$(git status --porcelain -- backend/gen app/src/gen)" || \
 	  { git status --porcelain -- backend/gen app/src/gen; echo "generated code is stale: run make gen and commit"; exit 1; }
+
+sqlc-check: ## Falha se o SQL gerado (sqlc) não corresponder às queries e ao schema.sql
+	cd backend && go tool sqlc generate
+	@test -z "$$(git status --porcelain -- 'backend/internal/*/store/sqlcgen' 'backend/internal/platform/*/sqlcgen')" || \
+	  { git status --porcelain -- 'backend/internal/*/store/sqlcgen' 'backend/internal/platform/*/sqlcgen'; echo "generated SQL is stale: run make sqlc-check and commit"; exit 1; }
 
 lint: lint-proto lint-go ## buf lint + buf format + golangci-lint (eslint e clippy entram com a app e o firmware)
 
@@ -118,6 +130,9 @@ workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKE
 
 run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger; com login se `make zitadel-provision` já correu (Ctrl+C para parar)
 	@bash scripts/run-api.sh
+
+run-worker: ## Corre o pitbox-worker (poller da outbox) contra a infraestrutura local (Ctrl+C para parar)
+	@bash scripts/run-worker.sh
 
 zitadel-provision: ## Projeto, app OIDC, tempos dos tokens e política de login do Zitadel local (idempotente; precisa de make up)
 	python3 -I scripts/zitadel-provision.py $(ARGS)
@@ -158,7 +173,7 @@ db-migrate: ## Aplica as migrações ao Postgres do compose (make up) como pitbo
 authz-test: ## Asserções do modelo OpenFGA
 	fga model test --tests backend/authz/model.fga.yaml
 
-ci: lint test gen-check app-typecheck secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
+ci: lint test gen-check sqlc-check app-typecheck secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
 
 hooks: ## Ativa os hooks de .githooks (pre-push: gitleaks antes de cada push)
 	git config core.hooksPath .githooks

@@ -51,7 +51,7 @@ const (
 	MaxRateLimitRPS = 1000
 )
 
-// Config is the configuration of pitbox-api.
+// Config is the configuration shared by pitbox-api and pitbox-worker.
 //
 // Go note: the `env` struct tags are read by reflection at runtime. A typo in a
 // tag compiles fine, which is why Validate and the tests in this package cover
@@ -142,6 +142,15 @@ type Config struct {
 	OpenFGAStoreID      string        `env:"PITBOX_OPENFGA_STORE_ID"`
 	OpenFGAModelID      string        `env:"PITBOX_OPENFGA_MODEL_ID"`
 
+	// Outbox worker (F1-05b, ADR 0015). The lease bounds how long an event is
+	// hidden while one instance applies it; the backoff keeps a failing event (and
+	// the following ones of its key) waiting. The alert is a log/metric threshold.
+	OutboxPollInterval  time.Duration `env:"PITBOX_OUTBOX_POLL_INTERVAL"  envDefault:"1s"`
+	OutboxBatchSize     int           `env:"PITBOX_OUTBOX_BATCH_SIZE"     envDefault:"20"`
+	OutboxLease         time.Duration `env:"PITBOX_OUTBOX_LEASE"          envDefault:"30s"`
+	OutboxMaxBackoff    time.Duration `env:"PITBOX_OUTBOX_MAX_BACKOFF"    envDefault:"5m"`
+	OutboxAlertAttempts int           `env:"PITBOX_OUTBOX_ALERT_ATTEMPTS" envDefault:"5"`
+
 	// The standard OpenTelemetry variables are read here only to validate them:
 	// the SDK reads them again itself. Tracing is off when neither is set.
 	OTLPEndpoint       string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
@@ -163,6 +172,9 @@ func LoadFrom(environment map[string]string) (Config, error) {
 	}
 	return c, nil
 }
+
+// Environment returns the deployment environment (for the telemetry resource).
+func (c Config) Environment() string { return c.Env }
 
 // TracingEnabled reports whether an OTLP endpoint is configured.
 func (c Config) TracingEnabled() bool {
@@ -218,6 +230,7 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateRateLimit()...)
 	errs = append(errs, c.validateOpenFGA()...)
+	errs = append(errs, c.validateOutbox()...)
 
 	// Telemetry must not travel in clear text outside local development.
 	if c.Env != EnvLocal {
@@ -289,23 +302,51 @@ func (c Config) validateRateLimit() []error {
 }
 
 func (c Config) validateOpenFGA() []error {
+	return validateOpenFGASettings(c.Env, c.OpenFGAAddr, c.OpenFGATimeout, c.OpenFGATLSEnabled, c.OpenFGAPresharedKey, c.OpenFGAStoreID)
+}
+
+func validateOpenFGASettings(env, addr string, timeout time.Duration, tls bool, presharedKey, storeID string) []error {
 	var errs []error
-	if err := validateAddr(c.OpenFGAAddr); err != nil {
+	if err := validateAddr(addr); err != nil {
 		errs = append(errs, fmt.Errorf("PITBOX_OPENFGA_ADDR: %w", err))
 	}
-	if c.OpenFGATimeout < 50*time.Millisecond || c.OpenFGATimeout > time.Second {
-		errs = append(errs, fmt.Errorf("PITBOX_OPENFGA_TIMEOUT: %s is outside 50ms..1s", c.OpenFGATimeout))
+	if timeout < 50*time.Millisecond || timeout > time.Second {
+		errs = append(errs, fmt.Errorf("PITBOX_OPENFGA_TIMEOUT: %s is outside 50ms..1s", timeout))
 	}
-	if c.Env != EnvLocal {
-		if !c.OpenFGATLSEnabled {
+	if env != EnvLocal {
+		if !tls {
 			errs = append(errs, errors.New("PITBOX_OPENFGA_TLS: required outside local development"))
 		}
-		if c.OpenFGAPresharedKey == "" {
+		if presharedKey == "" {
 			errs = append(errs, errors.New("PITBOX_OPENFGA_PRESHARED_KEY: required outside local development"))
 		}
-		if c.OpenFGAStoreID == "" {
+		if storeID == "" {
 			errs = append(errs, errors.New("PITBOX_OPENFGA_STORE_ID: required outside local development"))
 		}
+	}
+	return errs
+}
+
+func (c Config) validateOutbox() []error {
+	return validateOutboxSettings(c.OutboxPollInterval, c.OutboxBatchSize, c.OutboxLease, c.OutboxMaxBackoff, c.OutboxAlertAttempts)
+}
+
+func validateOutboxSettings(poll time.Duration, batch int, lease, maxBackoff time.Duration, alert int) []error {
+	var errs []error
+	if poll < 100*time.Millisecond || poll > time.Minute {
+		errs = append(errs, fmt.Errorf("PITBOX_OUTBOX_POLL_INTERVAL: %s is outside 100ms..1m", poll))
+	}
+	if batch < 1 || batch > 200 {
+		errs = append(errs, fmt.Errorf("PITBOX_OUTBOX_BATCH_SIZE: %d is outside 1..200", batch))
+	}
+	if lease < time.Second || lease > 5*time.Minute {
+		errs = append(errs, fmt.Errorf("PITBOX_OUTBOX_LEASE: %s is outside 1s..5m", lease))
+	}
+	if maxBackoff < 30*time.Second || maxBackoff > time.Hour {
+		errs = append(errs, fmt.Errorf("PITBOX_OUTBOX_MAX_BACKOFF: %s is outside 30s..1h", maxBackoff))
+	}
+	if alert < 1 || alert > 100 {
+		errs = append(errs, fmt.Errorf("PITBOX_OUTBOX_ALERT_ATTEMPTS: %d is outside 1..100", alert))
 	}
 	return errs
 }
@@ -358,6 +399,11 @@ func (c Config) LogValue() slog.Value {
 		slog.Duration("openfga_timeout", c.OpenFGATimeout),
 		slog.Bool("openfga_store_id_set", c.OpenFGAStoreID != ""),
 		slog.Bool("openfga_model_id_set", c.OpenFGAModelID != ""),
+		slog.Duration("outbox_poll_interval", c.OutboxPollInterval),
+		slog.Int("outbox_batch_size", c.OutboxBatchSize),
+		slog.Duration("outbox_lease", c.OutboxLease),
+		slog.Duration("outbox_max_backoff", c.OutboxMaxBackoff),
+		slog.Int("outbox_alert_attempts", c.OutboxAlertAttempts),
 		slog.Bool("tracing_enabled", c.TracingEnabled()),
 	)
 }

@@ -1,12 +1,13 @@
 // Package authz wraps the OpenFGA Go SDK. It is the only package that talks to OpenFGA;
-// use cases call Check before touching data and the worker uses WriteTuple/DeleteTuple to
-// keep OpenFGA in sync with identity.membership.
+// use cases call Check before touching data and the worker uses SetTeamRole to keep
+// OpenFGA in sync with identity.membership.
 package authz
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	openfga "github.com/openfga/go-sdk"
@@ -20,7 +21,14 @@ var (
 	// ErrUnavailable means the OpenFGA call failed (network, timeout, misconfiguration).
 	// Callers should fail closed.
 	ErrUnavailable = errors.New("authz: unavailable")
+	// ErrInvalidRole means SetTeamRole was given something that is not a team relation.
+	// It is a programming error, never a value that reaches the client.
+	ErrInvalidRole = errors.New("authz: invalid team role")
 )
+
+// teamRelations are the team relations a membership can map to. A guest has no team
+// relation (it only sees what is shared with it), so it maps to no tuple.
+var teamRelations = []string{"owner", "mechanic", "pilot"}
 
 // Config is what is needed to connect to one OpenFGA store.
 type Config struct {
@@ -146,27 +154,47 @@ func (c *Client) ListObjects(ctx context.Context, user string, relation, objectT
 	return resp.GetObjects(), nil
 }
 
-// WriteTuple writes a relationship tuple. It is used by the worker that syncs membership.
-func (c *Client) WriteTuple(ctx context.Context, user, relation, object string) error {
-	ctx, cancel := context.WithTimeout(ctx, c.timeout)
-	defer cancel()
-
-	_, err := c.api.WriteTuples(ctx).Body([]client.ClientTupleKey{
-		{User: user, Relation: relation, Object: object},
-	}).Execute()
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrUnavailable, err)
+// SetTeamRole makes the user's role on the team exactly role, in one atomic Write:
+// it removes the other team relations and writes the wanted one (none for guest or
+// nil). Duplicate writes and missing deletes are ignored, so re-applying the same
+// state is safe. user and team are OpenFGA subjects ("user:<uuid>", "team:<uuid>").
+//
+// The Write API applies writes and deletes in a single transaction (OpenFGA docs);
+// the two arrays never contain the same tuple.
+func (c *Client) SetTeamRole(ctx context.Context, user, team string, role *string) error {
+	want := ""
+	if role != nil {
+		want = *role
 	}
-	return nil
-}
+	if want != "" && want != "guest" && !slices.Contains(teamRelations, want) {
+		return ErrInvalidRole
+	}
 
-// DeleteTuple deletes a relationship tuple.
-func (c *Client) DeleteTuple(ctx context.Context, user, relation, object string) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	_, err := c.api.DeleteTuples(ctx).Body([]client.ClientTupleKeyWithoutCondition{
-		{User: user, Relation: relation, Object: object},
+	deletes := make([]client.ClientTupleKeyWithoutCondition, 0, len(teamRelations))
+	for _, relation := range teamRelations {
+		if relation == want {
+			continue
+		}
+		deletes = append(deletes, client.ClientTupleKeyWithoutCondition{
+			User: user, Relation: relation, Object: team,
+		})
+	}
+	var writes []client.ClientTupleKey
+	if want != "" && want != "guest" {
+		writes = append(writes, client.ClientTupleKey{User: user, Relation: want, Object: team})
+	}
+
+	_, err := c.api.Write(ctx).Body(client.ClientWriteRequest{
+		Writes:  writes,
+		Deletes: deletes,
+	}).Options(client.ClientWriteOptions{
+		Conflict: client.ClientWriteConflictOptions{
+			OnDuplicateWrites: client.CLIENT_WRITE_REQUEST_ON_DUPLICATE_WRITES_IGNORE,
+			OnMissingDeletes:  client.CLIENT_WRITE_REQUEST_ON_MISSING_DELETES_IGNORE,
+		},
 	}).Execute()
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)

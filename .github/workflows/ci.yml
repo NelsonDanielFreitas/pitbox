@@ -55,6 +55,14 @@ jobs:
           path: ~/.local/share/pnpm/store
           key: pnpm-${{ runner.os }}-${{ hashFiles('app/pnpm-lock.yaml') }}
 
+      - name: Cache Go modules and build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
+
       - name: Lint contracts
         run: make lint-proto
 
@@ -96,6 +104,9 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: go-${{ runner.os }}-${{ hashFiles('backend/go.sum') }}
+
+      - name: Generated SQL is up to date
+        run: make sqlc-check
 
       - name: golangci-lint
         run: make lint-go

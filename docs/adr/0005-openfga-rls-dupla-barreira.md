@@ -39,3 +39,13 @@ A decisão mantém-se. O F1-04 concretiza o `db.WithTeamTx` e fixa o que a base 
 - **Um `team_id` do cliente que o contrato não recusa não é um erro interno.** O protovalidate aceita o UUID nulo; `ParseTeamID` recusa-o com `ErrInvalidTeamID`, que embrulha `apperr.ErrInvalidArgument`, e o interceptor de erros responde `INVALID_ARGUMENT` com mensagem fixa (nível Info, não Error). O `ParseUserID` devolve só `ErrInvalidScope`: o id do utilizador vem da nossa sessão, e um inválido é um erro interno.
 - **Auditoria na mesma transação** (`audit.RecordTeam`): a equipa e o autor vêm de `app.current_team_id()` e `app.current_user_id()` no próprio SQL, não de argumentos, para nenhum caso de uso auditar na equipa errada; sem contexto não escreve (`ErrNoContext`).
 
+
+## Emenda (2026-10-19, F1-06)
+
+A decisão mantém-se. O F1-06 acrescenta duas variantes de transação, porque criar uma equipa e aceitar um convite não cabem no `WithTeamTx` nem no `WithUserTx`:
+
+- **`WithNewTeamTx`** (criar equipa): o próprio `platform/db` gera o UUIDv7 e define `app.user_id` e `app.team_id` antes de correr a função. Não há pertença para verificar — a equipa e a primeira `membership` são criadas na mesma transação. O chamador nunca escolhe o id da equipa.
+- **`WithJoinTeamTx`** (aceitar convite): abre a transação só com `app.user_id`, corre o `join` (o `identity.accept_invitation`, `SECURITY DEFINER`, porque a RLS esconde o convite antes de a equipa ser conhecida), define `app.team_id` com a equipa devolvida e **só então** corre a verificação de pertença normal. Nunca existe um contexto de equipa sem pertença.
+- **Uma exceção estreita, revista:** o `archtest` só permite chamar estas duas variantes em `internal/identity/app`; o `WithTeamTx` continua a ser o caminho normal. O `identity.accept_invitation` entra na lista exata de funções `SECURITY DEFINER` e só `pitbox_app` o executa.
+- **Um só dono por equipa** é garantido na base (`membership_one_owner_uq`, índice único parcial por `team_id` onde `role = 'owner'`); a transferência despromove o dono antigo antes de promover o novo, na mesma transação.
+- **Prova:** `backend/internal/platform/db/tx_test.go` (`TestNewTeamTx`, `TestJoinTeamTx`), `backend/internal/archtest`, `backend/db/tests/rls_and_constraints_test.sql` e `backend/internal/identity/app/integration_test.go`.

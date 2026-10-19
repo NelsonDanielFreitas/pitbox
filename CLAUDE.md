@@ -10,7 +10,7 @@ Plataforma para equipas de automodelismo 1/8 TT nitro: setups, motores, provas, 
 - `docs/02-arquitetura-tecnica.md` — como está construído (módulos, identidade, autorização, dados, sync, telemetria, infra, segurança)
 - `docs/03-plano-de-trabalho.md` — cartões F0-01 a F5-14 com "Pronto quando"
 - `docs/adr/` — decisões de arquitetura; `docs/threat-model/` — STRIDE; `docs/runbooks/` — um por alerta
-- `backend/db/schema/schema.sql` — estado desejado da base de dados (55 tabelas, RLS)
+- `backend/db/schema/schema.sql` — estado desejado da base de dados (56 tabelas, RLS)
 
 Antes de implementar uma funcionalidade, lê a secção da especificação e da arquitetura correspondente e o cartão do plano.
 

@@ -20,3 +20,12 @@ var ErrInvalidArgument = errors.New("invalid argument")
 // requested action. The errors interceptor answers PERMISSION_DENIED with a fixed message;
 // wrap it with context for the log and never put the resource id in the text.
 var ErrPermissionDenied = errors.New("permission denied")
+
+// ErrConflict means the resource changed since the caller read it (optimistic
+// concurrency). The errors interceptor answers ABORTED with a fixed message.
+var ErrConflict = errors.New("conflict")
+
+// ErrFailedPrecondition means the request is valid but the resource is not in a
+// state that allows it (for example, removing the last owner). The errors
+// interceptor answers FAILED_PRECONDITION with a fixed message.
+var ErrFailedPrecondition = errors.New("failed precondition")

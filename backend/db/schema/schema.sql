@@ -1170,7 +1170,7 @@ CREATE TABLE platform.idempotency_key (
 );
 CREATE INDEX idempotency_key_expiry_idx ON platform.idempotency_key (expires_at);
 
--- Outbox transacional: eventos de domínio publicados pelo worker (River).
+-- Outbox transacional: eventos de domínio publicados pelo pitbox-worker (poller próprio; ADR 0015).
 CREATE TABLE platform.outbox (
   id                  bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   team_id             uuid,
@@ -1181,9 +1181,12 @@ CREATE TABLE platform.outbox (
   trace_parent        text,                                   -- W3C traceparent
   created_at          timestamptz NOT NULL DEFAULT now(),
   published_at        timestamptz,
-  attempts            smallint    NOT NULL DEFAULT 0
+  attempts            smallint    NOT NULL DEFAULT 0,
+  locked_until        timestamptz
 );
 CREATE INDEX outbox_unpublished_idx ON platform.outbox (id) WHERE published_at IS NULL;
+-- Ordem por chave (ADR 0015): o claim só pega no evento mais antigo por (equipa, agregado, id).
+CREATE INDEX outbox_unpublished_key_idx ON platform.outbox (team_id, aggregate, aggregate_id, id) WHERE published_at IS NULL;
 
 CREATE TABLE platform.notification_preference (
   user_id             uuid        NOT NULL REFERENCES identity.user_account (id) ON DELETE CASCADE,

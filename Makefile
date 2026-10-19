@@ -5,7 +5,12 @@ COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
 # Data de validade do PAT do utilizador de provisionamento do Zitadel (30 dias). Só conta no
 # primeiro arranque do volume; o compose exige-a, por isso passa sempre pelo make.
-export ZITADEL_PROVISIONER_PAT_EXPIRATION ?= $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
+# := e não ?=: com export, o $(shell ...) de um ?= volta a expandir a variável exportada dentro
+# do próprio shell (recursão); com nomes longos isso estoura a stack do make (SIGSEGV no push).
+ifeq ($(origin ZITADEL_PROVISIONER_PAT_EXPIRATION), undefined)
+ZITADEL_PROVISIONER_PAT_EXPIRATION := $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
+endif
+export ZITADEL_PROVISIONER_PAT_EXPIRATION
 COMPOSE     := docker compose --project-directory $(COMPOSE_DIR) --env-file $(ENV_FILE) -f $(COMPOSE_DIR)/docker-compose.yml
 
 help: ## Mostra os alvos disponíveis

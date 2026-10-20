@@ -26,6 +26,19 @@ func requestMessages() []proto.Message {
 	return []proto.Message{
 		&identityv1.CreateTeamRequest{},
 		&identityv1.ListMyTeamsRequest{},
+		&identityv1.GetTeamRequest{},
+		&identityv1.UpdateTeamRequest{},
+		&identityv1.ListMembersRequest{},
+		&identityv1.ListInvitationsRequest{},
+		&identityv1.InviteMemberRequest{},
+		&identityv1.AcceptInvitationRequest{},
+		&identityv1.ChangeMemberRoleRequest{},
+		&identityv1.RemoveMemberRequest{},
+		&identityv1.LeaveTeamRequest{},
+		&identityv1.RevokeInvitationRequest{},
+		&identityv1.InitiateTransferRequest{},
+		&identityv1.AcceptTransferRequest{},
+		&identityv1.CancelTransferRequest{},
 	}
 }
 

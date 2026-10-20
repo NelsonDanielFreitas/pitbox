@@ -100,12 +100,91 @@ func touchesContext(text string) bool {
 		}
 	}
 	spaced := whitespace.ReplaceAllString(strings.NewReplacer("'", " ", `"`, " ", "||", " ").Replace(lower), " ")
-	return setStatements.MatchString(spaced)
+	// Strip SQL comments before looking for SET role: "/* update */ SET role"
+	// must not look like an UPDATE assignment. The other checks keep the comments,
+	// so a comment that names SET LOCAL or set_config is still reported.
+	roleText := whitespace.ReplaceAllString(strings.NewReplacer("'", " ", `"`, " ", "||", " ").Replace(stripSQLComments(lower)), " ")
+	// "set role" is the dangerous form (SET ROLE, SET role = 'x', SET role TO x),
+	// except when it is the SET clause of an UPDATE. The setup text is split at
+	// the last semicolon so a statement before the UPDATE cannot hide it.
+	for _, match := range setRole.FindAllStringIndex(roleText, -1) {
+		prefix := roleText[:match[0]]
+		if i := strings.LastIndex(prefix, ";"); i >= 0 {
+			prefix = prefix[i+1:]
+		}
+		if !updateStmt.MatchString(prefix) {
+			return true
+		}
+	}
+	return setTransaction.MatchString(spaced) || resetStatements.MatchString(spaced)
+}
+
+// stripSQLComments replaces -- and /* */ comments with spaces. It is quote-aware
+// so a "--" inside a string literal is not a comment (the SQL-file rule reads the
+// whole file and cannot parse it).
+func stripSQLComments(text string) string {
+	b := []byte(text)
+	inSingle, inDouble := false, false
+	for i := 0; i < len(b); {
+		switch {
+		case inSingle:
+			if b[i] == '\'' {
+				if i+1 < len(b) && b[i+1] == '\'' {
+					i += 2
+					continue
+				}
+				inSingle = false
+			}
+			i++
+		case inDouble:
+			if b[i] == '"' {
+				if i+1 < len(b) && b[i+1] == '"' {
+					i += 2
+					continue
+				}
+				inDouble = false
+			}
+			i++
+		case b[i] == '\'':
+			inSingle = true
+			i++
+		case b[i] == '"':
+			inDouble = true
+			i++
+		case b[i] == '-' && i+1 < len(b) && b[i+1] == '-':
+			for i < len(b) && b[i] != '\n' {
+				b[i] = ' '
+				i++
+			}
+		case b[i] == '/' && i+1 < len(b) && b[i+1] == '*':
+			b[i], b[i+1] = ' ', ' '
+			i += 2
+			for i+1 < len(b) && (b[i] != '*' || b[i+1] != '/') {
+				b[i] = ' '
+				i++
+			}
+			if i+1 < len(b) {
+				b[i], b[i+1] = ' ', ' '
+				i += 2
+			} else {
+				for i < len(b) {
+					b[i] = ' '
+					i++
+				}
+			}
+		default:
+			i++
+		}
+	}
+	return string(b)
 }
 
 var (
-	whitespace    = regexp.MustCompile(`\s+`)
-	setStatements = regexp.MustCompile(`\bset\b.{0,40}?\b(local|session|role)\b|\breset\b.{0,40}?\b(role|all|session)\b`)
+	whitespace      = regexp.MustCompile(`\s+`)
+	setRole         = regexp.MustCompile(`\bset\b.{0,40}?\brole\b`)
+	setTransaction  = regexp.MustCompile(`\bset\b.{0,40}?\b(local|session)\b`)
+	resetStatements = regexp.MustCompile(`\breset\b.{0,40}?\b(role|all|session)\b`)
+	updateStmt      = regexp.MustCompile(`\bupdate\b`)
 )
 
 // layerDir matches the directories of a module that must not import the database driver.
@@ -183,6 +262,8 @@ func checkSource(path, src string, consts constTable) ([]string, error) {
 			}
 		case pkg == connectName && fn == "Errorf":
 			report(call.Pos(), "connect.Errorf formats text for the client: use connect.NewError with a fixed message and WithCause (ADR 0012)")
+		case (fn == "WithNewTeamTx" || fn == "WithJoinTeamTx") && !strings.HasPrefix(slashPath, "internal/identity/app/"):
+			report(call.Pos(), "%s only from internal/identity/app: a team context without a membership is a reviewed exception (F1-06)", fn)
 		case pkg == connecthttpName && (fn == "WithReadMaxBytes" || fn == "WithSendMaxBytes"):
 			if filepath.ToSlash(path) != limitsFile {
 				report(call.Pos(), "connecthttp.%s only in %s (zero means unlimited; ADR 0012)", fn, limitsFile)

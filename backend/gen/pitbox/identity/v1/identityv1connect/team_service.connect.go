@@ -28,6 +28,10 @@ const (
 	TeamServiceCreateTeamProcedure = "/pitbox.identity.v1.TeamService/CreateTeam"
 	// TeamServiceListMyTeamsProcedure is the procedure name of the TeamService's ListMyTeams RPC.
 	TeamServiceListMyTeamsProcedure = "/pitbox.identity.v1.TeamService/ListMyTeams"
+	// TeamServiceGetTeamProcedure is the procedure name of the TeamService's GetTeam RPC.
+	TeamServiceGetTeamProcedure = "/pitbox.identity.v1.TeamService/GetTeam"
+	// TeamServiceUpdateTeamProcedure is the procedure name of the TeamService's UpdateTeam RPC.
+	TeamServiceUpdateTeamProcedure = "/pitbox.identity.v1.TeamService/UpdateTeam"
 )
 
 var (
@@ -45,16 +49,39 @@ var (
 			Procedure:  TeamServiceListMyTeamsProcedure,
 		}
 	})
+	teamServiceGetTeamSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pitbox_identity_v1_team_service_proto.Services().ByName("TeamService").Methods().ByName("GetTeam"),
+			Procedure:        TeamServiceGetTeamProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	teamServiceUpdateTeamSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_identity_v1_team_service_proto.Services().ByName("TeamService").Methods().ByName("UpdateTeam"),
+			Procedure:  TeamServiceUpdateTeamProcedure,
+		}
+	})
 )
 
 // TeamServiceClient is a client for the pitbox.identity.v1.TeamService service.
 type TeamServiceClient interface {
 	// CreateTeam creates a team and makes the caller its owner.
-	// Idempotent per request_id.
+	// Idempotent per request_id. Requires a strong authentication factor
+	// (passkey or TOTP), even when the session is recent.
 	CreateTeam(context.Context, *v1.CreateTeamRequest) (*v1.CreateTeamResponse, error)
 	// ListMyTeams lists the teams the caller belongs to, with the caller's role
 	// in each one, ordered by a stable cursor.
 	ListMyTeams(context.Context, *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error)
+	// GetTeam returns one team the caller belongs to. A guest gets NOT_FOUND:
+	// team data is only visible to members.
+	GetTeam(context.Context, *v1.GetTeamRequest) (*v1.GetTeamResponse, error)
+	// UpdateTeam changes the team's name, category, club or country. Only the
+	// owner may call it. The version is the one returned by GetTeam/ListMyTeams;
+	// a stale version is ABORTED.
+	UpdateTeam(context.Context, *v1.UpdateTeamRequest) (*v1.UpdateTeamResponse, error)
 }
 
 // NewTeamServiceClient constructs a client for the pitbox.identity.v1.TeamService service. Multiple
@@ -66,11 +93,19 @@ func NewTeamServiceClient(client *connect.Client) TeamServiceClient {
 // TeamServiceHandler is an implementation of the pitbox.identity.v1.TeamService service.
 type TeamServiceHandler interface {
 	// CreateTeam creates a team and makes the caller its owner.
-	// Idempotent per request_id.
+	// Idempotent per request_id. Requires a strong authentication factor
+	// (passkey or TOTP), even when the session is recent.
 	CreateTeam(context.Context, *v1.CreateTeamRequest) (*v1.CreateTeamResponse, error)
 	// ListMyTeams lists the teams the caller belongs to, with the caller's role
 	// in each one, ordered by a stable cursor.
 	ListMyTeams(context.Context, *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error)
+	// GetTeam returns one team the caller belongs to. A guest gets NOT_FOUND:
+	// team data is only visible to members.
+	GetTeam(context.Context, *v1.GetTeamRequest) (*v1.GetTeamResponse, error)
+	// UpdateTeam changes the team's name, category, club or country. Only the
+	// owner may call it. The version is the one returned by GetTeam/ListMyTeams;
+	// a stale version is ABORTED.
+	UpdateTeam(context.Context, *v1.UpdateTeamRequest) (*v1.UpdateTeamResponse, error)
 }
 
 // RegisterTeamServiceHandler registers svc as the pitbox.identity.v1.TeamService implementation on
@@ -80,6 +115,8 @@ func RegisterTeamServiceHandler(server *connect.Server, svc TeamServiceHandler) 
 	server.Register(
 		connect.Method{Spec: teamServiceCreateTeamSpec(), Handler: adapter.createTeam},
 		connect.Method{Spec: teamServiceListMyTeamsSpec(), Handler: adapter.listMyTeams},
+		connect.Method{Spec: teamServiceGetTeamSpec(), Handler: adapter.getTeam},
+		connect.Method{Spec: teamServiceUpdateTeamSpec(), Handler: adapter.updateTeam},
 	)
 }
 
@@ -92,6 +129,14 @@ func (UnimplementedTeamServiceHandler) CreateTeam(context.Context, *v1.CreateTea
 
 func (UnimplementedTeamServiceHandler) ListMyTeams(context.Context, *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.identity.v1.TeamService.ListMyTeams is not implemented")
+}
+
+func (UnimplementedTeamServiceHandler) GetTeam(context.Context, *v1.GetTeamRequest) (*v1.GetTeamResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.identity.v1.TeamService.GetTeam is not implemented")
+}
+
+func (UnimplementedTeamServiceHandler) UpdateTeam(context.Context, *v1.UpdateTeamRequest) (*v1.UpdateTeamResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.identity.v1.TeamService.UpdateTeam is not implemented")
 }
 
 type teamServiceClient struct {
@@ -109,6 +154,22 @@ func (c *teamServiceClient) CreateTeam(ctx context.Context, req *v1.CreateTeamRe
 func (c *teamServiceClient) ListMyTeams(ctx context.Context, req *v1.ListMyTeamsRequest) (*v1.ListMyTeamsResponse, error) {
 	var res v1.ListMyTeamsResponse
 	if err := c.client.CallUnary(ctx, teamServiceListMyTeamsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *teamServiceClient) GetTeam(ctx context.Context, req *v1.GetTeamRequest) (*v1.GetTeamResponse, error) {
+	var res v1.GetTeamResponse
+	if err := c.client.CallUnary(ctx, teamServiceGetTeamSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *teamServiceClient) UpdateTeam(ctx context.Context, req *v1.UpdateTeamRequest) (*v1.UpdateTeamResponse, error) {
+	var res v1.UpdateTeamResponse
+	if err := c.client.CallUnary(ctx, teamServiceUpdateTeamSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -134,6 +195,30 @@ func (h teamServiceHandler) listMyTeams(ctx context.Context, _ connect.Spec, str
 		return err
 	}
 	res, err := h.svc.ListMyTeams(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h teamServiceHandler) getTeam(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTeamRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTeam(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h teamServiceHandler) updateTeam(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateTeamRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateTeam(ctx, &req)
 	if err != nil {
 		return err
 	}

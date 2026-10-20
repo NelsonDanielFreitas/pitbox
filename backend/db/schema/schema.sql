@@ -186,6 +186,7 @@ CREATE TABLE identity.membership (
   PRIMARY KEY (team_id, user_id)
 );
 CREATE INDEX membership_user_idx ON identity.membership (user_id);
+CREATE UNIQUE INDEX membership_one_owner_uq ON identity.membership (team_id) WHERE role = 'owner';
 COMMENT ON TABLE identity.membership IS
   'Fonte de verdade dos papéis; espelhada nas relações do OpenFGA pelo worker (outbox).';
 
@@ -201,9 +202,33 @@ CREATE TABLE identity.invitation (
   revoked_at      timestamptz,
   created_by      uuid        NOT NULL REFERENCES identity.user_account (id),
   created_at      timestamptz NOT NULL DEFAULT now(),
-  CHECK (expires_at <= created_at + interval '7 days')
+  CONSTRAINT invitation_token_hash_len CHECK (length(token_hash) = 32),
+  CONSTRAINT invitation_expires_after_created CHECK (expires_at > created_at),
+  CHECK (expires_at <= created_at + interval '7 days'),
+  CONSTRAINT invitation_team_id_uq UNIQUE (team_id, id)
 );
 CREATE INDEX invitation_team_idx ON identity.invitation (team_id) WHERE accepted_at IS NULL AND revoked_at IS NULL;
+
+CREATE TABLE identity.ownership_transfer (
+  id              uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
+  team_id         uuid        NOT NULL REFERENCES identity.team (id) ON DELETE CASCADE,
+  from_user_id    uuid        NOT NULL,
+  to_user_id      uuid        NOT NULL,
+  created_by      uuid        NOT NULL REFERENCES identity.user_account (id),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  expires_at      timestamptz NOT NULL,
+  confirmed_at    timestamptz,
+  cancelled_at    timestamptz,
+  UNIQUE (team_id, id),
+  FOREIGN KEY (team_id, from_user_id) REFERENCES identity.membership (team_id, user_id) ON DELETE CASCADE,
+  FOREIGN KEY (team_id, to_user_id)   REFERENCES identity.membership (team_id, user_id) ON DELETE CASCADE,
+  CHECK (from_user_id <> to_user_id),
+  CHECK (expires_at > created_at AND expires_at <= created_at + interval '24 hours'),
+  CHECK (confirmed_at IS NULL OR cancelled_at IS NULL)
+);
+CREATE UNIQUE INDEX ownership_transfer_pending_uq
+  ON identity.ownership_transfer (team_id)
+  WHERE confirmed_at IS NULL AND cancelled_at IS NULL;
 
 -- Dispositivos da app (telemóvel/tablet) com chave pública para assinar operações offline.
 CREATE TABLE identity.device_key (
@@ -1653,6 +1678,90 @@ REVOKE ALL ON FUNCTION identity.consume_recovery_code(uuid, bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION identity.consume_recovery_code(uuid, bytea) TO pitbox_app;
 COMMENT ON FUNCTION identity.consume_recovery_code(uuid, bytea) IS
   'Consome um código de recuperação de MFA. SECURITY DEFINER, só pitbox_app.';
+
+CREATE OR REPLACE FUNCTION identity.accept_invitation(p_token_hash bytea)
+  RETURNS TABLE (out_team_id uuid, out_role identity.team_role, out_consumed boolean)
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_user     uuid := app.current_user_id();
+  v_inv      identity.invitation%ROWTYPE;
+  v_email    public.citext;
+  v_role     identity.team_role;
+  v_consumed boolean := false;
+BEGIN
+  IF v_user IS NULL THEN
+    RAISE EXCEPTION 'accept_invitation: no user context' USING ERRCODE = 'PB010';
+  END IF;
+  IF p_token_hash IS NULL OR length(p_token_hash) <> 32 THEN
+    RAISE EXCEPTION 'accept_invitation: invalid invitation' USING ERRCODE = 'PB010';
+  END IF;
+
+  SELECT * INTO v_inv
+    FROM identity.invitation i
+   WHERE i.token_hash = p_token_hash
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'accept_invitation: invalid invitation' USING ERRCODE = 'PB010';
+  END IF;
+
+  -- Já aceite por este utilizador: devolve a pertença existente sem mudar nada.
+  IF v_inv.accepted_at IS NOT NULL THEN
+    IF v_inv.accepted_by = v_user THEN
+      SELECT m.role INTO v_role
+        FROM identity.membership m
+       WHERE m.team_id = v_inv.team_id AND m.user_id = v_user;
+      IF FOUND THEN
+        RETURN QUERY SELECT v_inv.team_id, v_role, false;
+        RETURN;
+      END IF;
+    END IF;
+    RAISE EXCEPTION 'accept_invitation: invalid invitation' USING ERRCODE = 'PB010';
+  END IF;
+
+  IF v_inv.revoked_at IS NOT NULL OR v_inv.expires_at <= now() THEN
+    RAISE EXCEPTION 'accept_invitation: invalid invitation' USING ERRCODE = 'PB010';
+  END IF;
+
+  -- Convite por email: tem de coincidir com o email da conta. Com este
+  -- search_path os operadores de citext não são visíveis: comparar com lower().
+  IF v_inv.email IS NOT NULL THEN
+    SELECT u.email INTO v_email
+      FROM identity.user_account u
+     WHERE u.id = v_user AND u.deleted_at IS NULL;
+    IF NOT FOUND OR v_email IS NULL OR lower(v_email::text) <> lower(v_inv.email::text) THEN
+      RAISE EXCEPTION 'accept_invitation: invalid invitation' USING ERRCODE = 'PB010';
+    END IF;
+  END IF;
+
+  -- Já é membro por outra via: não consome o convite nem muda o papel.
+  SELECT m.role INTO v_role
+    FROM identity.membership m
+   WHERE m.team_id = v_inv.team_id AND m.user_id = v_user;
+  IF FOUND THEN
+    RETURN QUERY SELECT v_inv.team_id, v_role, false;
+    RETURN;
+  END IF;
+
+  UPDATE identity.invitation
+     SET accepted_at = now(), accepted_by = v_user
+   WHERE id = v_inv.id;
+
+  INSERT INTO identity.membership (team_id, user_id, role, invited_by)
+  VALUES (v_inv.team_id, v_user, v_inv.role, v_inv.created_by);
+
+  v_role := v_inv.role;
+  v_consumed := true;
+  RETURN QUERY SELECT v_inv.team_id, v_role, v_consumed;
+END
+$$;
+
+REVOKE ALL ON FUNCTION identity.accept_invitation(bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION identity.accept_invitation(bytea) TO pitbox_app;
+COMMENT ON FUNCTION identity.accept_invitation(bytea) IS
+  'Aceita um convite pelo hash do token, sem contexto de equipa. SECURITY DEFINER, só pitbox_app.';
 
 -- =============================================================================
 -- TimescaleDB: hypertable e retenção da telemetria

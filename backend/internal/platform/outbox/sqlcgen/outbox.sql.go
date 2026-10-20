@@ -83,6 +83,91 @@ func (q *Queries) ClaimOutbox(ctx context.Context, arg ClaimOutboxParams) ([]Cla
 	return items, nil
 }
 
+const claimOutboxKey = `-- name: ClaimOutboxKey :many
+UPDATE platform.outbox o
+SET locked_until = now() + make_interval(secs => $1::double precision),
+    attempts = LEAST(o.attempts + 1, 32767)
+WHERE o.id IN (
+    SELECT o2.id
+      FROM platform.outbox o2
+     WHERE o2.published_at IS NULL
+       AND o2.team_id = $2::uuid
+       AND o2.aggregate = $3
+       AND o2.aggregate_id = $4::uuid
+       AND (o2.locked_until IS NULL OR o2.locked_until < now())
+       AND NOT EXISTS (
+           SELECT 1
+             FROM platform.outbox o3
+            WHERE o3.published_at IS NULL
+              AND o3.team_id = o2.team_id
+              AND o3.aggregate = o2.aggregate
+              AND o3.aggregate_id = o2.aggregate_id
+              AND o3.id < o2.id
+       )
+     ORDER BY o2.id
+     LIMIT $5
+     FOR UPDATE SKIP LOCKED
+)
+RETURNING o.id, o.team_id, o.aggregate, o.aggregate_id, o.event_type, o.payload, o.trace_parent, o.attempts
+`
+
+type ClaimOutboxKeyParams struct {
+	LeaseSeconds float64
+	TeamID       pgtype.UUID
+	Aggregate    string
+	AggregateID  pgtype.UUID
+	BatchSize    int32
+}
+
+type ClaimOutboxKeyRow struct {
+	ID          int64
+	TeamID      pgtype.UUID
+	Aggregate   string
+	AggregateID pgtype.UUID
+	EventType   string
+	Payload     []byte
+	TraceParent pgtype.Text
+	Attempts    int16
+}
+
+// Claim the oldest event of one key only, for the post-commit synchronous drain.
+// The NOT EXISTS keeps the per-key order: if the worker already holds an older
+// event, the drain does nothing and lets the worker finish.
+func (q *Queries) ClaimOutboxKey(ctx context.Context, arg ClaimOutboxKeyParams) ([]ClaimOutboxKeyRow, error) {
+	rows, err := q.db.Query(ctx, claimOutboxKey,
+		arg.LeaseSeconds,
+		arg.TeamID,
+		arg.Aggregate,
+		arg.AggregateID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimOutboxKeyRow
+	for rows.Next() {
+		var i ClaimOutboxKeyRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TeamID,
+			&i.Aggregate,
+			&i.AggregateID,
+			&i.EventType,
+			&i.Payload,
+			&i.TraceParent,
+			&i.Attempts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertOutbox = `-- name: InsertOutbox :exec
 
 INSERT INTO platform.outbox (team_id, aggregate, aggregate_id, event_type, payload, trace_parent)

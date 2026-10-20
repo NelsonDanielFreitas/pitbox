@@ -115,9 +115,17 @@ func TestRLSContextAndTransactionRules(t *testing.T) {
 		{name: "reading the context is fine", path: "internal/platform/audit/team.go", src: "package p\nconst q = `SELECT app.current_team_id(), app.current_user_id()::text`\n"},
 		{name: "ordinary SQL is fine", path: "internal/garage/store/cars.go", src: "package p\nconst q = `SELECT id FROM garage.car WHERE team_id = $1`\n"},
 		{name: "a reviewed exception", path: "internal/x/x.go", src: "package p\n//archtest:allow one-off migration helper reviewed in PR 123\nvar q = \"RESET ALL\"\n"},
+		{name: "SET role = outside an update", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET role = 'pitbox_owner'\"\n"},
+		{name: "SET role TO outside an update", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET role TO pitbox_owner\"\n"},
+		{name: "UPDATE ... SET role is a column", path: "internal/identity/store/repo.go", src: "package p\nvar q = \"UPDATE identity.membership SET role = $1 WHERE team_id = $2\"\n"},
+		{name: "a comment cannot hide SET role", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"/* update */ SET role = 'pitbox_owner'\"\n"},
 
 		// Rule 4: transactions and pools in one place.
 		{name: "Begin outside db", path: "internal/garage/store/cars.go", wantHit: "Begin only in", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},
+		{name: "WithNewTeamTx outside identity/app", path: "internal/garage/app/cars.go", wantHit: "internal/identity/app", src: "package p\nfunc f(db interface{ WithNewTeamTx(int) }) { db.WithNewTeamTx(1) }\n"},
+		{name: "WithJoinTeamTx outside identity/app", path: "internal/garage/app/cars.go", wantHit: "internal/identity/app", src: "package p\nfunc f(db interface{ WithJoinTeamTx(int) }) { db.WithJoinTeamTx(1) }\n"},
+		{name: "WithNewTeamTx in identity/app", path: "internal/identity/app/team.go", src: "package p\nfunc f(db interface{ WithNewTeamTx(int) }) { db.WithNewTeamTx(1) }\n"},
+		{name: "WithJoinTeamTx in identity/app", path: "internal/identity/app/member.go", src: "package p\nfunc f(db interface{ WithJoinTeamTx(int) }) { db.WithJoinTeamTx(1) }\n"},
 		{name: "BeginTx on a field", path: "internal/garage/app/x.go", wantHit: "BeginTx only in", src: "package p\ntype s struct{ pool interface{ BeginTx(int) } }\nfunc (x s) f() { x.pool.BeginTx(1) }\n"},
 		{name: "Begin inside db", path: "internal/platform/db/tx.go", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},
 		{name: "pgxpool in a module", path: "internal/garage/store/cars.go", wantHit: "pgxpool only in", src: "package p\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n"},

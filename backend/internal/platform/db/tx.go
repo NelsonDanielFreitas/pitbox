@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -118,8 +119,69 @@ func (d *DB) WithUserTx(ctx context.Context, user UserID, fn func(ctx context.Co
 	return d.run(ctx, user, nil, false, func(ctx context.Context, tx DBTX, _ Membership) error { return fn(ctx, tx) })
 }
 
-func (d *DB) run(ctx context.Context, user UserID, team *TeamID, readOnly bool, fn func(context.Context, DBTX, Membership) error) (err error) {
+// WithNewTeamTx runs fn with the context of a team that does not exist yet. The
+// id is generated here, never by the caller, and both app.user_id and
+// app.team_id are set before fn runs, so the INSERTs of the team and of its first
+// membership pass the RLS policies. There is no membership to check: fn creates
+// it, and the transaction is all-or-nothing.
+func (d *DB) WithNewTeamTx(ctx context.Context, user UserID, fn func(ctx context.Context, tx DBTX, team TeamID) error) error {
+	if fn == nil || user.IsZero() {
+		return ErrInvalidScope
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return fmt.Errorf("generate team id: %w", err)
+	}
+	team := TeamID(id)
+	return d.runTx(ctx, user, false, func(ctx context.Context, tx DBTX) (Membership, error) {
+		_, err := tx.Exec(ctx, setContextSQL, user.String(), team.String())
+		return Membership{}, err
+	}, func(ctx context.Context, tx DBTX, _ Membership) error {
+		return fn(ctx, tx, team)
+	})
+}
+
+// WithJoinTeamTx runs join with only the user's context (the invitation is read
+// through a narrow SECURITY DEFINER function, because the RLS hides it before
+// the team is known). join returns the team it joined; the team context is then
+// set and the normal membership check runs before fn. fn only runs if the user
+// really is a member, so there is never a team context without membership.
+//
+// Only accepting an invitation uses this variant (F1-06).
+func (d *DB) WithJoinTeamTx(ctx context.Context, user UserID, join func(ctx context.Context, tx DBTX) (TeamID, error), fn func(ctx context.Context, tx DBTX, m Membership) error) error {
+	if join == nil || user.IsZero() {
+		return ErrInvalidScope
+	}
+	return d.runTx(ctx, user, false, func(ctx context.Context, tx DBTX) (Membership, error) {
+		if _, err := tx.Exec(ctx, setContextSQL, user.String(), ""); err != nil {
+			return Membership{}, err
+		}
+		team, err := join(ctx, tx)
+		if err != nil {
+			return Membership{}, err
+		}
+		if team.IsZero() {
+			return Membership{}, ErrInvalidScope
+		}
+		return setContext(ctx, tx, user, &team)
+	}, fn)
+}
+
+func (d *DB) run(ctx context.Context, user UserID, team *TeamID, readOnly bool, fn func(context.Context, DBTX, Membership) error) error {
 	if fn == nil || user.IsZero() || (team != nil && team.IsZero()) {
+		return ErrInvalidScope
+	}
+	return d.runTx(ctx, user, readOnly, func(ctx context.Context, tx DBTX) (Membership, error) {
+		return setContext(ctx, tx, user, team)
+	}, fn)
+}
+
+// runTx is the transaction core: it opens the transaction, lets setup set the
+// RLS context (and, when there is a team, check the membership), runs fn and
+// commits only if both succeed. setup and fn receive the narrow DBTX, never the
+// pgx.Tx.
+func (d *DB) runTx(ctx context.Context, user UserID, readOnly bool, setup func(context.Context, DBTX) (Membership, error), fn func(context.Context, DBTX, Membership) error) (err error) {
+	if setup == nil || fn == nil || user.IsZero() {
 		return ErrInvalidScope
 	}
 
@@ -154,7 +216,7 @@ func (d *DB) run(ctx context.Context, user UserID, team *TeamID, readOnly bool, 
 		}
 	}()
 
-	m, err := setContext(ctx, tx, user, team)
+	m, err := setup(ctx, scope)
 	if err != nil {
 		return err
 	}
@@ -170,7 +232,7 @@ func (d *DB) run(ctx context.Context, user UserID, team *TeamID, readOnly bool, 
 }
 
 // setContext sets the context and, for a team, reads the membership, in one round trip.
-func setContext(ctx context.Context, tx pgx.Tx, user UserID, team *TeamID) (Membership, error) {
+func setContext(ctx context.Context, tx DBTX, user UserID, team *TeamID) (Membership, error) {
 	teamArg, userArg := "", user.String()
 	if team != nil {
 		teamArg = team.String()

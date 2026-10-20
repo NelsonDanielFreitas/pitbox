@@ -10,6 +10,7 @@ import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -89,10 +90,15 @@ type Team struct {
 	Category string  `protobuf:"bytes,3,opt,name=category,proto3" json:"category,omitempty"`
 	Club     *string `protobuf:"bytes,4,opt,name=club,proto3,oneof" json:"club,omitempty"`
 	// ISO 3166-1 alpha-2, upper case.
-	CountryCode   string                 `protobuf:"bytes,5,opt,name=country_code,json=countryCode,proto3" json:"country_code,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CountryCode string                 `protobuf:"bytes,5,opt,name=country_code,json=countryCode,proto3" json:"country_code,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Optimistic concurrency version for UpdateTeam.
+	Version int32 `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
+	// Set while an ownership transfer is pending. The recipient uses
+	// AcceptTransfer to become the new owner.
+	PendingTransfer *OwnershipTransfer `protobuf:"bytes,8,opt,name=pending_transfer,json=pendingTransfer,proto3" json:"pending_transfer,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Team) Reset() {
@@ -167,6 +173,98 @@ func (x *Team) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Team) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *Team) GetPendingTransfer() *OwnershipTransfer {
+	if x != nil {
+		return x.PendingTransfer
+	}
+	return nil
+}
+
+// OwnershipTransfer is a pending two-sided ownership transfer.
+type OwnershipTransfer struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	FromUserId string                 `protobuf:"bytes,2,opt,name=from_user_id,json=fromUserId,proto3" json:"from_user_id,omitempty"`
+	ToUserId   string                 `protobuf:"bytes,3,opt,name=to_user_id,json=toUserId,proto3" json:"to_user_id,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// After this instant the transfer can no longer be accepted.
+	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OwnershipTransfer) Reset() {
+	*x = OwnershipTransfer{}
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OwnershipTransfer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OwnershipTransfer) ProtoMessage() {}
+
+func (x *OwnershipTransfer) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OwnershipTransfer.ProtoReflect.Descriptor instead.
+func (*OwnershipTransfer) Descriptor() ([]byte, []int) {
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *OwnershipTransfer) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OwnershipTransfer) GetFromUserId() string {
+	if x != nil {
+		return x.FromUserId
+	}
+	return ""
+}
+
+func (x *OwnershipTransfer) GetToUserId() string {
+	if x != nil {
+		return x.ToUserId
+	}
+	return ""
+}
+
+func (x *OwnershipTransfer) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *OwnershipTransfer) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
 // TeamMembership is a team together with the caller's role in it.
 type TeamMembership struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -178,7 +276,7 @@ type TeamMembership struct {
 
 func (x *TeamMembership) Reset() {
 	*x = TeamMembership{}
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[1]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -190,7 +288,7 @@ func (x *TeamMembership) String() string {
 func (*TeamMembership) ProtoMessage() {}
 
 func (x *TeamMembership) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[1]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -203,7 +301,7 @@ func (x *TeamMembership) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TeamMembership.ProtoReflect.Descriptor instead.
 func (*TeamMembership) Descriptor() ([]byte, []int) {
-	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{1}
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *TeamMembership) GetTeam() *Team {
@@ -240,7 +338,7 @@ type CreateTeamRequest struct {
 
 func (x *CreateTeamRequest) Reset() {
 	*x = CreateTeamRequest{}
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[2]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -252,7 +350,7 @@ func (x *CreateTeamRequest) String() string {
 func (*CreateTeamRequest) ProtoMessage() {}
 
 func (x *CreateTeamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[2]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -265,7 +363,7 @@ func (x *CreateTeamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTeamRequest.ProtoReflect.Descriptor instead.
 func (*CreateTeamRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{2}
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateTeamRequest) GetRequestId() string {
@@ -312,7 +410,7 @@ type CreateTeamResponse struct {
 
 func (x *CreateTeamResponse) Reset() {
 	*x = CreateTeamResponse{}
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[3]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -324,7 +422,7 @@ func (x *CreateTeamResponse) String() string {
 func (*CreateTeamResponse) ProtoMessage() {}
 
 func (x *CreateTeamResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[3]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -337,7 +435,7 @@ func (x *CreateTeamResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTeamResponse.ProtoReflect.Descriptor instead.
 func (*CreateTeamResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{3}
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateTeamResponse) GetTeam() *Team {
@@ -360,7 +458,7 @@ type ListMyTeamsRequest struct {
 
 func (x *ListMyTeamsRequest) Reset() {
 	*x = ListMyTeamsRequest{}
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[4]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +470,7 @@ func (x *ListMyTeamsRequest) String() string {
 func (*ListMyTeamsRequest) ProtoMessage() {}
 
 func (x *ListMyTeamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[4]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +483,7 @@ func (x *ListMyTeamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyTeamsRequest.ProtoReflect.Descriptor instead.
 func (*ListMyTeamsRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{4}
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListMyTeamsRequest) GetPageSize() int32 {
@@ -413,7 +511,7 @@ type ListMyTeamsResponse struct {
 
 func (x *ListMyTeamsResponse) Reset() {
 	*x = ListMyTeamsResponse{}
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[5]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -425,7 +523,7 @@ func (x *ListMyTeamsResponse) String() string {
 func (*ListMyTeamsResponse) ProtoMessage() {}
 
 func (x *ListMyTeamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[5]
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -438,7 +536,7 @@ func (x *ListMyTeamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyTeamsResponse.ProtoReflect.Descriptor instead.
 func (*ListMyTeamsResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{5}
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListMyTeamsResponse) GetTeams() []*TeamMembership {
@@ -455,11 +553,248 @@ func (x *ListMyTeamsResponse) GetNextPageToken() string {
 	return ""
 }
 
+type GetTeamRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TeamId        string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTeamRequest) Reset() {
+	*x = GetTeamRequest{}
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTeamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTeamRequest) ProtoMessage() {}
+
+func (x *GetTeamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTeamRequest.ProtoReflect.Descriptor instead.
+func (*GetTeamRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetTeamRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+type GetTeamResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Team          *Team                  `protobuf:"bytes,1,opt,name=team,proto3" json:"team,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTeamResponse) Reset() {
+	*x = GetTeamResponse{}
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTeamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTeamResponse) ProtoMessage() {}
+
+func (x *GetTeamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTeamResponse.ProtoReflect.Descriptor instead.
+func (*GetTeamResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GetTeamResponse) GetTeam() *Team {
+	if x != nil {
+		return x.Team
+	}
+	return nil
+}
+
+type UpdateTeamRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TeamId string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// Idempotency key; kept with the audit entry of the change.
+	RequestId string `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Version read by the client. A stale version is ABORTED.
+	Version int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// Paths to update. Only name, category, club and country_code are allowed.
+	// A path in the mask with the field absent in the request clears the field;
+	// only club may be cleared (the others are required).
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,4,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
+	Name          *string                `protobuf:"bytes,5,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Category      *string                `protobuf:"bytes,6,opt,name=category,proto3,oneof" json:"category,omitempty"`
+	Club          *string                `protobuf:"bytes,7,opt,name=club,proto3,oneof" json:"club,omitempty"`
+	CountryCode   *string                `protobuf:"bytes,8,opt,name=country_code,json=countryCode,proto3,oneof" json:"country_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTeamRequest) Reset() {
+	*x = UpdateTeamRequest{}
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTeamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTeamRequest) ProtoMessage() {}
+
+func (x *UpdateTeamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTeamRequest.ProtoReflect.Descriptor instead.
+func (*UpdateTeamRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UpdateTeamRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *UpdateTeamRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *UpdateTeamRequest) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *UpdateTeamRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
+	}
+	return nil
+}
+
+func (x *UpdateTeamRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateTeamRequest) GetCategory() string {
+	if x != nil && x.Category != nil {
+		return *x.Category
+	}
+	return ""
+}
+
+func (x *UpdateTeamRequest) GetClub() string {
+	if x != nil && x.Club != nil {
+		return *x.Club
+	}
+	return ""
+}
+
+func (x *UpdateTeamRequest) GetCountryCode() string {
+	if x != nil && x.CountryCode != nil {
+		return *x.CountryCode
+	}
+	return ""
+}
+
+type UpdateTeamResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Team          *Team                  `protobuf:"bytes,1,opt,name=team,proto3" json:"team,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTeamResponse) Reset() {
+	*x = UpdateTeamResponse{}
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTeamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTeamResponse) ProtoMessage() {}
+
+func (x *UpdateTeamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_identity_v1_team_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTeamResponse.ProtoReflect.Descriptor instead.
+func (*UpdateTeamResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_identity_v1_team_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UpdateTeamResponse) GetTeam() *Team {
+	if x != nil {
+		return x.Team
+	}
+	return nil
+}
+
 var File_pitbox_identity_v1_team_service_proto protoreflect.FileDescriptor
 
 const file_pitbox_identity_v1_team_service_proto_rawDesc = "" +
 	"\n" +
-	"%pitbox/identity/v1/team_service.proto\x12\x12pitbox.identity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x01\n" +
+	"%pitbox/identity/v1/team_service.proto\x12\x12pitbox.identity.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb2\x02\n" +
 	"\x04Team\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -467,8 +802,20 @@ const file_pitbox_identity_v1_team_service_proto_rawDesc = "" +
 	"\x04club\x18\x04 \x01(\tH\x00R\x04club\x88\x01\x01\x12!\n" +
 	"\fcountry_code\x18\x05 \x01(\tR\vcountryCode\x129\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtB\a\n" +
-	"\x05_club\"p\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
+	"\aversion\x18\a \x01(\x05R\aversion\x12P\n" +
+	"\x10pending_transfer\x18\b \x01(\v2%.pitbox.identity.v1.OwnershipTransferR\x0fpendingTransferB\a\n" +
+	"\x05_club\"\xd9\x01\n" +
+	"\x11OwnershipTransfer\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
+	"\ffrom_user_id\x18\x02 \x01(\tR\n" +
+	"fromUserId\x12\x1c\n" +
+	"\n" +
+	"to_user_id\x18\x03 \x01(\tR\btoUserId\x129\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"p\n" +
 	"\x0eTeamMembership\x12,\n" +
 	"\x04team\x18\x01 \x01(\v2\x18.pitbox.identity.v1.TeamR\x04team\x120\n" +
 	"\x04role\x18\x02 \x01(\x0e2\x1c.pitbox.identity.v1.TeamRoleR\x04role\"\xe3\x01\n" +
@@ -490,17 +837,42 @@ const file_pitbox_identity_v1_team_service_proto_rawDesc = "" +
 	"page_token\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"w\n" +
 	"\x13ListMyTeamsResponse\x128\n" +
 	"\x05teams\x18\x01 \x03(\v2\".pitbox.identity.v1.TeamMembershipR\x05teams\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*|\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"3\n" +
+	"\x0eGetTeamRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\"?\n" +
+	"\x0fGetTeamResponse\x12,\n" +
+	"\x04team\x18\x01 \x01(\v2\x18.pitbox.identity.v1.TeamR\x04team\"\xa4\x03\n" +
+	"\x11UpdateTeamRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12!\n" +
+	"\aversion\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\aversion\x12C\n" +
+	"\vupdate_mask\x18\x04 \x01(\v2\x1a.google.protobuf.FieldMaskB\x06\xbaH\x03\xc8\x01\x01R\n" +
+	"updateMask\x12\"\n" +
+	"\x04name\x18\x05 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18PH\x00R\x04name\x88\x01\x01\x12(\n" +
+	"\bcategory\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x18(H\x01R\bcategory\x88\x01\x01\x12\"\n" +
+	"\x04club\x18\a \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18PH\x02R\x04club\x88\x01\x01\x129\n" +
+	"\fcountry_code\x18\b \x01(\tB\x11\xbaH\x0er\f2\n" +
+	"^[A-Z]{2}$H\x03R\vcountryCode\x88\x01\x01B\a\n" +
+	"\x05_nameB\v\n" +
+	"\t_categoryB\a\n" +
+	"\x05_clubB\x0f\n" +
+	"\r_country_code\"B\n" +
+	"\x12UpdateTeamResponse\x12,\n" +
+	"\x04team\x18\x01 \x01(\v2\x18.pitbox.identity.v1.TeamR\x04team*|\n" +
 	"\bTeamRole\x12\x19\n" +
 	"\x15TEAM_ROLE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fTEAM_ROLE_OWNER\x10\x01\x12\x16\n" +
 	"\x12TEAM_ROLE_MECHANIC\x10\x02\x12\x13\n" +
 	"\x0fTEAM_ROLE_PILOT\x10\x03\x12\x13\n" +
-	"\x0fTEAM_ROLE_GUEST\x10\x042\xca\x01\n" +
+	"\x0fTEAM_ROLE_GUEST\x10\x042\x80\x03\n" +
 	"\vTeamService\x12[\n" +
 	"\n" +
 	"CreateTeam\x12%.pitbox.identity.v1.CreateTeamRequest\x1a&.pitbox.identity.v1.CreateTeamResponse\x12^\n" +
-	"\vListMyTeams\x12&.pitbox.identity.v1.ListMyTeamsRequest\x1a'.pitbox.identity.v1.ListMyTeamsResponseB\xe5\x01\n" +
+	"\vListMyTeams\x12&.pitbox.identity.v1.ListMyTeamsRequest\x1a'.pitbox.identity.v1.ListMyTeamsResponse\x12W\n" +
+	"\aGetTeam\x12\".pitbox.identity.v1.GetTeamRequest\x1a#.pitbox.identity.v1.GetTeamResponse\"\x03\x90\x02\x01\x12[\n" +
+	"\n" +
+	"UpdateTeam\x12%.pitbox.identity.v1.UpdateTeamRequest\x1a&.pitbox.identity.v1.UpdateTeamResponseB\xe5\x01\n" +
 	"\x16com.pitbox.identity.v1B\x10TeamServiceProtoP\x01ZOgithub.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1;identityv1\xa2\x02\x03PIX\xaa\x02\x12Pitbox.Identity.V1\xca\x02\x12Pitbox\\Identity\\V1\xe2\x02\x1ePitbox\\Identity\\V1\\GPBMetadata\xea\x02\x14Pitbox::Identity::V1b\x06proto3"
 
 var (
@@ -516,32 +888,48 @@ func file_pitbox_identity_v1_team_service_proto_rawDescGZIP() []byte {
 }
 
 var file_pitbox_identity_v1_team_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pitbox_identity_v1_team_service_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_pitbox_identity_v1_team_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_pitbox_identity_v1_team_service_proto_goTypes = []any{
 	(TeamRole)(0),                 // 0: pitbox.identity.v1.TeamRole
 	(*Team)(nil),                  // 1: pitbox.identity.v1.Team
-	(*TeamMembership)(nil),        // 2: pitbox.identity.v1.TeamMembership
-	(*CreateTeamRequest)(nil),     // 3: pitbox.identity.v1.CreateTeamRequest
-	(*CreateTeamResponse)(nil),    // 4: pitbox.identity.v1.CreateTeamResponse
-	(*ListMyTeamsRequest)(nil),    // 5: pitbox.identity.v1.ListMyTeamsRequest
-	(*ListMyTeamsResponse)(nil),   // 6: pitbox.identity.v1.ListMyTeamsResponse
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*OwnershipTransfer)(nil),     // 2: pitbox.identity.v1.OwnershipTransfer
+	(*TeamMembership)(nil),        // 3: pitbox.identity.v1.TeamMembership
+	(*CreateTeamRequest)(nil),     // 4: pitbox.identity.v1.CreateTeamRequest
+	(*CreateTeamResponse)(nil),    // 5: pitbox.identity.v1.CreateTeamResponse
+	(*ListMyTeamsRequest)(nil),    // 6: pitbox.identity.v1.ListMyTeamsRequest
+	(*ListMyTeamsResponse)(nil),   // 7: pitbox.identity.v1.ListMyTeamsResponse
+	(*GetTeamRequest)(nil),        // 8: pitbox.identity.v1.GetTeamRequest
+	(*GetTeamResponse)(nil),       // 9: pitbox.identity.v1.GetTeamResponse
+	(*UpdateTeamRequest)(nil),     // 10: pitbox.identity.v1.UpdateTeamRequest
+	(*UpdateTeamResponse)(nil),    // 11: pitbox.identity.v1.UpdateTeamResponse
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil), // 13: google.protobuf.FieldMask
 }
 var file_pitbox_identity_v1_team_service_proto_depIdxs = []int32{
-	7, // 0: pitbox.identity.v1.Team.created_at:type_name -> google.protobuf.Timestamp
-	1, // 1: pitbox.identity.v1.TeamMembership.team:type_name -> pitbox.identity.v1.Team
-	0, // 2: pitbox.identity.v1.TeamMembership.role:type_name -> pitbox.identity.v1.TeamRole
-	1, // 3: pitbox.identity.v1.CreateTeamResponse.team:type_name -> pitbox.identity.v1.Team
-	2, // 4: pitbox.identity.v1.ListMyTeamsResponse.teams:type_name -> pitbox.identity.v1.TeamMembership
-	3, // 5: pitbox.identity.v1.TeamService.CreateTeam:input_type -> pitbox.identity.v1.CreateTeamRequest
-	5, // 6: pitbox.identity.v1.TeamService.ListMyTeams:input_type -> pitbox.identity.v1.ListMyTeamsRequest
-	4, // 7: pitbox.identity.v1.TeamService.CreateTeam:output_type -> pitbox.identity.v1.CreateTeamResponse
-	6, // 8: pitbox.identity.v1.TeamService.ListMyTeams:output_type -> pitbox.identity.v1.ListMyTeamsResponse
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	12, // 0: pitbox.identity.v1.Team.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 1: pitbox.identity.v1.Team.pending_transfer:type_name -> pitbox.identity.v1.OwnershipTransfer
+	12, // 2: pitbox.identity.v1.OwnershipTransfer.created_at:type_name -> google.protobuf.Timestamp
+	12, // 3: pitbox.identity.v1.OwnershipTransfer.expires_at:type_name -> google.protobuf.Timestamp
+	1,  // 4: pitbox.identity.v1.TeamMembership.team:type_name -> pitbox.identity.v1.Team
+	0,  // 5: pitbox.identity.v1.TeamMembership.role:type_name -> pitbox.identity.v1.TeamRole
+	1,  // 6: pitbox.identity.v1.CreateTeamResponse.team:type_name -> pitbox.identity.v1.Team
+	3,  // 7: pitbox.identity.v1.ListMyTeamsResponse.teams:type_name -> pitbox.identity.v1.TeamMembership
+	1,  // 8: pitbox.identity.v1.GetTeamResponse.team:type_name -> pitbox.identity.v1.Team
+	13, // 9: pitbox.identity.v1.UpdateTeamRequest.update_mask:type_name -> google.protobuf.FieldMask
+	1,  // 10: pitbox.identity.v1.UpdateTeamResponse.team:type_name -> pitbox.identity.v1.Team
+	4,  // 11: pitbox.identity.v1.TeamService.CreateTeam:input_type -> pitbox.identity.v1.CreateTeamRequest
+	6,  // 12: pitbox.identity.v1.TeamService.ListMyTeams:input_type -> pitbox.identity.v1.ListMyTeamsRequest
+	8,  // 13: pitbox.identity.v1.TeamService.GetTeam:input_type -> pitbox.identity.v1.GetTeamRequest
+	10, // 14: pitbox.identity.v1.TeamService.UpdateTeam:input_type -> pitbox.identity.v1.UpdateTeamRequest
+	5,  // 15: pitbox.identity.v1.TeamService.CreateTeam:output_type -> pitbox.identity.v1.CreateTeamResponse
+	7,  // 16: pitbox.identity.v1.TeamService.ListMyTeams:output_type -> pitbox.identity.v1.ListMyTeamsResponse
+	9,  // 17: pitbox.identity.v1.TeamService.GetTeam:output_type -> pitbox.identity.v1.GetTeamResponse
+	11, // 18: pitbox.identity.v1.TeamService.UpdateTeam:output_type -> pitbox.identity.v1.UpdateTeamResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_pitbox_identity_v1_team_service_proto_init() }
@@ -550,14 +938,15 @@ func file_pitbox_identity_v1_team_service_proto_init() {
 		return
 	}
 	file_pitbox_identity_v1_team_service_proto_msgTypes[0].OneofWrappers = []any{}
-	file_pitbox_identity_v1_team_service_proto_msgTypes[2].OneofWrappers = []any{}
+	file_pitbox_identity_v1_team_service_proto_msgTypes[3].OneofWrappers = []any{}
+	file_pitbox_identity_v1_team_service_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pitbox_identity_v1_team_service_proto_rawDesc), len(file_pitbox_identity_v1_team_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

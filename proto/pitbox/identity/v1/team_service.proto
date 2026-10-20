@@ -3,6 +3,7 @@ syntax = "proto3";
 package pitbox.identity.v1;
 
 import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
 // TeamService manages teams and the caller's memberships.
@@ -10,15 +11,28 @@ import "google/protobuf/timestamp.proto";
 // Authorization: every RPC runs as the authenticated principal; the caller's
 // identity never travels in a request message. A team the caller is not a
 // member of is reported as NOT_FOUND, never PERMISSION_DENIED, so team ids
-// cannot be probed.
+// cannot be probed. A member without the role gets PERMISSION_DENIED; a stale
+// version is ABORTED and the last-owner/limit rules are FAILED_PRECONDITION.
 service TeamService {
   // CreateTeam creates a team and makes the caller its owner.
-  // Idempotent per request_id.
+  // Idempotent per request_id. Requires a strong authentication factor
+  // (passkey or TOTP), even when the session is recent.
   rpc CreateTeam(CreateTeamRequest) returns (CreateTeamResponse);
 
   // ListMyTeams lists the teams the caller belongs to, with the caller's role
   // in each one, ordered by a stable cursor.
   rpc ListMyTeams(ListMyTeamsRequest) returns (ListMyTeamsResponse);
+
+  // GetTeam returns one team the caller belongs to. A guest gets NOT_FOUND:
+  // team data is only visible to members.
+  rpc GetTeam(GetTeamRequest) returns (GetTeamResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // UpdateTeam changes the team's name, category, club or country. Only the
+  // owner may call it. The version is the one returned by GetTeam/ListMyTeams;
+  // a stale version is ABORTED.
+  rpc UpdateTeam(UpdateTeamRequest) returns (UpdateTeamResponse);
 }
 
 // TeamRole is the role of a user inside a team. Mirrors identity.team_role.
@@ -41,6 +55,21 @@ message Team {
   // ISO 3166-1 alpha-2, upper case.
   string country_code = 5;
   google.protobuf.Timestamp created_at = 6;
+  // Optimistic concurrency version for UpdateTeam.
+  int32 version = 7;
+  // Set while an ownership transfer is pending. The recipient uses
+  // AcceptTransfer to become the new owner.
+  OwnershipTransfer pending_transfer = 8;
+}
+
+// OwnershipTransfer is a pending two-sided ownership transfer.
+message OwnershipTransfer {
+  string id = 1;
+  string from_user_id = 2;
+  string to_user_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  // After this instant the transfer can no longer be accepted.
+  google.protobuf.Timestamp expires_at = 5;
 }
 
 // TeamMembership is a team together with the caller's role in it.
@@ -94,4 +123,45 @@ message ListMyTeamsResponse {
   repeated TeamMembership teams = 1;
   // Empty when there are no more pages.
   string next_page_token = 2;
+}
+
+message GetTeamRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetTeamResponse {
+  Team team = 1;
+}
+
+message UpdateTeamRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+
+  // Idempotency key; kept with the audit entry of the change.
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+
+  // Version read by the client. A stale version is ABORTED.
+  int32 version = 3 [(buf.validate.field).int32.gte = 1];
+
+  // Paths to update. Only name, category, club and country_code are allowed.
+  // A path in the mask with the field absent in the request clears the field;
+  // only club may be cleared (the others are required).
+  google.protobuf.FieldMask update_mask = 4 [(buf.validate.field).required = true];
+
+  optional string name = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+
+  optional string category = 6 [(buf.validate.field).string.max_len = 40];
+
+  optional string club = 7 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+
+  optional string country_code = 8 [(buf.validate.field).string.pattern = "^[A-Z]{2}$"];
+}
+
+message UpdateTeamResponse {
+  Team team = 1;
 }

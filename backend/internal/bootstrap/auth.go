@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/valkey-io/valkey-go"
 	"go.opentelemetry.io/otel"
 
@@ -26,6 +27,9 @@ type authStack struct {
 	interceptor connect.ServerInterceptor
 	mount       func(mux *http.ServeMux)
 	close       func()
+	// pool is the application pool, shared with the identity module. The BFF
+	// closes it at shutdown.
+	pool *pgxpool.Pool
 }
 
 // newAuthStack wires the login flow (ADR 0013): the Valkey session store, the OIDC provider
@@ -97,6 +101,7 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 		// No public procedures yet: every RPC needs a session.
 		interceptor: auth.Interceptor(authenticator, origin),
 		mount:       handler.Mount,
+		pool:        pool,
 		close: func() {
 			pool.Close()
 		},

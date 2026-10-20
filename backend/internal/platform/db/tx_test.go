@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -694,4 +695,123 @@ func TestKnownLimitTheContextCanBeRewrittenBySQLRunningAsTheApplicationRole(t *t
 	if err != nil {
 		t.Fatalf("WithTeamReadTx: %v", err)
 	}
+}
+
+// F1-06: team creation needs a team context before the membership exists.
+func TestNewTeamTx(t *testing.T) {
+	t.Parallel()
+	pg, _, d := setup(t)
+	ctx := context.Background()
+	u := user(t, idUserC) // belongs to no team
+
+	var generated db.TeamID
+	err := d.WithNewTeamTx(ctx, u, func(ctx context.Context, tx db.DBTX, team db.TeamID) error {
+		generated = team
+		var ctxUser, ctxTeam string
+		if err := tx.QueryRow(ctx, `SELECT app.current_user_id()::text, app.current_team_id()::text`).Scan(&ctxUser, &ctxTeam); err != nil {
+			return err
+		}
+		if ctxUser != idUserC || ctxTeam != team.String() {
+			t.Errorf("context = user %q team %q, want %q/%q", ctxUser, ctxTeam, idUserC, team.String())
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO identity.team (id, name, created_by) VALUES ($1, 'Nova', $2)`, team.String(), idUserC); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO identity.membership (team_id, user_id, role) VALUES ($1, $2, 'owner')`, team.String(), idUserC)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("WithNewTeamTx: %v", err)
+	}
+
+	v, err := uuid.Parse(generated.String())
+	if err != nil || v.Version() != 7 {
+		t.Errorf("generated team id = %q (err %v), want a UUIDv7", generated, err)
+	}
+	if got := pg.Exec(t, `SELECT count(*) FROM identity.membership WHERE team_id = '`+generated.String()+`' AND user_id = '`+idUserC+`' AND role = 'owner'`); got != "1" {
+		t.Errorf("membership rows = %s, want 1", got)
+	}
+
+	// The caller cannot choose the id: two calls produce two different teams.
+	var second db.TeamID
+	if err := d.WithNewTeamTx(ctx, u, func(_ context.Context, _ db.DBTX, team db.TeamID) error {
+		second = team
+		return errors.New("rollback")
+	}); err == nil {
+		t.Fatal("the failing call must return its error")
+	}
+	if second == generated || second.IsZero() {
+		t.Errorf("second generated id = %q, want a different non-zero id", second)
+	}
+}
+
+// F1-06: accepting an invitation sets the team context only after the join and
+// still requires a real membership.
+func TestJoinTeamTx(t *testing.T) {
+	t.Parallel()
+	pg, _, d := setup(t)
+	ctx := context.Background()
+
+	t.Run("member", func(t *testing.T) {
+		called := false
+		err := d.WithJoinTeamTx(ctx, user(t, idUserB), func(context.Context, db.DBTX) (db.TeamID, error) {
+			return team(t, idTeamB), nil
+		}, func(ctx context.Context, tx db.DBTX, m db.Membership) error {
+			called = true
+			if m.Role != "mechanic" {
+				t.Errorf("role = %q, want mechanic", m.Role)
+			}
+			var ctxTeam string
+			if err := tx.QueryRow(ctx, `SELECT app.current_team_id()::text`).Scan(&ctxTeam); err != nil {
+				return err
+			}
+			if ctxTeam != idTeamB {
+				t.Errorf("team context = %q, want %q", ctxTeam, idTeamB)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("WithJoinTeamTx: %v", err)
+		}
+		if !called {
+			t.Error("fn was not called")
+		}
+	})
+
+	t.Run("not a member", func(t *testing.T) {
+		called := false
+		err := d.WithJoinTeamTx(ctx, user(t, idUserC), func(context.Context, db.DBTX) (db.TeamID, error) {
+			return team(t, idTeamA), nil
+		}, func(context.Context, db.DBTX, db.Membership) error {
+			called = true
+			return nil
+		})
+		if !errors.Is(err, db.ErrNotMember) || !errors.Is(err, apperr.ErrNotFound) {
+			t.Fatalf("err = %v, want ErrNotMember wrapping ErrNotFound", err)
+		}
+		if called {
+			t.Error("fn ran without a membership")
+		}
+	})
+
+	t.Run("join error rolls back", func(t *testing.T) {
+		sentinel := errors.New("join failed")
+		agg := "01900000-0000-7000-8000-00000000aaaa"
+		err := d.WithJoinTeamTx(ctx, user(t, idUserB), func(ctx context.Context, tx db.DBTX) (db.TeamID, error) {
+			if _, err := tx.Exec(ctx, `INSERT INTO platform.outbox (team_id, aggregate, aggregate_id, event_type, payload)
+				VALUES ($1, 'test.rollback', $2, 'test.event', '{}'::jsonb)`, idTeamB, agg); err != nil {
+				return db.TeamID{}, err
+			}
+			return db.TeamID{}, sentinel
+		}, func(context.Context, db.DBTX, db.Membership) error {
+			t.Error("fn must not run after a failed join")
+			return nil
+		})
+		if !errors.Is(err, sentinel) {
+			t.Fatalf("err = %v, want the join error", err)
+		}
+		if got := pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM platform.outbox WHERE aggregate_id = '%s'`, agg)); got != "0" {
+			t.Errorf("outbox rows = %s after rollback, want 0", got)
+		}
+	})
 }

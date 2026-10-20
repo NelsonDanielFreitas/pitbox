@@ -177,5 +177,85 @@ DO $$ DECLARE a uuid := app.uuid_v7(); b uuid; BEGIN
   ASSERT substr(a::text, 15, 1) = '7', 'versão 7';
 END $$;
 
+-- ---------- F1-06: membros, convites e transferência ----------
+-- Um segundo e um terceiro utilizador na equipa A (para os testes de dono e transferência).
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
+SET LOCAL app.user_id = '01900000-0000-7000-8000-0000000000ba';
+INSERT INTO identity.user_account (id, idp_subject, email, display_name)
+VALUES (app.current_user_id(), 'sub-ba', 'mecanico-ba@a.pt', 'Mecânico BA');
+SET LOCAL app.user_id = '01900000-0000-7000-8000-0000000000bb';
+INSERT INTO identity.user_account (id, idp_subject, email, display_name)
+VALUES (app.current_user_id(), 'sub-bb', 'piloto-bb@a.pt', 'Piloto BB');
+SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000a';
+INSERT INTO identity.membership (team_id, user_id, role) VALUES
+  (app.current_team_id(), '01900000-0000-7000-8000-0000000000ba', 'mechanic'),
+  (app.current_team_id(), '01900000-0000-7000-8000-0000000000bb', 'pilot');
+
+-- Um só dono por equipa, garantido na base.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO identity.membership (team_id, user_id, role)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000ba', 'owner');
+    RAISE EXCEPTION 'FALHOU: dois donos aceites';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+
+-- Convite: token_hash tem de ter 32 bytes; expires_at > created_at; (team_id,id) único.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO identity.invitation (team_id, role, token_hash, expires_at, created_by)
+    VALUES (app.current_team_id(), 'pilot', decode(repeat('11', 31), 'hex'), now() + interval '1 day', app.current_user_id());
+    RAISE EXCEPTION 'FALHOU: token_hash curto aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO identity.invitation (team_id, role, token_hash, expires_at, created_by)
+    VALUES (app.current_team_id(), 'pilot', decode(repeat('12', 32), 'hex'), now() - interval '1 second', app.current_user_id());
+    RAISE EXCEPTION 'FALHOU: convite já expirado aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  INSERT INTO identity.invitation (team_id, role, token_hash, expires_at, created_by)
+  VALUES (app.current_team_id(), 'pilot', decode(repeat('13', 32), 'hex'), now() + interval '1 day', app.current_user_id());
+END $$;
+
+-- Transferência: from <> to, validade <= 24 h e um só pendente por equipa.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO identity.ownership_transfer (team_id, from_user_id, to_user_id, created_by, expires_at)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000ba', '01900000-0000-7000-8000-0000000000ba',
+            app.current_user_id(), now() + interval '1 hour');
+    RAISE EXCEPTION 'FALHOU: transferência para o próprio aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO identity.ownership_transfer (team_id, from_user_id, to_user_id, created_by, expires_at)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000ba', '01900000-0000-7000-8000-0000000000bb',
+            app.current_user_id(), now() + interval '25 hours');
+    RAISE EXCEPTION 'FALHOU: transferência com mais de 24 h aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  INSERT INTO identity.ownership_transfer (team_id, from_user_id, to_user_id, created_by, expires_at)
+  VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000ba', '01900000-0000-7000-8000-0000000000bb',
+          app.current_user_id(), now() + interval '1 hour');
+  BEGIN
+    INSERT INTO identity.ownership_transfer (team_id, from_user_id, to_user_id, created_by, expires_at)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000bb', '01900000-0000-7000-8000-0000000000ba',
+            app.current_user_id(), now() + interval '1 hour');
+    RAISE EXCEPTION 'FALHOU: duas transferências pendentes aceites';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+  UPDATE identity.ownership_transfer SET cancelled_at = now()
+   WHERE team_id = app.current_team_id() AND confirmed_at IS NULL AND cancelled_at IS NULL;
+  INSERT INTO identity.ownership_transfer (team_id, from_user_id, to_user_id, created_by, expires_at)
+  VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000ba', '01900000-0000-7000-8000-0000000000bb',
+          app.current_user_id(), now() + interval '1 hour');
+END $$;
+
+-- accept_invitation: sem app.user_id falha fechado com o mesmo SQLSTATE das recusas.
+RESET app.user_id;
+DO $$ BEGIN
+  BEGIN
+    PERFORM identity.accept_invitation(decode(repeat('00', 32), 'hex'));
+    RAISE EXCEPTION 'FALHOU: accept_invitation sem contexto';
+  EXCEPTION WHEN SQLSTATE 'PB010' THEN NULL; END;
+END $$;
+SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000a';
+
+
 \echo 'Todos os testes passaram.'
 ROLLBACK;

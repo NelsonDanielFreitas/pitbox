@@ -257,5 +257,48 @@ END $$;
 SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000a';
 
 
+-- ---------- F1-07a: escala e motorização ----------
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
+SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000a';
+
+-- Sem os campos, o carro fica 1/8/nitro.
+INSERT INTO garage.car (id, team_id, make, model)
+VALUES ('01900000-0000-7000-8000-0000000000c3', app.current_team_id(), 'Xray', 'XB8');
+DO $$ BEGIN
+  ASSERT (SELECT scale FROM garage.car WHERE id = '01900000-0000-7000-8000-0000000000c3') = '1/8', 'scale por omissão';
+  ASSERT (SELECT powertrain FROM garage.car WHERE id = '01900000-0000-7000-8000-0000000000c3') = 'nitro', 'powertrain por omissão';
+END $$;
+
+-- Escala/motorização inexistente é recusada pela FK.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO garage.car (id, team_id, make, model, scale)
+    VALUES ('01900000-0000-7000-8000-0000000000c4', app.current_team_id(), 'X', 'Y', '1/100');
+    RAISE EXCEPTION 'FALHOU: escala inexistente aceite';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO garage.car (id, team_id, make, model, powertrain)
+    VALUES ('01900000-0000-7000-8000-0000000000c5', app.current_team_id(), 'X', 'Y', 'nuclear');
+    RAISE EXCEPTION 'FALHOU: motorização inexistente aceite';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+END $$;
+
+-- A aplicação não escreve nos catálogos globais.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO garage.scale (code, name) VALUES ('1/16', '1/16');
+    RAISE EXCEPTION 'FALHOU: app escreveu em garage.scale';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    UPDATE garage.scale SET active = false;
+    RAISE EXCEPTION 'FALHOU: app atualizou garage.scale';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN
+    DELETE FROM garage.powertrain;
+    RAISE EXCEPTION 'FALHOU: app apagou garage.powertrain';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
+
 \echo 'Todos os testes passaram.'
 ROLLBACK;

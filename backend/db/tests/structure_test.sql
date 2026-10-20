@@ -2,9 +2,9 @@
 -- Correm como pitbox_api (o papel real da aplicação) numa base já migrada.
 --   psql -v ON_ERROR_STOP=1 -U pitbox_api -d pitbox -f tests/structure_test.sql
 \set QUIET on
--- Tabelas sem RLS por decisão (o acesso é limitado por GRANT): platform.outbox e
--- telemetry.firmware_release. Qualquer outra tabela sem RLS falha. (Sem tabelas temporárias:
--- a base revoga TEMP a PUBLIC.)
+-- Tabelas sem RLS por decisão (o acesso é limitado por GRANT): platform.outbox,
+-- telemetry.firmware_release e os catálogos globais garage.scale/garage.powertrain.
+-- Qualquer outra tabela sem RLS falha. (Sem tabelas temporárias: a base revoga TEMP a PUBLIC.)
 
 -- 1. Toda a tabela da aplicação tem RLS, exceto as listadas.
 DO $$ DECLARE bad text; BEGIN
@@ -12,10 +12,12 @@ DO $$ DECLARE bad text; BEGIN
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE c.relkind IN ('r', 'p') AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit')
     AND NOT c.relrowsecurity
-    AND c.oid NOT IN ('platform.outbox'::regclass, 'telemetry.firmware_release'::regclass);
+    AND c.oid NOT IN ('platform.outbox'::regclass, 'telemetry.firmware_release'::regclass,
+                      'garage.scale'::regclass, 'garage.powertrain'::regclass);
   ASSERT bad IS NULL, 'tabelas sem RLS: ' || bad;
-  ASSERT (SELECT count(*) FROM pg_class WHERE oid IN ('platform.outbox'::regclass, 'telemetry.firmware_release'::regclass)
-          AND NOT relrowsecurity) = 2, 'a lista de tabelas sem RLS ficou desatualizada';
+  ASSERT (SELECT count(*) FROM pg_class WHERE oid IN ('platform.outbox'::regclass, 'telemetry.firmware_release'::regclass,
+                                                      'garage.scale'::regclass, 'garage.powertrain'::regclass)
+          AND NOT relrowsecurity) = 4, 'a lista de tabelas sem RLS ficou desatualizada';
 END $$;
 
 -- 2. Toda a tabela com coluna team_id (e RLS exigido) está coberta, inclusive as sem política padrão.
@@ -50,8 +52,8 @@ DO $$ DECLARE bad text; BEGIN
   ) q;
   ASSERT bad IS NULL, 'objetos com dono errado: ' || bad;
   ASSERT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 57,
-    'esperadas 57 tabelas (hypertable incluída)';
+          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 59,
+    'esperadas 59 tabelas (hypertable incluída)';
 END $$;
 
 -- 5. Papéis: nenhum com privilégios de administração; os de grupo não fazem login.
@@ -88,6 +90,18 @@ DO $$ DECLARE bad text; BEGIN
   ASSERT NOT has_table_privilege('pitbox_app', 'telemetry.firmware_release', 'INSERT')
      AND NOT has_table_privilege('pitbox_app', 'telemetry.firmware_release', 'UPDATE')
      AND NOT has_table_privilege('pitbox_app', 'telemetry.firmware_release', 'DELETE'), 'firmware_release é só de leitura';
+  ASSERT has_table_privilege('pitbox_app', 'garage.scale', 'SELECT')
+     AND NOT has_table_privilege('pitbox_app', 'garage.scale', 'INSERT')
+     AND NOT has_table_privilege('pitbox_app', 'garage.scale', 'UPDATE')
+     AND NOT has_table_privilege('pitbox_app', 'garage.scale', 'DELETE'), 'scale é catálogo só de leitura';
+  ASSERT has_table_privilege('pitbox_app', 'garage.powertrain', 'SELECT')
+     AND NOT has_table_privilege('pitbox_app', 'garage.powertrain', 'INSERT')
+     AND NOT has_table_privilege('pitbox_app', 'garage.powertrain', 'UPDATE')
+     AND NOT has_table_privilege('pitbox_app', 'garage.powertrain', 'DELETE'), 'powertrain é catálogo só de leitura';
+  ASSERT has_table_privilege('pitbox_readonly', 'garage.scale', 'SELECT')
+     AND has_table_privilege('pitbox_readonly', 'garage.powertrain', 'SELECT'), 'readonly lê os catálogos';
+  ASSERT (SELECT count(*) FROM garage.scale WHERE code = '1/8' AND active) = 1, 'seed 1/8 em falta';
+  ASSERT (SELECT count(*) FROM garage.powertrain WHERE code = 'nitro' AND family = 'combustion' AND active) = 1, 'seed nitro em falta';
   ASSERT NOT has_schema_privilege('pitbox_app', 'public', 'CREATE'), 'pitbox_app não cria objetos em public';
   ASSERT NOT has_database_privilege('pitbox_app', current_database(), 'CREATE'), 'pitbox_app não cria esquemas';
 END $$;

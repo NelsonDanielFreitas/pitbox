@@ -38,7 +38,7 @@ func (Repo) CreateTeam(ctx context.Context, tx db.DBTX, t domain.Team) (domain.T
 	return teamFromCreate(row), nil
 }
 
-func (Repo) GetTeam(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (domain.Team, error) {
+func (r Repo) GetTeam(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (domain.Team, error) {
 	q := sqlcgen.New(tx)
 	row, err := q.GetTeam(ctx, teamID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -48,17 +48,29 @@ func (Repo) GetTeam(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (domain.T
 		return domain.Team{}, fmt.Errorf("get team: %w", err)
 	}
 	team := teamFromGet(row)
-	transfer, err := q.GetPendingTransfer(ctx, teamID)
+	transfer, err := r.GetPendingTransfer(ctx, tx, teamID)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, apperr.ErrNotFound):
 		// no pending transfer
 	case err != nil:
-		return domain.Team{}, fmt.Errorf("get pending transfer: %w", err)
+		return domain.Team{}, err
 	default:
-		t := transferFromModel(transfer)
-		team.PendingTransfer = &t
+		team.PendingTransfer = &transfer
 	}
 	return team, nil
+}
+
+// GetPendingTransfer returns the non-expired, not-cancelled, not-confirmed
+// transfer of the team, or apperr.ErrNotFound.
+func (Repo) GetPendingTransfer(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (domain.OwnershipTransfer, error) {
+	row, err := sqlcgen.New(tx).GetPendingTransfer(ctx, teamID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.OwnershipTransfer{}, fmt.Errorf("get pending transfer: %w", apperr.ErrNotFound)
+	}
+	if err != nil {
+		return domain.OwnershipTransfer{}, fmt.Errorf("get pending transfer: %w", err)
+	}
+	return transferFromModel(row), nil
 }
 
 func (Repo) ListMyTeams(ctx context.Context, tx db.DBTX, userID uuid.UUID, after uuid.UUID, limit int32) ([]domain.TeamMembership, error) {
@@ -188,6 +200,15 @@ func (Repo) DeleteOwnMembership(ctx context.Context, tx db.DBTX, teamID, userID 
 	}
 	if n == 0 {
 		return fmt.Errorf("leave team: %w", apperr.ErrNotFound)
+	}
+	return nil
+}
+
+func (Repo) LockTeamForInvites(ctx context.Context, tx db.DBTX, teamID uuid.UUID) error {
+	if _, err := sqlcgen.New(tx).LockTeamForInvites(ctx, teamID); errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock team: %w", apperr.ErrNotFound)
+	} else if err != nil {
+		return fmt.Errorf("lock team: %w", err)
 	}
 	return nil
 }

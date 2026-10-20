@@ -27,3 +27,6 @@ RETURNING id, name, category, club, country_code, created_by, created_at, versio
 SELECT id, team_id, from_user_id, to_user_id, created_by, created_at, expires_at, confirmed_at, cancelled_at
 FROM identity.ownership_transfer
 WHERE team_id = $1 AND confirmed_at IS NULL AND cancelled_at IS NULL AND expires_at > now();
+
+-- name: LockTeamForInvites :one
+SELECT id FROM identity.team WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE;

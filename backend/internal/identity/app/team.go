@@ -105,8 +105,7 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 	if err != nil {
 		return domain.Team{}, err
 	}
-	owner := domain.RoleOwner
-	s.syncRole(ctx, uuid.UUID(user).String(), result.ID.String(), &owner)
+	s.syncRole(ctx, uuid.UUID(user), result.ID)
 	return result, nil
 }
 

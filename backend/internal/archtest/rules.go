@@ -100,16 +100,27 @@ func touchesContext(text string) bool {
 		}
 	}
 	spaced := whitespace.ReplaceAllString(strings.NewReplacer("'", " ", `"`, " ", "||", " ").Replace(lower), " ")
-	// SET ROLE <name> (not the "SET role = ..." of an UPDATE), SET LOCAL/SESSION,
-	// and RESET ROLE/ALL/SESSION. The role assignment in an UPDATE is ordinary SQL.
-	return setRole.MatchString(spaced) || setTransaction.MatchString(spaced) || resetStatements.MatchString(spaced)
+	// "set role" is the dangerous form (SET ROLE, SET role = 'x', SET role TO x),
+	// except when it is the SET clause of an UPDATE. The setup text is split at
+	// the last semicolon so a statement before the UPDATE cannot hide it.
+	for _, match := range setRole.FindAllStringIndex(spaced, -1) {
+		prefix := spaced[:match[0]]
+		if i := strings.LastIndex(prefix, ";"); i >= 0 {
+			prefix = prefix[i+1:]
+		}
+		if !updateStmt.MatchString(prefix) {
+			return true
+		}
+	}
+	return setTransaction.MatchString(spaced) || resetStatements.MatchString(spaced)
 }
 
 var (
 	whitespace      = regexp.MustCompile(`\s+`)
-	setRole         = regexp.MustCompile(`\bset\b.{0,40}?\brole\s+[a-z_][a-z0-9_]*`)
+	setRole         = regexp.MustCompile(`\bset\b.{0,40}?\brole\b`)
 	setTransaction  = regexp.MustCompile(`\bset\b.{0,40}?\b(local|session)\b`)
 	resetStatements = regexp.MustCompile(`\breset\b.{0,40}?\b(role|all|session)\b`)
+	updateStmt      = regexp.MustCompile(`\bupdate\b`)
 )
 
 // layerDir matches the directories of a module that must not import the database driver.

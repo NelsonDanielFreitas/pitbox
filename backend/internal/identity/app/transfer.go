@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity/domain"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/apperr"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/audit"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
@@ -28,7 +30,7 @@ func (s *Service) InitiateTransfer(ctx context.Context, user db.UserID, teamID d
 			return err
 		}
 		if !domain.TransferTarget(target.Role) {
-			return domain.ErrForbidden
+			return domain.ErrTransferTarget
 		}
 		if err := s.store.CancelPendingTransfers(ctx, tx, uuid.UUID(teamID)); err != nil {
 			return err
@@ -77,6 +79,9 @@ func (s *Service) AcceptTransfer(ctx context.Context, user db.UserID, teamID db.
 		if oldOwner.Role != domain.RoleOwner {
 			return domain.ErrOwnerRequired
 		}
+		if !domain.TransferTarget(newOwner.Role) {
+			return domain.ErrTransferTarget
+		}
 
 		oldUpdated, err := s.store.UpdateMemberRole(ctx, tx, uuid.UUID(teamID), oldOwner.UserID, domain.RoleMechanic, oldOwner.Version)
 		if err != nil {
@@ -116,9 +121,8 @@ func (s *Service) AcceptTransfer(ctx context.Context, user db.UserID, teamID db.
 		return domain.TeamMembership{}, err
 	}
 
-	owner, mechanic := domain.RoleOwner, domain.RoleMechanic
-	s.syncRole(ctx, oldOwnerID.String(), uuid.UUID(teamID).String(), &mechanic)
-	s.syncRole(ctx, uuid.UUID(user).String(), uuid.UUID(teamID).String(), &owner)
+	s.syncRole(ctx, oldOwnerID, uuid.UUID(teamID))
+	s.syncRole(ctx, uuid.UUID(user), uuid.UUID(teamID))
 	return membership, nil
 }
 
@@ -141,5 +145,29 @@ func (s *Service) CancelTransfer(ctx context.Context, user db.UserID, teamID db.
 			Action: "ownership.transfer_cancelled", ObjectType: "ownership_transfer", ObjectID: transferID.String(),
 			RequestID: requestID.String(),
 		})
+	})
+}
+
+// cancelPendingTransferFor cancels the pending transfer when userID is its
+// recipient. It is used when the recipient is removed, leaves or is demoted to
+// guest, so the row is cancelled and audited explicitly (the FK cascade is only
+// the safety net) and a guest cannot accept an old transfer.
+func (s *Service) cancelPendingTransferFor(ctx context.Context, tx db.DBTX, teamID, userID, requestID uuid.UUID, reason string) error {
+	transfer, err := s.store.GetPendingTransfer(ctx, tx, teamID)
+	switch {
+	case errors.Is(err, apperr.ErrNotFound):
+		return nil
+	case err != nil:
+		return err
+	}
+	if transfer.ToUserID != userID {
+		return nil
+	}
+	if err := s.store.CancelTransfer(ctx, tx, teamID, transfer.ID); err != nil {
+		return err
+	}
+	return audit.RecordTeam(ctx, tx, audit.TeamEvent{
+		Action: "ownership.transfer_cancelled", ObjectType: "ownership_transfer", ObjectID: transfer.ID.String(),
+		After: map[string]any{"reason": reason}, RequestID: requestID.String(),
 	})
 }

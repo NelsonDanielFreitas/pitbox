@@ -283,3 +283,46 @@ func (r *recordingRoles) called(user, team, role string) bool {
 	}
 	return false
 }
+
+func TestDrainKeyAppliesInOrderAndNeverOverwritesANewerEvent(t *testing.T) {
+	pg := testutil.StartPostgres(t)
+	pool := openPool(t, pg.URL)
+	ctx := context.Background()
+	teamID := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+
+	roles := &recordingRoles{}
+	proc := newProcessor(t, pool, roles)
+	insert(t, pool, teamID, userID, ptr("mechanic"))
+	insert(t, pool, teamID, userID, nil)
+
+	require.NoError(t, proc.DrainKey(ctx, teamID, userID))
+	calls := roles.snapshot()
+	require.Len(t, calls, 2)
+	require.Equal(t, "mechanic", calls[0].role)
+	require.Equal(t, "", calls[1].role, "the removal wins")
+
+	// The delayed syncRole calls the drain again: the key is already published,
+	// so it must not write the old role back over the removal.
+	require.NoError(t, proc.DrainKey(ctx, teamID, userID))
+	require.Len(t, roles.snapshot(), 2)
+}
+
+func TestDrainKeyDoesNotStealAKeyTheWorkerHolds(t *testing.T) {
+	pg := testutil.StartPostgres(t)
+	pool := openPool(t, pg.URL)
+	ctx := context.Background()
+	teamID := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+
+	roles := &recordingRoles{}
+	proc := newProcessor(t, pool, roles)
+	insert(t, pool, teamID, userID, ptr("mechanic"))
+	insert(t, pool, teamID, userID, nil)
+	// Simulate the worker having claimed the oldest event.
+	_, err := pool.Exec(ctx, `UPDATE platform.outbox SET locked_until = now() + interval '1 minute' WHERE team_id = $1 AND aggregate_id = $2 AND id = (SELECT min(id) FROM platform.outbox WHERE team_id = $1 AND aggregate_id = $2)`, teamID, userID)
+	require.NoError(t, err)
+
+	require.NoError(t, proc.DrainKey(ctx, teamID, userID))
+	require.Empty(t, roles.snapshot(), "the worker owns the key; the drain must not jump the removal")
+}

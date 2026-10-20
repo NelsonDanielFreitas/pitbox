@@ -81,6 +81,17 @@ func (s *Service) withMemberTx(ctx context.Context, user db.UserID, team db.Team
 	return s.db.WithTeamTx(ctx, user, team, fn)
 }
 
+// withOwnerReadTx is withOwnerTx for NO_SIDE_EFFECTS RPCs: the transaction is
+// read-only.
+func (s *Service) withOwnerReadTx(ctx context.Context, user db.UserID, team db.TeamID, fn func(context.Context, db.DBTX) error) error {
+	if err := s.checkOwner(ctx, user.String(), team.String()); err != nil {
+		return err
+	}
+	return s.db.WithTeamReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, _ db.Membership) error {
+		return fn(ctx, tx)
+	})
+}
+
 // withMemberReadTx is withMemberTx for NO_SIDE_EFFECTS RPCs: the transaction is
 // read-only.
 func (s *Service) withMemberReadTx(ctx context.Context, user db.UserID, team db.TeamID, fn func(context.Context, db.DBTX) error) error {

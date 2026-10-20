@@ -141,8 +141,10 @@ var (
 type MemberServiceClient interface {
 	// ListMembers lists the members of a team. Any member may call it.
 	ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error)
-	// ListInvitations lists the pending invitations of a team. Any member may
-	// call it; a guest gets NOT_FOUND.
+	// ListInvitations lists the pending invitations of a team. Only the owner may
+	// call it: the email is personal data that other members do not need to see.
+	// A member without the role gets PERMISSION_DENIED; a non-member gets
+	// NOT_FOUND.
 	ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error)
 	// InviteMember creates an invitation by email or by link (no email).
 	// Only the owner may invite, and the role can never be owner.
@@ -167,10 +169,13 @@ type MemberServiceClient interface {
 	// RevokeInvitation revokes a pending invitation. Only the owner may call it.
 	RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error)
 	// InitiateTransfer starts a two-sided ownership transfer to a mechanic or
-	// pilot. Only the owner may call it, with step-up.
+	// pilot. Only the owner may call it, with step-up. Any other recipient
+	// (including the owner itself) is FAILED_PRECONDITION.
 	InitiateTransfer(context.Context, *v1.InitiateTransferRequest) (*v1.InitiateTransferResponse, error)
 	// AcceptTransfer confirms a pending transfer. Only its recipient may call it,
-	// with step-up; the previous owner becomes a mechanic.
+	// with step-up; the previous owner becomes a mechanic. If the recipient is no
+	// longer a mechanic or pilot, it is FAILED_PRECONDITION; a missing, expired,
+	// cancelled or used transfer is NOT_FOUND.
 	AcceptTransfer(context.Context, *v1.AcceptTransferRequest) (*v1.AcceptTransferResponse, error)
 	// CancelTransfer cancels a pending transfer. The owner or the recipient may
 	// call it.
@@ -187,8 +192,10 @@ func NewMemberServiceClient(client *connect.Client) MemberServiceClient {
 type MemberServiceHandler interface {
 	// ListMembers lists the members of a team. Any member may call it.
 	ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error)
-	// ListInvitations lists the pending invitations of a team. Any member may
-	// call it; a guest gets NOT_FOUND.
+	// ListInvitations lists the pending invitations of a team. Only the owner may
+	// call it: the email is personal data that other members do not need to see.
+	// A member without the role gets PERMISSION_DENIED; a non-member gets
+	// NOT_FOUND.
 	ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error)
 	// InviteMember creates an invitation by email or by link (no email).
 	// Only the owner may invite, and the role can never be owner.
@@ -213,10 +220,13 @@ type MemberServiceHandler interface {
 	// RevokeInvitation revokes a pending invitation. Only the owner may call it.
 	RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error)
 	// InitiateTransfer starts a two-sided ownership transfer to a mechanic or
-	// pilot. Only the owner may call it, with step-up.
+	// pilot. Only the owner may call it, with step-up. Any other recipient
+	// (including the owner itself) is FAILED_PRECONDITION.
 	InitiateTransfer(context.Context, *v1.InitiateTransferRequest) (*v1.InitiateTransferResponse, error)
 	// AcceptTransfer confirms a pending transfer. Only its recipient may call it,
-	// with step-up; the previous owner becomes a mechanic.
+	// with step-up; the previous owner becomes a mechanic. If the recipient is no
+	// longer a mechanic or pilot, it is FAILED_PRECONDITION; a missing, expired,
+	// cancelled or used transfer is NOT_FOUND.
 	AcceptTransfer(context.Context, *v1.AcceptTransferRequest) (*v1.AcceptTransferResponse, error)
 	// CancelTransfer cancels a pending transfer. The owner or the recipient may
 	// call it.

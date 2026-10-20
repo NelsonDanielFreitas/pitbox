@@ -175,6 +175,17 @@ func (q *Queries) ListMyTeams(ctx context.Context, arg ListMyTeamsParams) ([]Lis
 	return items, nil
 }
 
+const lockTeamForInvites = `-- name: LockTeamForInvites :one
+SELECT id FROM identity.team WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE
+`
+
+func (q *Queries) LockTeamForInvites(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTeamForInvites, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
 const updateTeam = `-- name: UpdateTeam :one
 UPDATE identity.team
 SET name = $1, category = $2, club = $3, country_code = $4

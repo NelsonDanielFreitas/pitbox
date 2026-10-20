@@ -15,10 +15,11 @@ import (
 
 // Deps is what the identity module needs from the composition root.
 type Deps struct {
-	DB    *db.DB
-	Authz app.Authorizer
-	Clock clock.Clock
-	Log   *slog.Logger
+	DB     *db.DB
+	Authz  app.Authorizer
+	Outbox app.KeyDrainer
+	Clock  clock.Clock
+	Log    *slog.Logger
 }
 
 // Module registers the identity services.
@@ -31,8 +32,8 @@ type Module struct {
 // provider in F5.
 func New(d Deps) (*Module, error) {
 	svc, err := app.New(app.Deps{
-		DB: d.DB, Store: store.NewRepo(), Authz: d.Authz, Clock: d.Clock, Log: d.Log,
-		Mailer: app.NoopMailer{},
+		DB: d.DB, Store: store.NewRepo(), Authz: d.Authz, Outbox: d.Outbox,
+		Clock: d.Clock, Log: d.Log, Mailer: app.NoopMailer{},
 	})
 	if err != nil {
 		return nil, err

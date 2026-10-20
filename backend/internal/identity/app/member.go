@@ -71,6 +71,11 @@ func (s *Service) ChangeMemberRole(ctx context.Context, user db.UserID, teamID d
 		if err != nil {
 			return err
 		}
+		if !domain.TransferTarget(in.Role) {
+			if err := s.cancelPendingTransferFor(ctx, tx, uuid.UUID(teamID), in.UserID, in.RequestID, "recipient_demoted"); err != nil {
+				return err
+			}
+		}
 		role := string(in.Role)
 		if err := outbox.Record(ctx, tx, outbox.MembershipChanged(uuid.UUID(teamID), in.UserID, &role)); err != nil {
 			return err
@@ -94,6 +99,9 @@ func (s *Service) RemoveMember(ctx context.Context, user db.UserID, teamID db.Te
 		if target.Role == domain.RoleOwner {
 			return domain.ErrOwnerRequired
 		}
+		if err := s.cancelPendingTransferFor(ctx, tx, uuid.UUID(teamID), in.UserID, in.RequestID, "recipient_removed"); err != nil {
+			return err
+		}
 		if err := s.store.DeleteMember(ctx, tx, uuid.UUID(teamID), in.UserID, in.Version); err != nil {
 			return err
 		}
@@ -114,6 +122,9 @@ func (s *Service) LeaveTeam(ctx context.Context, user db.UserID, teamID db.TeamI
 	return s.db.WithTeamTx(ctx, user, teamID, func(ctx context.Context, tx db.DBTX, m db.Membership) error {
 		if m.Role == string(domain.RoleOwner) {
 			return domain.ErrOwnerRequired
+		}
+		if err := s.cancelPendingTransferFor(ctx, tx, uuid.UUID(teamID), uuid.UUID(user), requestID, "recipient_left"); err != nil {
+			return err
 		}
 		if err := s.store.DeleteOwnMembership(ctx, tx, uuid.UUID(teamID), uuid.UUID(user)); err != nil {
 			return err

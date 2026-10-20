@@ -28,6 +28,9 @@ var (
 	// ErrTransferInvalid: the transfer does not exist, expired, was cancelled or
 	// was already confirmed.
 	ErrTransferInvalid = fmt.Errorf("identity: invalid ownership transfer: %w", apperr.ErrNotFound)
+	// ErrTransferTarget: the recipient is not a mechanic or a pilot (or the owner
+	// tried to transfer to itself). The transfer is valid but the state is not.
+	ErrTransferTarget = fmt.Errorf("identity: ownership transfer target must be a mechanic or pilot: %w", apperr.ErrFailedPrecondition)
 	// ErrConflict: the row changed since the client read it (optimistic concurrency).
 	ErrConflict = fmt.Errorf("identity: version conflict: %w", apperr.ErrConflict)
 	// ErrForbidden: the role does not allow the action (a domain rule independent

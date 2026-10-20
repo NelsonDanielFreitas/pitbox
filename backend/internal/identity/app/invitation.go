@@ -37,6 +37,11 @@ func (s *Service) InviteMember(ctx context.Context, user db.UserID, teamID db.Te
 
 	var created domain.Invitation
 	err = s.withOwnerTx(ctx, user, teamID, func(ctx context.Context, tx db.DBTX, _ db.Membership) error {
+		// Serialise invitations of this team: the count-then-insert below would
+		// otherwise let two concurrent requests both pass at 49 pending.
+		if err := s.store.LockTeamForInvites(ctx, tx, uuid.UUID(teamID)); err != nil {
+			return err
+		}
 		pending, err := s.store.CountPendingInvitations(ctx, tx, uuid.UUID(teamID))
 		if err != nil {
 			return err
@@ -76,7 +81,7 @@ func (s *Service) ListInvitations(ctx context.Context, user db.UserID, teamID db
 	}
 	limit := pageSize(size)
 	var invitations []domain.Invitation
-	err := s.withMemberReadTx(ctx, user, teamID, func(ctx context.Context, tx db.DBTX) error {
+	err := s.withOwnerReadTx(ctx, user, teamID, func(ctx context.Context, tx db.DBTX) error {
 		var err error
 		invitations, err = s.store.ListInvitations(ctx, tx, uuid.UUID(teamID), cursor.ID, limit+1)
 		return err
@@ -133,8 +138,7 @@ func (s *Service) AcceptInvitation(ctx context.Context, user db.UserID, requestI
 	if err != nil {
 		return domain.TeamMembership{}, err
 	}
-	role := acceptance.Role
-	s.syncRole(ctx, uuid.UUID(user).String(), acceptance.TeamID.String(), &role)
+	s.syncRole(ctx, uuid.UUID(user), acceptance.TeamID)
 	return membership, nil
 }
 

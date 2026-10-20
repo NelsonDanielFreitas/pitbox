@@ -115,6 +115,9 @@ func TestRLSContextAndTransactionRules(t *testing.T) {
 		{name: "reading the context is fine", path: "internal/platform/audit/team.go", src: "package p\nconst q = `SELECT app.current_team_id(), app.current_user_id()::text`\n"},
 		{name: "ordinary SQL is fine", path: "internal/garage/store/cars.go", src: "package p\nconst q = `SELECT id FROM garage.car WHERE team_id = $1`\n"},
 		{name: "a reviewed exception", path: "internal/x/x.go", src: "package p\n//archtest:allow one-off migration helper reviewed in PR 123\nvar q = \"RESET ALL\"\n"},
+		{name: "SET role = outside an update", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET role = 'pitbox_owner'\"\n"},
+		{name: "SET role TO outside an update", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET role TO pitbox_owner\"\n"},
+		{name: "UPDATE ... SET role is a column", path: "internal/identity/store/repo.go", src: "package p\nvar q = \"UPDATE identity.membership SET role = $1 WHERE team_id = $2\"\n"},
 
 		// Rule 4: transactions and pools in one place.
 		{name: "Begin outside db", path: "internal/garage/store/cars.go", wantHit: "Begin only in", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},

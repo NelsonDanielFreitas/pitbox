@@ -749,7 +749,7 @@ func TestNewTeamTx(t *testing.T) {
 // still requires a real membership.
 func TestJoinTeamTx(t *testing.T) {
 	t.Parallel()
-	_, _, d := setup(t)
+	pg, _, d := setup(t)
 	ctx := context.Background()
 
 	t.Run("member", func(t *testing.T) {
@@ -809,6 +809,9 @@ func TestJoinTeamTx(t *testing.T) {
 		})
 		if !errors.Is(err, sentinel) {
 			t.Fatalf("err = %v, want the join error", err)
+		}
+		if got := pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM platform.outbox WHERE aggregate_id = '%s'`, agg)); got != "0" {
+			t.Errorf("outbox rows = %s after rollback, want 0", got)
 		}
 	})
 }

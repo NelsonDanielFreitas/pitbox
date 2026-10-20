@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity/domain"
+	"github.com/google/uuid"
+
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 )
@@ -17,6 +18,7 @@ type Deps struct {
 	DB     *db.DB
 	Store  Store
 	Authz  Authorizer
+	Outbox KeyDrainer
 	Clock  clock.Clock
 	Log    *slog.Logger
 	Mailer Mailer
@@ -27,6 +29,7 @@ type Service struct {
 	db     *db.DB
 	store  Store
 	authz  Authorizer
+	outbox KeyDrainer
 	clock  clock.Clock
 	log    *slog.Logger
 	mailer Mailer
@@ -34,25 +37,20 @@ type Service struct {
 
 // New validates the dependencies and returns the service.
 func New(d Deps) (*Service, error) {
-	if d.DB == nil || d.Store == nil || d.Authz == nil || d.Clock == nil || d.Log == nil || d.Mailer == nil {
+	if d.DB == nil || d.Store == nil || d.Authz == nil || d.Outbox == nil || d.Clock == nil || d.Log == nil || d.Mailer == nil {
 		return nil, errors.New("identity: missing service dependency")
 	}
-	return &Service{db: d.DB, store: d.Store, authz: d.Authz, clock: d.Clock, log: d.Log, mailer: d.Mailer}, nil
+	return &Service{db: d.DB, store: d.Store, authz: d.Authz, outbox: d.Outbox, clock: d.Clock, log: d.Log, mailer: d.Mailer}, nil
 }
 
-// syncRole sets the tuple after the transaction commits. The outbox is the
-// guarantee; this only removes the window in which the owner would get
-// NOT_FOUND right after creating a team or accepting an invitation. It never
-// fails the request, and the log carries no ids.
-func (s *Service) syncRole(ctx context.Context, user, teamID string, role *domain.Role) {
+// syncRole drains the membership events of one key after the transaction commits.
+// It is the same ordered claim the worker uses, so it can only apply the newest
+// state and never write an old role over a newer event. It never fails the
+// request, and the log carries no ids.
+func (s *Service) syncRole(ctx context.Context, user, teamID uuid.UUID) {
 	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	var want *string
-	if role != nil {
-		v := string(*role)
-		want = &v
-	}
-	if err := s.authz.SetTeamRole(ctx, "user:"+user, "team:"+teamID, want); err != nil {
+	if err := s.outbox.DrainKey(ctx, teamID, user); err != nil {
 		s.log.WarnContext(ctx, "outbox tuple sync failed", slog.String("reason", "authorization unavailable"))
 	}
 }

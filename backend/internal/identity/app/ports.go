@@ -39,17 +39,27 @@ type Store interface {
 	ConfirmTransfer(ctx context.Context, tx db.DBTX, teamID, id uuid.UUID) error
 	CancelTransfer(ctx context.Context, tx db.DBTX, teamID, id uuid.UUID) error
 
+	GetPendingTransfer(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (domain.OwnershipTransfer, error)
+
 	GetIdempotencyKey(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID) (requestHash, response []byte, err error)
 	InsertIdempotencyKey(ctx context.Context, tx db.DBTX, requestID, userID uuid.UUID, method string, requestHash []byte) (bool, error)
 	SetIdempotencyResponse(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID, response []byte) error
+
+	LockTeamForInvites(ctx context.Context, tx db.DBTX, teamID uuid.UUID) error
 }
 
 // Authorizer is the slice of OpenFGA the use cases need: a Check before touching
-// data and the post-commit tuple sync that keeps a new membership usable before
-// the worker drains the outbox.
+// data. The post-commit tuple sync goes through the outbox drain, never a direct
+// write (that would race the ordered events).
 type Authorizer interface {
 	Check(ctx context.Context, user, relation, object string) error
-	SetTeamRole(ctx context.Context, user, team string, role *string) error
+}
+
+// KeyDrainer applies the pending events of one membership key in order. It is
+// implemented by platform/outbox.Processor; the post-commit call uses it so a
+// delayed sync cannot write an old role over a newer event.
+type KeyDrainer interface {
+	DrainKey(ctx context.Context, teamID, aggregateID uuid.UUID) error
 }
 
 // Mailer sends an invitation. The real provider is F5; the fake never logs the

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
@@ -30,6 +31,18 @@ var (
 	errUnknownEvent  = errors.New("outbox: unknown event")
 	errPayloadBroken = errors.New("outbox: event payload does not match its columns")
 )
+
+// claimedRow is the shape shared by the batch claim and the per-key drain.
+type claimedRow struct {
+	ID          int64
+	TeamID      pgtype.UUID
+	Aggregate   string
+	AggregateID pgtype.UUID
+	EventType   string
+	Payload     []byte
+	TraceParent pgtype.Text
+	Attempts    int16
+}
 
 // Querier is the narrow database surface the worker needs (like store/login.go).
 // The pool of the application role satisfies it; the worker opens no transaction.
@@ -179,12 +192,16 @@ func (p *Processor) ProcessBatch(ctx context.Context) error {
 			// are still marked below, with a context that survives the cancellation.
 			break
 		}
-		if err := p.apply(ctx, row); err != nil {
+		r := claimedRow{
+			ID: row.ID, TeamID: row.TeamID, Aggregate: row.Aggregate, AggregateID: row.AggregateID,
+			EventType: row.EventType, Payload: row.Payload, TraceParent: row.TraceParent, Attempts: row.Attempts,
+		}
+		if err := p.apply(ctx, r); err != nil {
 			p.failed.Add(ctx, 1)
-			p.retry(ctx, row, err)
+			p.retry(ctx, r, err)
 			continue
 		}
-		applied = append(applied, row.ID)
+		applied = append(applied, r.ID)
 		p.applied.Add(ctx, 1)
 	}
 	if len(applied) == 0 {
@@ -201,7 +218,53 @@ func (p *Processor) ProcessBatch(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) apply(ctx context.Context, row sqlcgen.ClaimOutboxRow) error {
+// DrainKey applies the unpublished events of one membership key in order. It is
+// the same claim/apply/mark path as the worker, restricted to the key, so a
+// delayed post-commit call cannot write a role over a newer event: if the
+// worker already holds the oldest event, the drain does nothing.
+func (p *Processor) DrainKey(ctx context.Context, teamID, aggregateID uuid.UUID) error {
+	for {
+		rows, err := sqlcgen.New(p.db).ClaimOutboxKey(ctx, sqlcgen.ClaimOutboxKeyParams{
+			LeaseSeconds: p.opts.Lease.Seconds(),
+			TeamID:       pgtype.UUID{Bytes: teamID, Valid: true},
+			Aggregate:    AggregateMembership,
+			AggregateID:  pgtype.UUID{Bytes: aggregateID, Valid: true},
+			BatchSize:    int32(p.opts.BatchSize), //nolint:gosec // NewProcessor bounds BatchSize to 1..200
+		})
+		if err != nil {
+			return fmt.Errorf("claim outbox key: %w", err)
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		p.claimed.Add(ctx, int64(len(rows)))
+		applied := make([]int64, 0, len(rows))
+		for _, row := range rows {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			r := claimedRow{
+				ID: row.ID, TeamID: row.TeamID, Aggregate: row.Aggregate, AggregateID: row.AggregateID,
+				EventType: row.EventType, Payload: row.Payload, TraceParent: row.TraceParent, Attempts: row.Attempts,
+			}
+			if err := p.apply(ctx, r); err != nil {
+				p.failed.Add(ctx, 1)
+				p.retry(ctx, r, err)
+				return err
+			}
+			applied = append(applied, r.ID)
+			p.applied.Add(ctx, 1)
+		}
+		markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		err = sqlcgen.New(p.db).MarkOutboxPublished(markCtx, applied)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("mark outbox key: %w", err)
+		}
+	}
+}
+
+func (p *Processor) apply(ctx context.Context, row claimedRow) error {
 	if row.Aggregate != AggregateMembership || row.EventType != EventMembershipChanged {
 		return errUnknownEvent
 	}
@@ -230,7 +293,7 @@ func (p *Processor) apply(ctx context.Context, row sqlcgen.ClaimOutboxRow) error
 // retry replaces the lease with the backoff of the failed event. The event stays
 // unpublished, so the NOT EXISTS in the claim keeps the following events of the
 // same key waiting.
-func (p *Processor) retry(ctx context.Context, row sqlcgen.ClaimOutboxRow, cause error) {
+func (p *Processor) retry(ctx context.Context, row claimedRow, cause error) {
 	backoff := p.backoff(row.Attempts)
 	params := sqlcgen.RescheduleOutboxParams{BackoffSeconds: backoff.Seconds(), ID: row.ID}
 	if err := sqlcgen.New(p.db).RescheduleOutbox(ctx, params); err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 	platformlog "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/log"
 	platformotel "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/otel"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/ratelimit"
 	"go.opentelemetry.io/otel"
 )
@@ -85,8 +86,18 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up authorization: %w", err)
 	}
 
+	outboxOpts := outbox.DefaultOptions()
+	outboxOpts.Lease = cfg.OutboxLease
+	outboxOpts.BatchSize = cfg.OutboxBatchSize
+	outboxOpts.RoleTimeout = cfg.OpenFGATimeout
+	outboxProc, err := outbox.NewProcessor(authn.pool, authzClient, outboxOpts, logger, otel.GetMeterProvider(), tel.TracerProvider)
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up outbox drain: %w", err)
+	}
+
 	identityModule, err := identity.New(identity.Deps{
-		DB: db.New(authn.pool), Authz: authzClient, Clock: clock.Real(), Log: logger,
+		DB: db.New(authn.pool), Authz: authzClient, Outbox: outboxProc, Clock: clock.Real(), Log: logger,
 	})
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)

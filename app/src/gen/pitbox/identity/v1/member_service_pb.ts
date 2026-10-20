@@ -623,9 +623,10 @@ export const CancelTransferResponseSchema: GenMessage<CancelTransferResponse> = 
  * the required role gets PERMISSION_DENIED (for example a mechanic trying to
  * invite). Guests do not see team data: ListMembers and ListInvitations answer
  * NOT_FOUND to them. A stale version is ABORTED; the last-owner rule, the
- * invitation limit and invalid transfers are FAILED_PRECONDITION; every
- * invitation refusal (missing, expired, revoked, used, tampered) is NOT_FOUND
- * with the same message.
+ * invitation limit and an invalid transfer recipient (not a mechanic or pilot)
+ * are FAILED_PRECONDITION. A transfer that does not exist, expired, was
+ * cancelled or was already used is NOT_FOUND. Every invitation refusal
+ * (missing, expired, revoked, used, tampered) is NOT_FOUND with the same message.
  *
  * @generated from service pitbox.identity.v1.MemberService
  */
@@ -641,8 +642,10 @@ export const MemberService: GenService<{
     output: typeof ListMembersResponseSchema;
   },
   /**
-   * ListInvitations lists the pending invitations of a team. Any member may
-   * call it; a guest gets NOT_FOUND.
+   * ListInvitations lists the pending invitations of a team. Only the owner may
+   * call it: the email is personal data that other members do not need to see.
+   * A member without the role gets PERMISSION_DENIED; a non-member gets
+   * NOT_FOUND.
    *
    * @generated from rpc pitbox.identity.v1.MemberService.ListInvitations
    */
@@ -723,7 +726,8 @@ export const MemberService: GenService<{
   },
   /**
    * InitiateTransfer starts a two-sided ownership transfer to a mechanic or
-   * pilot. Only the owner may call it, with step-up.
+   * pilot. Only the owner may call it, with step-up. Any other recipient
+   * (including the owner itself) is FAILED_PRECONDITION.
    *
    * @generated from rpc pitbox.identity.v1.MemberService.InitiateTransfer
    */
@@ -734,7 +738,9 @@ export const MemberService: GenService<{
   },
   /**
    * AcceptTransfer confirms a pending transfer. Only its recipient may call it,
-   * with step-up; the previous owner becomes a mechanic.
+   * with step-up; the previous owner becomes a mechanic. If the recipient is no
+   * longer a mechanic or pilot, it is FAILED_PRECONDITION; a missing, expired,
+   * cancelled or used transfer is NOT_FOUND.
    *
    * @generated from rpc pitbox.identity.v1.MemberService.AcceptTransfer
    */

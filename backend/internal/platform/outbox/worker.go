@@ -296,7 +296,11 @@ func (p *Processor) apply(ctx context.Context, row claimedRow) error {
 func (p *Processor) retry(ctx context.Context, row claimedRow, cause error) {
 	backoff := p.backoff(row.Attempts)
 	params := sqlcgen.RescheduleOutboxParams{BackoffSeconds: backoff.Seconds(), ID: row.ID}
-	if err := sqlcgen.New(p.db).RescheduleOutbox(ctx, params); err != nil {
+	// The request context may be cancelled (a shutdown, a timeout): the backoff
+	// must still replace the lease, or the event stays hidden for the whole lease.
+	rescheduleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancel()
+	if err := sqlcgen.New(p.db).RescheduleOutbox(rescheduleCtx, params); err != nil {
 		// The lease will expire on its own; the event is not lost.
 		p.log.WarnContext(ctx, "outbox event could not be rescheduled",
 			slog.Int64("outbox_id", row.ID), slog.String("error", "database"))

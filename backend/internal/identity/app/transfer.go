@@ -112,8 +112,8 @@ func (s *Service) AcceptTransfer(ctx context.Context, user db.UserID, teamID db.
 
 		return audit.RecordTeam(ctx, tx, audit.TeamEvent{
 			Action: "ownership.transferred", ObjectType: "team", ObjectID: uuid.UUID(teamID).String(),
-			Before:    map[string]any{"owner": oldOwner.UserID.String(), "owner_role": string(oldOwner.Role), "recipient": newOwner.UserID.String(), "recipient_role": string(newOwner.Role)},
-			After:     map[string]any{"owner": newOwner.UserID.String(), "owner_role": string(newUpdated.Role), "recipient": oldUpdated.UserID.String(), "recipient_role": string(oldUpdated.Role)},
+			Before:    map[string]any{"previous_owner": oldOwner.UserID.String(), "previous_owner_role": string(oldOwner.Role), "new_owner": newOwner.UserID.String(), "new_owner_role": string(newOwner.Role)},
+			After:     map[string]any{"previous_owner": oldUpdated.UserID.String(), "previous_owner_role": string(oldUpdated.Role), "new_owner": newUpdated.UserID.String(), "new_owner_role": string(newUpdated.Role)},
 			RequestID: requestID.String(),
 		})
 	})

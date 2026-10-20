@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"runtime"
+	"time"
 
 	identityv1connect "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity"
@@ -86,9 +87,12 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up authorization: %w", err)
 	}
 
+	// The API only drains one key after commit: ClaimOutboxKey returns at most
+	// one event (NOT EXISTS), so a batch of 1 and a 5 s lease are enough. The
+	// worker keeps the configured batch/lease.
 	outboxOpts := outbox.DefaultOptions()
-	outboxOpts.Lease = cfg.OutboxLease
-	outboxOpts.BatchSize = cfg.OutboxBatchSize
+	outboxOpts.Lease = 5 * time.Second
+	outboxOpts.BatchSize = 1
 	outboxOpts.RoleTimeout = cfg.OpenFGATimeout
 	outboxProc, err := outbox.NewProcessor(authn.pool, authzClient, outboxOpts, logger, otel.GetMeterProvider(), tel.TracerProvider)
 	if err != nil {

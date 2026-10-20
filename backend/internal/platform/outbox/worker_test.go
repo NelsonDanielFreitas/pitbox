@@ -326,3 +326,36 @@ func TestDrainKeyDoesNotStealAKeyTheWorkerHolds(t *testing.T) {
 	require.NoError(t, proc.DrainKey(ctx, teamID, userID))
 	require.Empty(t, roles.snapshot(), "the worker owns the key; the drain must not jump the removal")
 }
+
+type cancelingRoles struct{ cancel context.CancelFunc }
+
+func (r cancelingRoles) SetTeamRole(context.Context, string, string, *string) error {
+	r.cancel()
+	return context.Canceled
+}
+
+func TestDrainKeyReschedulesWithACancelledContext(t *testing.T) {
+	pg := testutil.StartPostgres(t)
+	pool := openPool(t, pg.URL)
+	teamID := uuid.Must(uuid.NewV7())
+	userID := uuid.Must(uuid.NewV7())
+	insert(t, pool, teamID, userID, ptr("owner"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	opts := outbox.DefaultOptions()
+	opts.BaseBackoff = 100 * time.Millisecond
+	opts.MaxBackoff = time.Second
+	proc, err := outbox.NewProcessor(pool, cancelingRoles{cancel: cancel}, opts, slog.New(slog.DiscardHandler), nil, nil)
+	require.NoError(t, err)
+
+	err = proc.DrainKey(ctx, teamID, userID)
+	require.ErrorIs(t, err, context.Canceled)
+
+	var lockedUntil time.Time
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT locked_until FROM platform.outbox WHERE team_id = $1 AND aggregate_id = $2`, teamID, userID).Scan(&lockedUntil))
+	// The claim set the default 30 s lease; the retry must replace it with the
+	// much shorter backoff even though the request context is already cancelled.
+	require.True(t, lockedUntil.Before(time.Now().Add(5*time.Second)), "locked_until = %s", lockedUntil)
+}

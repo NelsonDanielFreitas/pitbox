@@ -118,6 +118,7 @@ func TestRLSContextAndTransactionRules(t *testing.T) {
 		{name: "SET role = outside an update", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET role = 'pitbox_owner'\"\n"},
 		{name: "SET role TO outside an update", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"SET role TO pitbox_owner\"\n"},
 		{name: "UPDATE ... SET role is a column", path: "internal/identity/store/repo.go", src: "package p\nvar q = \"UPDATE identity.membership SET role = $1 WHERE team_id = $2\"\n"},
+		{name: "a comment cannot hide SET role", path: "internal/x/x.go", wantHit: "RLS context", src: "package p\nvar q = \"/* update */ SET role = 'pitbox_owner'\"\n"},
 
 		// Rule 4: transactions and pools in one place.
 		{name: "Begin outside db", path: "internal/garage/store/cars.go", wantHit: "Begin only in", src: "package p\nfunc f(p interface{ Begin(int) }) { p.Begin(1) }\n"},

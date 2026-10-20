@@ -1,6 +1,6 @@
 {
   "source": "docs/03-plano-de-trabalho.md",
-  "generated": "2026-10-14",
+  "generated": "2026-10-20",
   "phases": {
     "0": {
       "title": "Fase 0 — Preparação",
@@ -25,6 +25,10 @@
     "5": {
       "title": "Fase 5 — v1.0 Produção",
       "description": "a plataforma corre na cloud, segura, monitorizada e com backups testados, pronta para outras equipas. Os cartões F5-04 a F5-09 podem ser feitos mais cedo se quiseres prática de infraestrutura entre fases."
+    },
+    "6": {
+      "title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "description": "servir equipas de elétricos (1/8 e-buggy, 1/10) e outras escalas/combustíveis ponta a ponta, sem regressões no nitro, usando os catálogos e as costuras do F1-07a."
     }
   },
   "cards": [
@@ -548,6 +552,45 @@
       "adrs": []
     },
     {
+      "id": "F1-07a",
+      "title": "Motorização e escala extensíveis",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "db",
+        "docs"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "ADR 0016; catálogos globais `garage.scale`/`garage.powertrain`; `garage.car.scale`/`powertrain` com FK/defaults; contratos do F1-07 com os dois campos; testes SQL e de estrutura; Fase 6 no plano",
+      "done_when": [
+        "ADR 0016 aceite",
+        "carro sem os campos fica 1/8/nitro",
+        "escala/motorização inexistente recusada (FK)",
+        "a app não escreve nos catálogos",
+        "uma escala nova é uma linha (teste)",
+        "make db-test e CI verdes"
+      ],
+      "done_when_raw": "ADR 0016 aceite; carro sem os campos fica 1/8/nitro; escala/motorização inexistente recusada (FK); a app não escreve nos catálogos; uma escala nova é uma linha (teste); make db-test e CI verdes",
+      "doc_references": [
+        "Spec §4",
+        "ADR 0016",
+        "Fase 6"
+      ],
+      "suggested_branch": "f1-07a-motorizacao-e-escala",
+      "issue_title": "F1-07a — ADR 0016: motorização e escala extensíveis (elétrico e combustão, qualquer escala)",
+      "labels": [
+        "fase-1",
+        "area:db",
+        "area:docs"
+      ],
+      "security_notes": "Catálogos globais só de leitura; FK + validação do catálogo ativo no servidor (F1-07); migração expand; push offline rejected (F1-13).",
+      "pull_request": null,
+      "adrs": [
+        "0016"
+      ]
+    },
+    {
       "id": "F1-07",
       "title": "Garagem no backend",
       "phase": "1",
@@ -558,12 +601,13 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico",
+      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico; `Car.scale`/`powertrain` validados contra os catálogos (ADR 0016); inativo só bloqueia criação/mudança",
       "done_when": [
         "CRUD testado com testcontainers",
-        "motor não fica em dois carros"
+        "motor não fica em dois carros",
+        "Car.scale/powertrain validados contra o catálogo; 1/8 nitro sem regressão"
       ],
-      "done_when_raw": "CRUD testado com testcontainers; motor não fica em dois carros",
+      "done_when_raw": "CRUD testado com testcontainers; motor não fica em dois carros; Car.scale/powertrain validados contra o catálogo; 1/8 nitro sem regressão",
       "doc_references": [],
       "suggested_branch": "f1-07-garagem-no-backend",
       "issue_title": "F1-07 — Garagem no backend",
@@ -2067,6 +2111,205 @@
       "issue_title": "F5-14 — Gate v1.0",
       "labels": [
         "fase-5",
+        "area:pista",
+        "gate"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F6-01",
+      "title": "Templates de setup por escala e motorização",
+      "phase": "6",
+      "phase_title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "areas": [
+        "app",
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Templates versionados de `setup.field_definition` por `(scale, powertrain)`, ligados aos catálogos do F1-07a; fallback por família",
+      "done_when": [
+        "Fichas diferentes para nitro e elétrico (teste)",
+        "Copiar um setup copia só os campos comuns (teste)",
+        "Template novo não exige código (teste)"
+      ],
+      "done_when_raw": "Fichas diferentes para nitro e elétrico; copiar um setup copia só os campos comuns; template novo não exige código",
+      "doc_references": [
+        "F1-07a",
+        "F6-01 (#115)"
+      ],
+      "suggested_branch": "f6-01-templates-de-setup",
+      "issue_title": "F6-01 — Templates de setup por escala e motorização",
+      "labels": [
+        "fase-6",
+        "area:app",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F6-02",
+      "title": "Baterias, motores brushless e ESC na garagem",
+      "phase": "6",
+      "phase_title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "areas": [
+        "app",
+        "backend",
+        "db"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Tabelas de equipa para bateria, log de bateria, motor brushless e ESC; montagem com histórico; contadores e avisos",
+      "done_when": [
+        "CRUD com testcontainers e isolamento/papéis",
+        "Bateria não fica em dois carros (EXCLUDE)",
+        "Bateria retired não monta",
+        "Aviso de ciclos/resistência interna"
+      ],
+      "done_when_raw": "CRUD com testcontainers e isolamento/papéis; bateria não fica em dois carros; retired não monta; aviso de ciclos/resistência",
+      "doc_references": [
+        "F1-07a",
+        "F6-02 (#116)"
+      ],
+      "suggested_branch": "f6-02-baterias-e-eletronica",
+      "issue_title": "F6-02 — Baterias, motores brushless e ESC na garagem",
+      "labels": [
+        "fase-6",
+        "area:app",
+        "area:backend",
+        "area:db"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F6-03",
+      "title": "Modo final para carros elétricos",
+      "phase": "6",
+      "phase_title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "`EnergyModel` elétrico: margem por volta, troca de bateria se o regulamento permitir, relatório pós-final",
+      "done_when": [
+        "Previsão de margem determinística",
+        "Final elétrica sem reabastecimentos; nitro igual",
+        "Funciona em modo avião (E2E)"
+      ],
+      "done_when_raw": "Previsão de margem determinística; final elétrica sem reabastecimentos; modo avião",
+      "doc_references": [
+        "F6-03 (#117)"
+      ],
+      "suggested_branch": "f6-03-modo-final-eletrico",
+      "issue_title": "F6-03 — Modo final para carros elétricos",
+      "labels": [
+        "fase-6",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F6-04",
+      "title": "Telemetria para carros elétricos",
+      "phase": "6",
+      "phase_title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "areas": [
+        "firmware",
+        "hardware",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Perfil de sensores por motorização: tensão/corrente, temperatura de motor/ESC, rotações; ingestão, gráficos e alertas",
+      "done_when": [
+        "Leituras de bancada dentro da tolerância",
+        "Protocolo nitro antigo compatível",
+        "Alerta de temperatura motor/ESC na app"
+      ],
+      "done_when_raw": "Leituras de bancada dentro da tolerância; protocolo nitro compatível; alerta de temperatura",
+      "doc_references": [
+        "F6-04 (#118)"
+      ],
+      "suggested_branch": "f6-04-telemetria-eletrica",
+      "issue_title": "F6-04 — Telemetria para carros elétricos",
+      "labels": [
+        "fase-6",
+        "area:firmware",
+        "area:hardware",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F6-06",
+      "title": "Outras escalas e combustão",
+      "phase": "6",
+      "phase_title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "areas": [
+        "backend",
+        "db",
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Ativar 1/10 nitro, 1/5 gasolina e afins; defaults por escala a partir do catálogo/configuração",
+      "done_when": [
+        "Um 1/10 nitro e um 1/5 gasolina percorrem o fluxo completo",
+        "1/8 nitro sem regressão",
+        "Sem alterar o esquema do carro nem os contratos do F1-07"
+      ],
+      "done_when_raw": "1/10 nitro e 1/5 gasolina ponta a ponta; 1/8 nitro sem regressão; sem alterar esquema/contratos",
+      "doc_references": [
+        "F1-07a",
+        "F6-06 (#125)"
+      ],
+      "suggested_branch": "f6-06-outras-escalas-e-combustao",
+      "issue_title": "F6-06 — Outras escalas e combustão",
+      "labels": [
+        "fase-6",
+        "area:backend",
+        "area:db",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F6-05",
+      "title": "Gate v1.1",
+      "phase": "6",
+      "phase_title": "Fase 6 — v1.1 Elétricos e outras escalas",
+      "areas": [
+        "pista"
+      ],
+      "gate": true,
+      "status": "Por fazer",
+      "todo": "Uma equipa de elétricos usa a app num treino/prova real; a equipa nitro usa a mesma versão no mesmo período; problemas convertidos em issues",
+      "done_when": [
+        "Nenhum setup/registo de bateria em papel",
+        "Nenhuma regressão no modo final nitro"
+      ],
+      "done_when_raw": "Nenhum setup/registo de bateria em papel; nenhuma regressão no modo final nitro",
+      "doc_references": [
+        "F6-01 a F6-04",
+        "F6-06"
+      ],
+      "suggested_branch": "f6-05-gate-v1-1",
+      "issue_title": "F6-05 — Gate v1.1",
+      "labels": [
+        "fase-6",
         "area:pista",
         "gate"
       ],

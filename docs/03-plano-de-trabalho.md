@@ -76,7 +76,8 @@ Objetivo: o mecânico faz login, regista carros, motores e pneus, e grava setups
 | F1-05 | Autorização com OpenFGA | Modelo `.fga` (§6.1) com ficheiro de asserções; `Check` em cada caso de uso; worker sincroniza membros → relações | Asserções no CI; piloto recebe `PERMISSION_DENIED` ao editar um setup | Por fazer |
 | F1-05b | Worker da outbox (membros → tuplos) | ADR 0015 (poller próprio até ao F2-04); `platform/outbox.Record` com eventos de estado `membership.changed`; `authz.SetTeamRole`; claim com lease (`FOR UPDATE SKIP LOCKED`), ordem estrita, backoff e runbook; `cmd/worker` + `bootstrap.RunWorker`; sqlc (schema, `make gen`, CI) | Evento na outbox → `Check` reflete o papel; remover remove o acesso; reaplicar não muda nada; duas instâncias não repetem; `SIGTERM` não perde eventos (testcontainers Postgres + OpenFGA) | Por fazer |
 | F1-06 | Equipas e convites | `TeamService` e `MemberService`: criar equipa, convidar por email ou link, aceitar, mudar papéis | Fluxo completo testado; convite expirado ou reutilizado falha | Por fazer |
-| F1-07 | Garagem no backend | `CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico | CRUD testado com testcontainers; motor não fica em dois carros | Por fazer |
+| F1-07a | Motorização e escala extensíveis | ADR 0016; catálogos globais `garage.scale`/`garage.powertrain`; `garage.car.scale`/`powertrain` com FK/defaults; contratos do F1-07 com os dois campos; testes SQL e de estrutura; Fase 6 no plano | Carro sem os campos fica 1/8/nitro; escala/motorização inexistente recusada (FK); a app não escreve nos catálogos; uma escala nova é uma linha (teste); `make db-test` e CI verdes | Por fazer |
+| F1-07 | Garagem no backend | `CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico; `Car.scale`/`powertrain` validados contra os catálogos (ADR 0016); inativo só bloqueia criação/mudança | CRUD testado com testcontainers; motor não fica em dois carros; 1/8 nitro sem regressão | Por fazer |
 | F1-08 | Setups no backend | `SetupService`: criar, nova versão, comparar duas versões, link de partilha; esquema JSON v1 dos campos 1/8 TT | Diferenças entre versões corretas; link revogado deixa de funcionar | Por fazer |
 | F1-09 | Esqueleto da app | Vite + React + TypeScript strict, TanStack Router e Query, Tailwind, cliente Connect gerado, login via BFF | App abre, faz login e mostra a lista de equipas | Por fazer |
 | F1-10 | Base local na app | SQLite (wa-sqlite + OPFS), migrações locais, repositórios por funcionalidade | Dados persistem depois de fechar e reabrir o browser | Por fazer |
@@ -210,6 +211,31 @@ Objetivo: a plataforma corre na cloud, segura, monitorizada e com backups testad
 | F5-12 | Teste de intrusão externo | Pedir a um colega do mestrado ou a uma empresa um teste à API, web e app; publicar `security.txt` | Relatório recebido e falhas críticas corrigidas | Por fazer |
 | F5-13 | Publicação nas lojas | Contas Google Play e Apple Developer; testes fechados com 2–3 equipas amigas | App aprovada nas duas lojas | Por fazer |
 | F5-14 | **Gate v1.0** | Uma prova com outra equipa a usar o PitBox além da vossa | Nenhum incidente de segurança ou perda de dados; SLOs cumpridos nesse fim de semana | Por fazer |
+
+## Fase 6 — v1.1 Elétricos e outras escalas
+
+Objetivo: servir equipas de elétricos (1/8 e-buggy, 1/10) e outras escalas/combustíveis sem
+regressões no nitro, usando os catálogos e as costuras do F1-07a.
+
+**Tecnologias desta fase**
+
+| Área | Tecnologias e bibliotecas | Para quê |
+| --- | --- | --- |
+| Backend | `garage/api.go` (catálogo/snapshot), outbox/River da Fase 2 | Catálogo local, contadores por família |
+| App | XState v5 (já na Fase 2), base local/SQLite | `EnergyModel` elétrico e modo offline |
+| Firmware | Sensores de tensão/corrente, telemetria de ESC | Telemetria elétrica isolada do sinal de controlo |
+| Testes | `fast-check` (já na Fase 2), Playwright em modo avião | Estratégia determinística e final offline |
+
+| ID | Cartão | O que fazer | Pronto quando | Estado |
+| --- | --- | --- | --- | --- |
+| F6-01 | Templates de setup por escala e motorização | Templates versionados de `setup.field_definition` por `(scale, powertrain)`, ligados aos catálogos do F1-07a; fallback por família | Um carro nitro e um elétrico têm fichas diferentes; copiar um setup copia só os campos comuns; um template novo não exige código | Por fazer |
+| F6-02 | Baterias, motores brushless e ESC na garagem | Tabelas de equipa para bateria, log de bateria, motor brushless e ESC; montagem com histórico; contadores e avisos | CRUD com testcontainers, isolamento e papéis; bateria não fica em dois carros; `retired` não monta; aviso de ciclos/resistência | Por fazer |
+| F6-03 | Modo final para carros elétricos | `EnergyModel` elétrico: margem por volta, troca de bateria se o regulamento permitir, relatório pós-final | Previsão determinística; final elétrica sem reabastecimentos; funciona em modo avião | Por fazer |
+| F6-04 | Telemetria para carros elétricos | Perfil de sensores por motorização: tensão/corrente, temperatura de motor/ESC, rotações; ingestão, gráficos e alertas | Bancada vs multímetro dentro da tolerância; protocolo nitro compatível; alerta de temperatura na app | Por fazer |
+| F6-06 | Outras escalas e combustão | Ativar 1/10 nitro, 1/5 gasolina e afins; defaults por escala a partir do catálogo/configuração | Um 1/10 nitro e um 1/5 gasolina percorrem o fluxo completo; 1/8 nitro sem regressão | Por fazer |
+| F6-05 | **Gate v1.1** | Uma equipa de elétricos usa a app num treino/prova real; a equipa nitro usa a mesma versão no mesmo período; problemas convertidos em issues | Nenhum setup/registo de bateria em papel; nenhuma regressão no modo final nitro | Por fazer |
+
+Issues: #115–#119 e #125 (F6-06). O Gate (#119) depende de F6-01..F6-04 e de F6-06.
 
 ## Cartões contínuos
 

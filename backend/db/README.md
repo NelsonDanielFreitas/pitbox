@@ -1,6 +1,6 @@
 # PitBox — Base de dados
 
-Esquema PostgreSQL 16 + TimescaleDB do PitBox: 56 tabelas em 10 esquemas, com Row-Level Security por equipa em todas as tabelas de dados.
+Esquema PostgreSQL 16 + TimescaleDB do PitBox: 58 tabelas em 10 esquemas, com Row-Level Security por equipa em todas as tabelas de dados.
 
 ## Ficheiros
 
@@ -41,7 +41,7 @@ Aplicar manualmente (por exemplo no compose): `DATABASE_URL=postgres://pitbox_mi
 | Esquema | Tabelas |
 | --- | --- |
 | `identity` | user_account, team, membership, invitation, ownership_transfer, device_key, offline_pass, support_grant |
-| `garage` | car, engine, engine_mount, tyre_set, part, stock_movement, part_install · vista stock_level |
+| `garage` | scale, powertrain, car, engine, engine_mount, tyre_set, part, stock_movement, part_install · vista stock_level |
 | `setup` | field_definition, setup, setup_version, favorite, share_link |
 | `events` | track, championship, event, session, driver_feedback, lap, lap_incident, race_strategy, pit_stop · vista session_lap_stats |
 | `maintenance` | rule, entry, entry_part, checklist_template, checklist_template_item, checklist_run, checklist_run_item · vista engine_rule_status |

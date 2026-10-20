@@ -86,6 +86,7 @@ Elementos: PostgreSQL + TimescaleDB, migrações Atlas.
 | TM-DB-09 | I | Dados em repouso e em trânsito até à base | TLS até à base de dados; cifra em repouso; cifra por envelope em campos sensíveis; backups cifrados e imutáveis | planeado | F5-04, F5-08 | M |
 | TM-DB-10 | D | Telemetria sem compressão cresce além do previsto | Retenção de 24 meses; gatilho de revisão aos ~20 GB; ficheiros brutos reprocessáveis | aceite | ADR 0011 (Nelson, 2026-10-12); estimativa por confirmar com dados reais | B |
 | TM-DB-11 | I | Backup ou restauro expõe dados ou não funciona | Backups cifrados na UE com restauro testado; validade de 35 dias | planeado | F5-08 | M |
+| TM-DB-12 | T | Catálogo global (escala/motorização) alterado pela aplicação, ou valor inválido/desativado num carro | Catálogos globais sem RLS e só de leitura (`SELECT`); `INSERT/UPDATE/DELETE` revogados; FK; validação do catálogo ativo no servidor (F1-07); push offline marca a operação `rejected` (F1-13) | implementado (catálogos F1-07a; validação no servidor F1-07) | `backend/db/tests/structure_test.sql`, `rls_and_constraints_test.sql`, `catalog_test.sql` | M |
 
 ## Sincronização offline (DF-03)
 

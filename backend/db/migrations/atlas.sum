@@ -1,4 +1,4 @@
-h1:rFooI1KTn8LAyERrb4MFQJANrfOE7yxhZnYkKsiTcpM=
+h1:Ut7ujnDODrOJ/35lPxppaz4XnefaUS0rI4w9iou/Vgo=
 20261012181718_initial.sql h1:Tiv1ABbDQmkD6Y/HZoE8Z7u2and+3cHSOASf5Ogdb20=
 20261013194110_resolve_login.sql h1:nx80NCYa8Lts3HZCs9dUb7AxcEm9oXjjk1T1UPCW4bY=
 20261017121627_is_owner_function.sql h1:hKUyQprD/UjKM6c29rubP068LbtDWgQMzJxrEA9Ss3Y=
@@ -7,3 +7,4 @@ h1:rFooI1KTn8LAyERrb4MFQJANrfOE7yxhZnYkKsiTcpM=
 20261019214050_f1-06-invitation.sql h1:YEcRUklv5X6U8qCaSquHJkVlzxMKFn3rhxnINiKPIfM=
 20261019214051_f1-06-ownership-transfer.sql h1:lEZW7sQpm0Uovpjd6MqQR55KUu5zHvKgrTkaXUSHSOQ=
 20261019214052_f1-06-one-owner.sql h1:6Po7CaeWLjvfw0nvahUlCpjQ/cIjpjMVws2lqUtMo38=
+20261020211703_f1-07a-scale-powertrain.sql h1:itEn5gH2bLHWb9iNlZMghtb6U2+Ba76eG0KfrfgsM2k=

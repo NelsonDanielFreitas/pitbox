@@ -2,7 +2,7 @@
 # Docker e o toolchain ESP (espup) não são geridos aqui; ver README.
 
 [tools]
-go = "1.27.2"
+go = "1.27.3"
 node = "24.21.0"
 pnpm = "12.11.2"
 rust = { version = "1.99.0", profile = "minimal", components = "rustfmt,clippy" }

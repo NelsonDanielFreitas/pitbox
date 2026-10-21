@@ -81,8 +81,12 @@ for t in rls_and_constraints_test structure_test login_test; do
 done
 echo "-- default_privileges_test"
 psql_as "$MIG" postgres < backend/db/tests/default_privileges_test.sql
+echo "-- catalog_test"
+psql_as "$MIG" postgres < backend/db/tests/catalog_test.sql
 echo "-- os mesmos testes sobre schema.sql"
 for t in rls_and_constraints_test structure_test login_test; do psql_as "$SCH" pitbox_api < "backend/db/tests/$t.sql"; done
+echo "-- catalog_test (schema.sql)"
+psql_as "$SCH" postgres < backend/db/tests/catalog_test.sql
 
 echo "== 5. Desvio entre migrações e schema.sql"
 snapshot() {

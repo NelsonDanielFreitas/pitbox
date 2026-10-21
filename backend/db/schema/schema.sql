@@ -113,6 +113,7 @@ CREATE TYPE garage.part_kind          AS ENUM (
   'piston_sleeve', 'air_filter', 'shock_oil', 'diff_oil', 'fuel', 'spring', 'tyre',
   'insert', 'body', 'wing', 'other');
 CREATE TYPE garage.stock_reason       AS ENUM ('purchase', 'consumed', 'installed', 'adjustment', 'lost', 'returned');
+CREATE TYPE garage.powertrain_family  AS ENUM ('combustion', 'electric');
 
 CREATE TYPE setup.field_type          AS ENUM ('number', 'integer', 'text', 'enum', 'boolean');
 CREATE TYPE setup.surface             AS ENUM ('dry', 'damp', 'wet', 'dusty', 'watered', 'rutted', 'mixed');
@@ -312,6 +313,31 @@ CREATE INDEX track_team_idx ON events.track (team_id);
 -- garage
 -- =============================================================================
 
+-- Catálogos globais de referência (ADR 0016): sem team_id e sem RLS, só de leitura
+-- para a aplicação; as migrações revistas escrevem. A versão que a app consome é um
+-- hash do conteúdo calculado na leitura por garage/api.go.
+CREATE TABLE garage.scale (
+  code        text        PRIMARY KEY CHECK (code ~ '^1/[1-9][0-9]?$'),
+  name        text        NOT NULL CHECK (length(name) BETWEEN 1 AND 40),
+  active      boolean     NOT NULL DEFAULT true,
+  sort_order  smallint    NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE garage.powertrain (
+  code        text        PRIMARY KEY CHECK (code ~ '^[a-z][a-z0-9_]{0,31}$'),
+  family      garage.powertrain_family NOT NULL,
+  name        text        NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+  active      boolean     NOT NULL DEFAULT true,
+  sort_order  smallint    NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Na v0.1 só existe 1/8 nitro; outras escalas/motorizações entram na Fase 6.
+INSERT INTO garage.scale (code, name, active, sort_order) VALUES ('1/8', '1/8', true, 10);
+INSERT INTO garage.powertrain (code, family, name, active, sort_order)
+VALUES ('nitro', 'combustion', 'Nitro', true, 10);
+
 CREATE TABLE garage.car (
   id                  uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
   team_id             uuid        NOT NULL REFERENCES identity.team (id) ON DELETE CASCADE,
@@ -330,6 +356,8 @@ CREATE TABLE garage.car (
   updated_at          timestamptz NOT NULL DEFAULT now(),
   version             integer     NOT NULL DEFAULT 1,
   deleted_at          timestamptz,
+  scale               text        NOT NULL DEFAULT '1/8' CONSTRAINT car_scale_fk REFERENCES garage.scale (code),
+  powertrain          text        NOT NULL DEFAULT 'nitro' CONSTRAINT car_powertrain_fk REFERENCES garage.powertrain (code),
   UNIQUE (team_id, id)
 );
 CREATE UNIQUE INDEX car_transponder_uq ON garage.car (team_id, transponder_number)
@@ -1513,6 +1541,9 @@ REVOKE INSERT, UPDATE, DELETE ON telemetry.firmware_release FROM pitbox_app;
 REVOKE SELECT ON platform.idempotency_key           FROM pitbox_readonly;
 REVOKE SELECT ON platform.push_subscription         FROM pitbox_readonly;   -- endpoints e chaves de push
 REVOKE SELECT ON platform.outbox                    FROM pitbox_readonly;   -- eventos de todas as equipas, sem RLS
+-- Catálogos globais de referência (ADR 0016): a aplicação só lê; só as migrações escrevem.
+REVOKE INSERT, UPDATE, DELETE ON garage.scale, garage.powertrain FROM pitbox_app;
+REVOKE INSERT, UPDATE, DELETE ON garage.scale, garage.powertrain FROM pitbox_readonly;
 
 -- =============================================================================
 -- identity.resolve_login — primeiro login (F1-03b, ADR 0013)

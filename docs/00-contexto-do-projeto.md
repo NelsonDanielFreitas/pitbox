@@ -47,8 +47,8 @@ Plataforma para equipas de 1/8 TT nitro, com quatro partes que partilham os mesm
 | --- | --- |
 | `docs/01-especificacao-funcional.md` | O quê: perfis, autenticação, funcionalidades, requisitos não funcionais, RGPD, roadmap |
 | `docs/02-arquitetura-tecnica.md` | Como: app, backend, identidade, autorização, dados, sync, telemetria, infraestrutura, segurança, CI/CD, custos, estrutura do repositório |
-| `docs/03-plano-de-trabalho.md` | 70 cartões em 6 fases (F0 a F5), com tecnologias por fase e critério "Pronto quando" |
-| `backend/db/schema/schema.sql` | Esquema PostgreSQL completo (56 tabelas, RLS, triggers), testado em PostgreSQL 16 |
+| `docs/03-plano-de-trabalho.md` | 80 cartões em 7 fases (F0 a F6), com tecnologias por fase e critério "Pronto quando" |
+| `backend/db/schema/schema.sql` | Esquema PostgreSQL completo (58 tabelas, RLS, triggers), testado em PostgreSQL 16 |
 | `backend/db/tests/rls_and_constraints_test.sql` | Testes de isolamento entre equipas, FKs compostas, imutabilidade e vistas |
 | `backend/db/README.md` | Resumo da base de dados e regras de segurança incorporadas |
 

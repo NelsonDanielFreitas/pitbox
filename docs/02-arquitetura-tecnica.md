@@ -291,7 +291,7 @@ Um único PostgreSQL 16 gerido guarda os dados de negócio (um esquema por módu
 | --- | --- | --- |
 | team | id, name, category, created\_at | Raiz do isolamento |
 | membership | team\_id, user\_id, role, invited\_by, joined\_at | Espelhado no OpenFGA |
-| car | id, team\_id, make, model, serial, transponder, status |  |
+| car | id, team\_id, make, model, serial, transponder, scale, powertrain, status | Catálogos globais (ADR 0016) |
 | engine | id, team\_id, make, model, serial, tanks\_total, minutes\_total | Contadores atualizados por eventos |
 | engine\_mount | engine\_id, car\_id, from\_ts, to\_ts | Histórico motor ↔ carro |
 | tyre\_set | id, team\_id, label, make, compound, insert, glued\_at, sessions\_total |  |
@@ -353,6 +353,7 @@ message Operation {
 3. **Fichas editáveis**: se `base_version` = versão atual, aplica; se não, junta campo a campo; o mesmo campo alterado nos dois lados gera um registo `conflict` devolvido à app para o mecânico escolher
 4. **Pull** devolve alterações por ordem de um número de sequência global por equipa (`change_seq`), em páginas de 500; o cursor é esse número
 5. Apagamentos propagam-se como lápides (`deleted_at`) durante 30 dias
+6. **Catálogos globais** (escalas e motorizações) não entram no `change_seq` da equipa: o `PullResponse` leva `catalog_version` (hash do conteúdo) e, quando o cliente tem outra versão, o snapshot. O `garage/api.go` serve a camada de sync; a app grava no SQLite local e a UI lê de lá
 
 ### 8.3 Sincronização local na box (fase 2)
 

@@ -120,6 +120,8 @@ Cada peça importante tem identidade própria e contador de uso, para que motore
 - Marca, modelo, ano, número de série, fotografia, estado (ativo, reserva, retirado)
 - Transponder associado (número MyLaps) — usado para casar resultados importados
 - Configuração base: o setup "de casa" do qual derivam os setups das sessões
+- Escala e motorização: catálogo global (`garage.scale`, `garage.powertrain`); na v0.1 só
+  1/8 nitro. Outras escalas e motorizações entram na Fase 6.
 
 ### 4.2 Motores
 

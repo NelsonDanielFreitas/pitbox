@@ -100,6 +100,11 @@ DO $$ DECLARE bad text; BEGIN
      AND NOT has_table_privilege('pitbox_app', 'garage.powertrain', 'DELETE'), 'powertrain é catálogo só de leitura';
   ASSERT has_table_privilege('pitbox_readonly', 'garage.scale', 'SELECT')
      AND has_table_privilege('pitbox_readonly', 'garage.powertrain', 'SELECT'), 'readonly lê os catálogos';
+  ASSERT (SELECT array_agg(DISTINCT a.privilege_type ORDER BY a.privilege_type)
+          FROM pg_class c, aclexplode(c.relacl) a
+          WHERE c.oid IN ('garage.scale'::regclass, 'garage.powertrain'::regclass)
+            AND a.grantee IN ('pitbox_app'::regrole, 'pitbox_readonly'::regrole)) = ARRAY['SELECT'],
+    'catálogos: pitbox_app/pitbox_readonly só podem ter SELECT';
   ASSERT (SELECT count(*) FROM garage.scale WHERE code = '1/8' AND active) = 1, 'seed 1/8 em falta';
   ASSERT (SELECT count(*) FROM garage.powertrain WHERE code = 'nitro' AND family = 'combustion' AND active) = 1, 'seed nitro em falta';
   ASSERT NOT has_schema_privilege('pitbox_app', 'public', 'CREATE'), 'pitbox_app não cria objetos em public';

@@ -38,10 +38,10 @@ Há duas restrições estruturais a respeitar:
 
 ```sql
 code        text        PRIMARY KEY CHECK (code ~ '^1/[1-9][0-9]?$'),
-name        text        NOT NULL,
+name        text        NOT NULL CHECK (length(name) BETWEEN 1 AND 40),
 active      boolean     NOT NULL DEFAULT true,
 sort_order  smallint    NOT NULL DEFAULT 0,
-created_at  timestamptz NOT NULL DEFAULT now(),
+created_at  timestamptz NOT NULL DEFAULT now()
 ```
 
 `garage.car.scale` é FK para `garage.scale(code)`, `NOT NULL DEFAULT '1/8'`.
@@ -60,10 +60,10 @@ desativando a antiga; não se faz `UPDATE` ao `code`. As linhas nunca se apagam,
 ```sql
 code        text        PRIMARY KEY CHECK (code ~ '^[a-z][a-z0-9_]{0,31}$'),
 family      garage.powertrain_family NOT NULL,
-name        text        NOT NULL,
+name        text        NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
 active      boolean     NOT NULL DEFAULT true,
 sort_order  smallint    NOT NULL DEFAULT 0,
-created_at  timestamptz NOT NULL DEFAULT now(),
+created_at  timestamptz NOT NULL DEFAULT now()
 ```
 
 `garage.car.powertrain` é FK para `garage.powertrain(code)`, `NOT NULL DEFAULT 'nitro'`.
@@ -86,8 +86,9 @@ ALTER TABLE garage.car VALIDATE CONSTRAINT car_powertrain_fk;
 ```
 
 O `DEFAULT` constante é metadata-only (sem reescrever a tabela). As FKs são `NOT VALID` e
-validadas depois, para não bloquear escritas. Os carros existentes ficam `1/8`/`nitro`; o
-comportamento de 1/8 nitro não muda.
+validadas depois, pela convenção do projeto: o padrão só reduz o bloqueio se o `VALIDATE`
+estiver numa migração separada; aqui fica pela convenção e porque a tabela está vazia. Os
+carros existentes ficam `1/8`/`nitro`; o comportamento de 1/8 nitro não muda.
 
 ### 4. Sementes e semântica de `active`
 
@@ -183,6 +184,16 @@ Os catálogos são globais; o `Pull` é por equipa. A decisão é:
   generaliza-se: componente e carro têm de partilhar a família.
 - `identity.team.category` continua texto livre, descritivo, sem lógica. A equipa pode ter
   carros de escalas diferentes; o carro é a autoridade.
+
+### 9. Exceções conscientes às regras 3 e 5
+
+- **Regra 3 (autorização + `WithTeamTx`)**: a leitura do catálogo por `garage/api.go` não usa
+  `authz.Check` nem `WithTeamTx`, porque os catálogos são **dados de referência globais**, sem
+  `team_id` e sem dados de equipa. A interface é consumida apenas pela camada de sync; não é
+  um caso de uso de equipa e não deve ser tratada como tal pelo teste de arquitetura.
+- **Regra 5 (FKs compostas `(team_id, x_id)`)**: `car.scale → garage.scale(code)` e
+  `car.powertrain → garage.powertrain(code)` são FKs **simples**, porque o alvo é global e não
+  tem `team_id`. As FKs do carro para tabelas de equipa continuam compostas.
 
 ## Alternativas consideradas
 

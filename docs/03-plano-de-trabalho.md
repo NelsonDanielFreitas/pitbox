@@ -233,7 +233,7 @@ regressões no nitro, usando os catálogos e as costuras do F1-07a.
 | F6-03 | Modo final para carros elétricos | `EnergyModel` elétrico: margem por volta, troca de bateria se o regulamento permitir, relatório pós-final | Previsão determinística; final elétrica sem reabastecimentos; funciona em modo avião | Por fazer |
 | F6-04 | Telemetria para carros elétricos | Perfil de sensores por motorização: tensão/corrente, temperatura de motor/ESC, rotações; ingestão, gráficos e alertas | Bancada vs multímetro dentro da tolerância; protocolo nitro compatível; alerta de temperatura na app | Por fazer |
 | F6-06 | Outras escalas e combustão | Ativar 1/10 nitro, 1/5 gasolina e afins; defaults por escala a partir do catálogo/configuração | Um 1/10 nitro e um 1/5 gasolina percorrem o fluxo completo; 1/8 nitro sem regressão | Por fazer |
-| F6-05 | **Gate v1.1** | Uma equipa de elétricos usa a app num treino/prova real; a equipa nitro usa a mesma versão no mesmo período; problemas convertidos em issues | Nenhum setup/registo de bateria em papel; nenhuma regressão no modo final nitro | Por fazer |
+| F6-05 | **Gate v1.1** | Uma equipa de elétricos usa a app num treino/prova real; a equipa nitro usa a mesma versão no mesmo período; um carro de outra escala/combustível também; problemas convertidos em issues | Nenhum setup/registo de bateria em papel; nenhuma regressão no modo final nitro; um 1/10 nitro usado num treino real sem regressões | Por fazer |
 
 Issues: #115–#119 e #125 (F6-06). O Gate (#119) depende de F6-01..F6-04 e de F6-06.
 

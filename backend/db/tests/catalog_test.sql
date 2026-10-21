@@ -22,6 +22,14 @@ DO $$ BEGIN
     'motorização nova não foi usada';
   ASSERT (SELECT count(*) FROM garage.scale WHERE code = '1/8') = 1, 'seed 1/8 desapareceu';
   ASSERT (SELECT count(*) FROM garage.powertrain WHERE code = 'nitro') = 1, 'seed nitro desapareceu';
+  BEGIN
+    INSERT INTO garage.scale (code, name) VALUES ('1/0', 'x');
+    RAISE EXCEPTION 'escala 1/0 foi aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO garage.powertrain (code, family, name) VALUES ('Nitro', 'combustion', 'x');
+    RAISE EXCEPTION 'código com maiúscula foi aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
 END $$;
 
 ROLLBACK;

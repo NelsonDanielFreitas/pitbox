@@ -2299,9 +2299,10 @@
       "todo": "Uma equipa de elétricos usa a app num treino/prova real; a equipa nitro usa a mesma versão no mesmo período; problemas convertidos em issues",
       "done_when": [
         "Nenhum setup/registo de bateria em papel",
-        "Nenhuma regressão no modo final nitro"
+        "Nenhuma regressão no modo final nitro",
+        "Um carro de outra escala ou combustível (ex.: 1/10 nitro) usado num treino real sem regressões"
       ],
-      "done_when_raw": "Nenhum setup/registo de bateria em papel; nenhuma regressão no modo final nitro",
+      "done_when_raw": "Nenhum setup/registo de bateria em papel; nenhuma regressão no modo final nitro; um 1/10 nitro usado num treino real sem regressões",
       "doc_references": [
         "F6-01 a F6-04",
         "F6-06"

@@ -51,8 +51,9 @@ func (s *Service) InitiateTransfer(ctx context.Context, user db.UserID, teamID d
 }
 
 // AcceptTransfer confirms a pending transfer. Only its recipient may accept, and
-// the recipient is a member (WithTeamTx). The old owner is demoted before the new
-// one is promoted, so the one-owner index never sees two owners.
+// the recipient is a member (WithTeamTx). The recipient may own at most
+// domain.MaxOwnedTeams teams. The old owner is demoted before the new one is
+// promoted, so the one-owner index never sees two owners.
 func (s *Service) AcceptTransfer(ctx context.Context, user db.UserID, teamID db.TeamID, requestID, transferID uuid.UUID) (domain.TeamMembership, error) {
 	var membership domain.TeamMembership
 	var oldOwnerID uuid.UUID
@@ -81,6 +82,19 @@ func (s *Service) AcceptTransfer(ctx context.Context, user db.UserID, teamID db.
 		}
 		if !domain.TransferTarget(newOwner.Role) {
 			return domain.ErrTransferTarget
+		}
+
+		// The same ownership limit as CreateTeam: otherwise a user could own an
+		// unlimited number of teams by receiving them from another account.
+		if err := s.store.LockUserForOwnership(ctx, tx, uuid.UUID(user)); err != nil {
+			return err
+		}
+		owned, err := s.store.CountOwnedTeams(ctx, tx, uuid.UUID(user))
+		if err != nil {
+			return err
+		}
+		if owned >= domain.MaxOwnedTeams {
+			return domain.ErrTeamLimit
 		}
 
 		oldUpdated, err := s.store.UpdateMemberRole(ctx, tx, uuid.UUID(teamID), oldOwner.UserID, domain.RoleMechanic, oldOwner.Version)

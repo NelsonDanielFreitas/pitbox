@@ -37,7 +37,9 @@ type UpdateTeamInput struct {
 
 // CreateTeam creates a team and makes the caller its owner. It is idempotent per
 // request_id: a retry with the same body returns the same team, and a different
-// body is INVALID_ARGUMENT. A strong factor is required by the transport.
+// body or method is INVALID_ARGUMENT. A user may own at most MaxOwnedTeams
+// teams; a live idempotency replay still works at the limit. A strong factor is
+// required by the transport.
 func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamInput) (domain.Team, error) {
 	team, err := domain.NewTeam(in.Name, in.Category, in.Club, in.CountryCode)
 	if err != nil {
@@ -51,12 +53,23 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 	var result domain.Team
 	err = s.db.WithNewTeamTx(ctx, user, func(ctx context.Context, tx db.DBTX, teamID db.TeamID) error {
 		userID := uuid.UUID(user)
-		existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
+		if err := s.store.LockUserForOwnership(ctx, tx, userID); err != nil {
+			return err
+		}
+		existingMethod, existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
 		switch {
 		case err == nil:
-			return s.replayCreateTeam(ctx, tx, existingHash, existingResponse, hash, &result)
+			return s.replayCreateTeam(ctx, tx, existingMethod, existingHash, existingResponse, hash, &result)
 		case !errors.Is(err, errNotFound):
 			return err
+		}
+
+		owned, err := s.store.CountOwnedTeams(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if owned >= domain.MaxOwnedTeams {
+			return domain.ErrTeamLimit
 		}
 
 		inserted, err := s.store.InsertIdempotencyKey(ctx, tx, in.RequestID, userID, createTeamMethod, hash)
@@ -67,11 +80,11 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 			// Another request with the same request_id won the race and has
 			// committed (the INSERT waited for it). Replay its team; nothing of
 			// this transaction is kept.
-			existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
+			existingMethod, existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
 			if err != nil {
 				return err
 			}
-			return s.replayCreateTeam(ctx, tx, existingHash, existingResponse, hash, &result)
+			return s.replayCreateTeam(ctx, tx, existingMethod, existingHash, existingResponse, hash, &result)
 		}
 
 		team.ID = uuid.UUID(teamID)
@@ -109,8 +122,8 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 	return result, nil
 }
 
-func (s *Service) replayCreateTeam(ctx context.Context, tx db.DBTX, existingHash, existingResponse, wantHash []byte, result *domain.Team) error {
-	if !bytes.Equal(existingHash, wantHash) {
+func (s *Service) replayCreateTeam(ctx context.Context, tx db.DBTX, existingMethod string, existingHash, existingResponse, wantHash []byte, result *domain.Team) error {
+	if existingMethod != createTeamMethod || !bytes.Equal(existingHash, wantHash) {
 		return fmt.Errorf("create team: %w", domain.ErrInvalid)
 	}
 	if len(existingResponse) != 16 {

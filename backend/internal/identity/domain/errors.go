@@ -23,8 +23,10 @@ var (
 	ErrInvalidInvitation = fmt.Errorf("identity: invalid invitation: %w", apperr.ErrNotFound)
 	// ErrOwnerRequired: the last owner cannot leave, be removed or be demoted.
 	ErrOwnerRequired = fmt.Errorf("identity: the team would be left without an owner: %w", apperr.ErrFailedPrecondition)
-	// ErrInvitationLimit: a team may have at most 50 pending invitations.
+	// ErrInvitationLimit: a team may have at most MaxPendingInvitations pending invitations.
 	ErrInvitationLimit = fmt.Errorf("identity: too many pending invitations: %w", apperr.ErrFailedPrecondition)
+	// ErrTeamLimit: a user may own at most MaxOwnedTeams teams.
+	ErrTeamLimit = fmt.Errorf("identity: team ownership limit reached: %w", apperr.ErrFailedPrecondition)
 	// ErrTransferInvalid: the transfer does not exist, expired, was cancelled or
 	// was already confirmed.
 	ErrTransferInvalid = fmt.Errorf("identity: invalid ownership transfer: %w", apperr.ErrNotFound)

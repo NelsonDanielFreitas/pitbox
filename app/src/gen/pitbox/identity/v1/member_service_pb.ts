@@ -255,8 +255,10 @@ export type InviteMemberResponse = Message<"pitbox.identity.v1.InviteMemberRespo
   invitation?: Invitation | undefined;
 
   /**
-   * Plaintext token, returned exactly once. The client puts it in the URL
-   * fragment of the invite link (/convite#t=<token>), never in the query string.
+   * Plaintext token, returned exactly once. For link invitations the client
+   * puts it in the URL fragment (/convite#t=<token>), never in the query string.
+   * Email invitations keep returning it until the real mailer ships (#124);
+   * from then on the token only travels in the email.
    *
    * @generated from field: string token = 2;
    */

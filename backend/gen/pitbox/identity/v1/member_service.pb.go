@@ -494,8 +494,10 @@ func (x *InviteMemberRequest) GetEmail() string {
 type InviteMemberResponse struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Invitation *Invitation            `protobuf:"bytes,1,opt,name=invitation,proto3" json:"invitation,omitempty"`
-	// Plaintext token, returned exactly once. The client puts it in the URL
-	// fragment of the invite link (/convite#t=<token>), never in the query string.
+	// Plaintext token, returned exactly once. For link invitations the client
+	// puts it in the URL fragment (/convite#t=<token>), never in the query string.
+	// Email invitations keep returning it until the real mailer ships (#124);
+	// from then on the token only travels in the email.
 	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

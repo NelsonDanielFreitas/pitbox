@@ -12,6 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const countOwnedTeams = `-- name: CountOwnedTeams :one
+SELECT count(*)
+FROM identity.membership m
+JOIN identity.team t ON t.id = m.team_id AND t.deleted_at IS NULL
+WHERE m.user_id = $1 AND m.role = 'owner'
+`
+
+func (q *Queries) CountOwnedTeams(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countOwnedTeams, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createTeam = `-- name: CreateTeam :one
 INSERT INTO identity.team (id, name, category, club, country_code, created_by)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -181,6 +195,17 @@ SELECT id FROM identity.team WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPD
 
 func (q *Queries) LockTeamForInvites(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, lockTeamForInvites, id)
+	var id_2 uuid.UUID
+	err := row.Scan(&id_2)
+	return id_2, err
+}
+
+const lockUserForOwnership = `-- name: LockUserForOwnership :one
+SELECT id FROM identity.user_account WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE
+`
+
+func (q *Queries) LockUserForOwnership(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockUserForOwnership, id)
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err

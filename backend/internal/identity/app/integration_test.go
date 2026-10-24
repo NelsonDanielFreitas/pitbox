@@ -231,6 +231,114 @@ func TestCreateTeamIdempotency(t *testing.T) {
 	require.ErrorIs(t, err, domain.ErrInvalid)
 }
 
+func TestCreateTeamOwnershipLimit(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	firstRequest := uuid.Must(uuid.NewV7())
+	firstInput := app.CreateTeamInput{
+		RequestID: firstRequest, Name: "Equipa 1", Category: "1/8", CountryCode: "PT",
+	}
+
+	first, err := h.svc.CreateTeam(h.ctx, uid(t, owner), firstInput)
+	require.NoError(t, err)
+	for i := 2; i <= domain.MaxOwnedTeams; i++ {
+		h.createTeam(t, owner, fmt.Sprintf("Equipa %d", i))
+	}
+	require.Equal(t, domain.MaxOwnedTeams, h.count(t, fmt.Sprintf(`SELECT count(*) FROM identity.team WHERE created_by = '%s' AND deleted_at IS NULL`, owner)))
+
+	// A live idempotency key still replays at the limit.
+	replay, err := h.svc.CreateTeam(h.ctx, uid(t, owner), firstInput)
+	require.NoError(t, err)
+	require.Equal(t, first.ID, replay.ID)
+
+	requestID := uuid.Must(uuid.NewV7())
+	_, err = h.svc.CreateTeam(h.ctx, uid(t, owner), app.CreateTeamInput{
+		RequestID: requestID, Name: "Equipa 11", Category: "1/8", CountryCode: "PT",
+	})
+	require.ErrorIs(t, err, domain.ErrTeamLimit)
+	require.ErrorIs(t, err, apperr.ErrFailedPrecondition)
+
+	require.Equal(t, domain.MaxOwnedTeams, h.count(t, fmt.Sprintf(`SELECT count(*) FROM identity.team WHERE created_by = '%s' AND deleted_at IS NULL`, owner)))
+	require.Equal(t, 0, h.count(t, fmt.Sprintf(`SELECT count(*) FROM platform.idempotency_key WHERE user_id = '%s' AND request_id = '%s'`, owner, requestID)))
+}
+
+func TestTeamLimitCountsOnlyOwnedActiveTeams(t *testing.T) {
+	h := newHarness(t)
+	owner, other := h.user(t, "owner"), h.user(t, "other")
+
+	// Being a mechanic in ten teams does not count towards the owner limit.
+	for i := 1; i <= domain.MaxOwnedTeams; i++ {
+		h.createTeam(t, other, fmt.Sprintf("Equipa de outro %d", i))
+	}
+	h.pg.Exec(t, fmt.Sprintf(
+		`INSERT INTO identity.membership (team_id, user_id, role)
+		 SELECT id, '%s', 'mechanic' FROM identity.team WHERE created_by = '%s'`,
+		owner, other))
+
+	// A deleted team does not count either.
+	deleted := h.createTeam(t, owner, "Equipa apagada")
+	h.pg.Exec(t, fmt.Sprintf(`UPDATE identity.team SET deleted_at = now() WHERE id = '%s'`, deleted.ID))
+
+	for i := 1; i <= domain.MaxOwnedTeams; i++ {
+		h.createTeam(t, owner, fmt.Sprintf("Equipa própria %d", i))
+	}
+	_, err := h.svc.CreateTeam(h.ctx, uid(t, owner), app.CreateTeamInput{
+		RequestID: uuid.Must(uuid.NewV7()), Name: "Equipa a mais", Category: "1/8", CountryCode: "PT",
+	})
+	require.ErrorIs(t, err, domain.ErrTeamLimit)
+}
+
+func TestCreateTeamIdempotencyExpired(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	requestID := uuid.Must(uuid.NewV7())
+	in := app.CreateTeamInput{
+		RequestID: requestID, Name: "Equipa", Category: "1/8", CountryCode: "PT",
+	}
+
+	first, err := h.svc.CreateTeam(h.ctx, uid(t, owner), in)
+	require.NoError(t, err)
+	h.pg.Exec(t, fmt.Sprintf(
+		`UPDATE platform.idempotency_key
+		 SET created_at = now() - interval '8 days', expires_at = now() - interval '1 day'
+		 WHERE user_id = '%s' AND request_id = '%s'`,
+		owner, requestID))
+
+	second, err := h.svc.CreateTeam(h.ctx, uid(t, owner), in)
+	require.NoError(t, err)
+	require.NotEqual(t, first.ID, second.ID)
+	require.Equal(t, 2, h.count(t, fmt.Sprintf(`SELECT count(*) FROM identity.team WHERE created_by = '%s'`, owner)))
+
+	// The expired key was taken over: the next retry replays the new team.
+	replay, err := h.svc.CreateTeam(h.ctx, uid(t, owner), in)
+	require.NoError(t, err)
+	require.Equal(t, second.ID, replay.ID)
+	require.Equal(t, 1, h.count(t, fmt.Sprintf(
+		`SELECT count(*) FROM platform.idempotency_key
+		 WHERE user_id = '%s' AND request_id = '%s' AND expires_at > now() AND response IS NOT NULL`,
+		owner, requestID)))
+}
+
+func TestCreateTeamIdempotencyRejectsAnotherMethod(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	requestID := uuid.Must(uuid.NewV7())
+	in := app.CreateTeamInput{
+		RequestID: requestID, Name: "Equipa", Category: "1/8", CountryCode: "PT",
+	}
+
+	_, err := h.svc.CreateTeam(h.ctx, uid(t, owner), in)
+	require.NoError(t, err)
+	h.pg.Exec(t, fmt.Sprintf(
+		`UPDATE platform.idempotency_key SET method = '/pitbox.setup.v1.SetupService/CreateSetup'
+		 WHERE user_id = '%s' AND request_id = '%s'`,
+		owner, requestID))
+
+	_, err = h.svc.CreateTeam(h.ctx, uid(t, owner), in)
+	require.ErrorIs(t, err, domain.ErrInvalid)
+	require.Equal(t, 1, h.count(t, fmt.Sprintf(`SELECT count(*) FROM identity.team WHERE created_by = '%s'`, owner)))
+}
+
 func TestInvitationFailuresAreIndistinguishable(t *testing.T) {
 	h := newHarness(t)
 	owner, userA, userB := h.user(t, "owner"), h.user(t, "a"), h.user(t, "b")
@@ -754,6 +862,101 @@ func TestConcurrentCreateTeamIdempotency(t *testing.T) {
 	require.NoError(t, errs[1])
 	require.Equal(t, ids[0], ids[1])
 	require.Equal(t, 1, h.count(t, fmt.Sprintf(`SELECT count(*) FROM identity.team WHERE created_by = '%s'`, owner)))
+}
+
+func TestConcurrentCreateTeamAtOwnershipLimit(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	for i := 1; i < domain.MaxOwnedTeams; i++ {
+		h.createTeam(t, owner, fmt.Sprintf("Equipa %d", i))
+	}
+
+	requestIDs := []uuid.UUID{uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())}
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make([]error, len(requestIDs))
+	for i, requestID := range requestIDs {
+		wg.Add(1)
+		go func(i int, requestID uuid.UUID) {
+			defer wg.Done()
+			<-start
+			_, errs[i] = h.svc.CreateTeam(h.ctx, uid(t, owner), app.CreateTeamInput{
+				RequestID: requestID, Name: fmt.Sprintf("Equipa concorrente %d", i), Category: "1/8", CountryCode: "PT",
+			})
+		}(i, requestID)
+	}
+	close(start)
+	wg.Wait()
+
+	successes, limited := 0, 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, domain.ErrTeamLimit):
+			limited++
+		default:
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, limited)
+	require.Equal(t, domain.MaxOwnedTeams, h.count(t, fmt.Sprintf(`SELECT count(*) FROM identity.team WHERE created_by = '%s' AND deleted_at IS NULL`, owner)))
+}
+
+func TestAcceptTransferRespectsOwnershipLimit(t *testing.T) {
+	h := newHarness(t)
+	oldOwner, recipient, other := h.user(t, "old-owner"), h.user(t, "recipient"), h.user(t, "other")
+	team := h.createTeam(t, oldOwner, "Equipa")
+
+	_, token, err := h.svc.InviteMember(h.ctx, uid(t, oldOwner), tid(t, team.ID), app.InviteMemberInput{
+		RequestID: uuid.Must(uuid.NewV7()), Role: domain.RoleMechanic,
+	})
+	require.NoError(t, err)
+	_, err = h.svc.AcceptInvitation(h.ctx, uid(t, recipient), uuid.Must(uuid.NewV7()), token)
+	require.NoError(t, err)
+	transfer, err := h.svc.InitiateTransfer(h.ctx, uid(t, oldOwner), tid(t, team.ID), app.InitiateTransferInput{
+		RequestID: uuid.Must(uuid.NewV7()), ToUserID: recipient,
+	})
+	require.NoError(t, err)
+
+	owned := make([]domain.Team, 0, domain.MaxOwnedTeams)
+	for i := 1; i <= domain.MaxOwnedTeams; i++ {
+		owned = append(owned, h.createTeam(t, recipient, fmt.Sprintf("Equipa do destinatário %d", i)))
+	}
+
+	_, err = h.svc.AcceptTransfer(h.ctx, uid(t, recipient), tid(t, team.ID), uuid.Must(uuid.NewV7()), transfer.ID)
+	require.ErrorIs(t, err, domain.ErrTeamLimit)
+	require.Equal(t, 1, h.count(t, fmt.Sprintf(
+		`SELECT count(*) FROM identity.ownership_transfer WHERE id = '%s' AND confirmed_at IS NULL AND cancelled_at IS NULL`,
+		transfer.ID)))
+	require.Equal(t, "owner", h.pg.Exec(t, fmt.Sprintf(
+		`SELECT role::text FROM identity.membership WHERE team_id = '%s' AND user_id = '%s'`, team.ID, oldOwner)))
+	require.Equal(t, "mechanic", h.pg.Exec(t, fmt.Sprintf(
+		`SELECT role::text FROM identity.membership WHERE team_id = '%s' AND user_id = '%s'`, team.ID, recipient)))
+
+	// Free one team through the intended path: transfer its ownership to other.
+	free := owned[0]
+	_, token, err = h.svc.InviteMember(h.ctx, uid(t, recipient), tid(t, free.ID), app.InviteMemberInput{
+		RequestID: uuid.Must(uuid.NewV7()), Role: domain.RoleMechanic,
+	})
+	require.NoError(t, err)
+	_, err = h.svc.AcceptInvitation(h.ctx, uid(t, other), uuid.Must(uuid.NewV7()), token)
+	require.NoError(t, err)
+	freeTransfer, err := h.svc.InitiateTransfer(h.ctx, uid(t, recipient), tid(t, free.ID), app.InitiateTransferInput{
+		RequestID: uuid.Must(uuid.NewV7()), ToUserID: other,
+	})
+	require.NoError(t, err)
+	_, err = h.svc.AcceptTransfer(h.ctx, uid(t, other), tid(t, free.ID), uuid.Must(uuid.NewV7()), freeTransfer.ID)
+	require.NoError(t, err)
+
+	membership, err := h.svc.AcceptTransfer(h.ctx, uid(t, recipient), tid(t, team.ID), uuid.Must(uuid.NewV7()), transfer.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.RoleOwner, membership.Role)
+	require.Equal(t, "owner", h.pg.Exec(t, fmt.Sprintf(
+		`SELECT role::text FROM identity.membership WHERE team_id = '%s' AND user_id = '%s'`, team.ID, recipient)))
+	require.Equal(t, "mechanic", h.pg.Exec(t, fmt.Sprintf(
+		`SELECT role::text FROM identity.membership WHERE team_id = '%s' AND user_id = '%s'`, team.ID, oldOwner)))
 }
 
 func TestConcurrentAcceptAndCancelTransfer(t *testing.T) {

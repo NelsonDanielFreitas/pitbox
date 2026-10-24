@@ -11,8 +11,6 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
 )
 
-const maxPendingInvitations = 50
-
 // InviteMemberInput is the input of InviteMember.
 type InviteMemberInput struct {
 	RequestID uuid.UUID
@@ -22,6 +20,7 @@ type InviteMemberInput struct {
 
 // InviteMember creates an invitation by email or link. It is intentionally not
 // idempotent; the plaintext token is returned once and only its hash is stored.
+// Email invitations keep returning the token until the real mailer ships (#124).
 func (s *Service) InviteMember(ctx context.Context, user db.UserID, teamID db.TeamID, in InviteMemberInput) (domain.Invitation, string, error) {
 	if err := domain.AssignableRole(in.Role); err != nil {
 		return domain.Invitation{}, "", err
@@ -46,7 +45,7 @@ func (s *Service) InviteMember(ctx context.Context, user db.UserID, teamID db.Te
 		if err != nil {
 			return err
 		}
-		if pending >= maxPendingInvitations {
+		if pending >= domain.MaxPendingInvitations {
 			return domain.ErrInvitationLimit
 		}
 		created, err = s.store.CreateInvitation(ctx, tx, domain.Invitation{

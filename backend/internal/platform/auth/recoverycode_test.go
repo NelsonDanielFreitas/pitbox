@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/hmac"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -69,6 +70,21 @@ func TestGenerateRecoveryCodesShape(t *testing.T) {
 		if len(hashes[i]) != 32 || !hmac.Equal(hashes[i], h.Hash(code)) {
 			t.Fatalf("hash %d does not match the active-key HMAC", i)
 		}
+	}
+}
+
+func TestRecoveryCodeHasherRefusesTooManyKeys(t *testing.T) {
+	t.Parallel()
+	keys := make([]config.AuthKey, maxRecoveryCodeKeys+1)
+	for i := range keys {
+		keys[i] = key(fmt.Sprintf("k%d", i), byte(i+1))
+	}
+	kr, err := NewKeyring(keys)
+	if err != nil {
+		t.Fatalf("NewKeyring: %v", err)
+	}
+	if _, err := kr.RecoveryCodeHasher(); err == nil {
+		t.Fatal("RecoveryCodeHasher accepted more than the maximum number of keys")
 	}
 }
 

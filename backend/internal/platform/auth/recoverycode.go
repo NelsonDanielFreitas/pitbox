@@ -19,6 +19,8 @@ const (
 	recoveryCodeLength = 26
 	// recoveryCodeGroup is the size of the readable groups shown to the user.
 	recoveryCodeGroup = 4
+	// maxRecoveryCodeKeys bounds the candidate list accepted by the store and SQL.
+	maxRecoveryCodeKeys = 16
 )
 
 // recoveryCodeEncoding is unpadded standard base32: 16 bytes -> 26 characters.

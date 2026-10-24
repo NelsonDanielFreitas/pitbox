@@ -87,6 +87,9 @@ func (k *Keyring) Sealer(purpose string) (*Sealer, error) {
 // different purpose from the AEAD sealers: a key never seals a cookie and authenticates a
 // recovery code.
 func (k *Keyring) RecoveryCodeHasher() (*RecoveryCodeHasher, error) {
+	if len(k.keys) > maxRecoveryCodeKeys {
+		return nil, errors.New("auth: too many recovery code keys")
+	}
 	h := &RecoveryCodeHasher{keys: make([]recoveryCodeKey, 0, len(k.keys))}
 	for _, key := range k.keys {
 		macKey, err := deriveKey(key.Secret, PurposeRecoveryCode, key.ID)

@@ -7,7 +7,7 @@ Aplica-se ao anel `PITBOX_AUTH_KEYS` (ADR 0013): cookies de pré-login, tokens d
 O anel é ordenado: a primeira chave sela os valores novos; todas as chaves abrem ou verificam valores antigos. Uma chave não pode sair enquanto existirem:
 
 - sessões seladas com ela;
-- códigos de recuperação não usados como `key_id` igual ao `kid` dessa chave.
+- códigos de recuperação não usados com `key_id` igual ao `kid` dessa chave.
 
 ### Códigos de recuperação
 
@@ -44,6 +44,15 @@ As sessões guardadas no Valkey estão seladas com a chave ativa no momento da c
 4. Executar a consulta de códigos de recuperação e garantir que a chave antiga já não tem códigos por usar.
 5. Retirar a chave antiga e reiniciar.
 6. Verificar login, logout, refresh e consumo de um código de recuperação de teste.
+
+## Chave comprometida
+
+Se uma chave mestra for comprometida, o objetivo deixa de ser esperar pela expiração: é fechar já as sessões seladas com ela.
+
+1. Acrescentar uma chave nova à frente do anel e **retirar imediatamente** a chave comprometida.
+2. Reiniciar o `pitbox-api`. As sessões e cookies de pré-login selados com a chave antiga deixam de abrir; os utilizadores voltam a autenticar-se, que é o efeito desejado.
+3. Os códigos de recuperação com esse `key_id` deixam de verificar. A consulta acima lista os utilizadores afetados; devem regenerar os códigos depois do próximo login com fator forte.
+4. Uma fuga da chave HMAC **não** torna os códigos quebráveis: têm 128 bits e a chave é uma camada adicional. Retirar a chave serve para fechar as sessões, não para proteger os códigos.
 
 ## Notas
 

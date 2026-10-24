@@ -431,6 +431,44 @@
       ]
     },
     {
+      "id": "F1-03d",
+      "title": "Endurecer os códigos de recuperação",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "16 bytes (128 bits) em base32 canónico; HMAC-SHA256 com chave HKDF (`recovery-code`); `key_id` na tabela para rotação; função SQL com lista de candidatos; normalização estrita; falhas auditadas; runbook de rotação",
+      "done_when": [
+        "Código gerado tem 128 bits",
+        "o mesmo código com chaves diferentes dá hashes diferentes",
+        "um código continua válido depois de rodar a chave",
+        "um código usado ou mal formado devolve a mesma resposta",
+        "go test -race ./..., make lint, make db-test e TM-AUTH-18 verdes"
+      ],
+      "done_when_raw": "Código gerado tem 128 bits; o mesmo código com chaves diferentes dá hashes diferentes; um código continua válido depois de rodar a chave; um código usado ou mal formado devolve a mesma resposta; go test -race ./..., make lint, make db-test e TM-AUTH-18 verdes",
+      "doc_references": [
+        "ADR 0013",
+        "Issue #127",
+        "Runbook de rotação de chaves"
+      ],
+      "suggested_branch": "f1-03d-endurecer-codigos",
+      "issue_title": "F1-03d — Endurecer os códigos de recuperação (128 bits e HMAC com chave rodável)",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "HMAC com chave fora da base de dados; key_id para retirar chaves antigas com segurança; 128 bits; normalização canónica; falhas auditadas sem código/hash; rate limiting de /auth/* aceite até F5-05.",
+      "pull_request": null,
+      "adrs": [
+        "0013"
+      ]
+    },
+    {
       "id": "F1-04",
       "title": "Contexto de equipa e RLS",
       "phase": "1",

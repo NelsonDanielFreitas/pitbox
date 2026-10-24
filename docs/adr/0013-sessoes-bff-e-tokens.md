@@ -50,7 +50,7 @@ O cookie de pré-login é Lax porque o regresso do Zitadel é uma navegação en
 
 ### Chaves
 
-Uma chave mestra de configuração com `kid`, e **uma chave por função** derivada com HKDF-SHA256 (pré-login, refresh tokens). Rodar a chave mestra = novo `kid`; o antigo continua válido só para decifrar até as sessões expirarem.
+Uma chave mestra de configuração com `kid`, e **uma chave por função** derivada com HKDF-SHA256 (pré-login, refresh tokens, códigos de recuperação). Rodar a chave mestra = novo `kid`; o antigo continua válido para decifrar até as sessões expirarem e para verificar códigos de recuperação enquanto existirem códigos não usados com esse `kid`.
 
 ### Sessão (Valkey)
 
@@ -94,11 +94,14 @@ Um utilizador que seja dono de alguma equipa só consegue fazer login se o callb
 
 Alternativa para utilizadores que perderam o acesso ao TOTP/passkey. O BFF gera e consome os códigos; o Zitadel não os gere.
 
-- 8 códigos de uso único por geração, 8 bytes de entropia codificados em base32 (maiúsculas, sem separadores).
-- Na base só é guardado o **SHA-256** do código normalizado; o texto em claro é mostrado uma única vez.
+- 8 códigos de uso único por geração, **16 bytes (128 bits)** codificados em base32 (26 caracteres, em grupos de 4; hífenes e espaços são ignorados).
+- Na base só é guardado o **HMAC-SHA256** do código normalizado; o texto em claro é mostrado uma única vez. A chave do HMAC é derivada do anel com HKDF-SHA256 e o propósito `recovery-code`, nunca é a chave AEAD.
+- O código normalizado tem de ser a grafia canónica: o `encoding/base32` do Go não tem modo estrito, por isso o descodificador compara a recodificação com a entrada.
 - A geração (`POST /auth/recovery-codes`) exige sessão com fator forte (step-up).
-- O consumo (`POST /auth/recovery-codes/consume`) valida o código, marca-o como usado e eleva a sessão atual a step-up (`amr` = `["otp"]`). Um código consumido é rejeitado na segunda tentativa.
+- O consumo (`POST /auth/recovery-codes/consume`) valida o código, marca-o como usado e eleva a sessão atual a step-up (`amr` = `["otp"]`). Um código consumido é rejeitado na segunda tentativa; um código mal formado recebe a mesma resposta de um código inválido.
+- A tabela `identity.recovery_code` guarda o `key_id` da chave que produziu o HMAC. A rotação calcula o HMAC com todas as chaves do anel, mas o `key_id` permite saber quando uma chave antiga já não tem códigos não usados. A regra operacional está em `docs/runbooks/rotacao-chaves-auth.md`.
 - A tabela `identity.recovery_code` tem RLS por utilizador e é acedida por funções `SECURITY DEFINER` (`replace_recovery_codes`, `consume_recovery_code`) porque o contexto do BFF pode não ter `app.user_id` definido.
+- `/auth/*` não tem rate limiting no servidor; o consumo de códigos fica abrangido pelo risco aceite até ao F5-05. Os 128 bits tornam a força bruta online inviável.
 
 ### Gestão de sessões
 

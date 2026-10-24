@@ -30,9 +30,10 @@ type UserDirectory interface {
 // package defines the interface; the identity module implements it.
 type RecoveryCodeStore interface {
 	// Replace deletes all unused codes for the user and inserts the new hashes atomically.
-	Replace(ctx context.Context, userID string, codeHashes [][]byte) error
-	// Consume marks one code as used if it exists and is unused for the user.
-	Consume(ctx context.Context, userID string, codeHash []byte) (bool, error)
+	// keyID identifies the active key used to hash them.
+	Replace(ctx context.Context, userID, keyID string, codeHashes [][]byte) error
+	// Consume marks one code as used if any of the candidate hashes exists and is unused.
+	Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error)
 }
 
 // ActorKind mirrors the actor_kind column of audit.audit_log.

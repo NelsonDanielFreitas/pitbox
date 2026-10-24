@@ -18,12 +18,13 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 )
 
-// Purposes: each one gets its own key derived from the master key, so a value sealed for
-// one purpose can never be opened as another (and a bug in one place cannot decrypt the
-// other).
+// Purposes: each one gets its own key derived from the master key, so a value sealed or
+// authenticated for one purpose can never be opened or verified as another (and a bug in one
+// place cannot decrypt or authenticate the other).
 const (
 	PurposeLoginCookie  = "login-cookie"
 	PurposeSessionToken = "session-token"
+	PurposeRecoveryCode = "recovery-code"
 )
 
 // ErrInvalidSealed is the only error Open returns. A malformed value, an unknown kid and
@@ -35,13 +36,14 @@ var ErrInvalidSealed = errors.New("auth: invalid sealed value")
 const maxSealedLen = 8192
 
 // Keyring holds the master keys. The first one seals; every one can open (rotation: add
-// a new first key, keep the old ones until the sessions sealed with them have expired).
+// a new first key, keep the old ones until the sessions sealed with them have expired and
+// no unused recovery code carries their kid).
 type Keyring struct {
 	keys []config.AuthKey
 }
 
 // NewKeyring checks the keys again (they come from config, but this package must not
-// trust its caller with the one thing that protects the refresh tokens).
+// trust its caller with the one thing that protects sessions and recovery codes).
 func NewKeyring(keys []config.AuthKey) (*Keyring, error) {
 	if len(keys) == 0 {
 		return nil, errors.New("auth: no master key configured")
@@ -54,12 +56,17 @@ func NewKeyring(keys []config.AuthKey) (*Keyring, error) {
 	return &Keyring{keys: keys}, nil
 }
 
+// deriveKey derives one 32-byte key per purpose and kid. HKDF-SHA256 (RFC 5869):
+// info binds the derived key to the purpose and the kid.
+func deriveKey(secret []byte, purpose, kid string) ([]byte, error) {
+	return hkdf.Key(sha256.New, secret, nil, "pitbox/v1/"+purpose+"/"+kid, 32)
+}
+
 // Sealer returns the AEAD for one purpose.
 func (k *Keyring) Sealer(purpose string) (*Sealer, error) {
 	s := &Sealer{aeads: make(map[string]cipher.AEAD, len(k.keys)), active: k.keys[0].ID}
 	for _, key := range k.keys {
-		// HKDF-SHA256 (RFC 5869): info binds the derived key to the purpose and the kid.
-		dk, err := hkdf.Key(sha256.New, key.Secret, nil, "pitbox/v1/"+purpose+"/"+key.ID, 32)
+		dk, err := deriveKey(key.Secret, purpose, key.ID)
 		if err != nil {
 			return nil, fmt.Errorf("derive key: %w", err)
 		}
@@ -74,6 +81,24 @@ func (k *Keyring) Sealer(purpose string) (*Sealer, error) {
 		s.aeads[key.ID] = aead
 	}
 	return s, nil
+}
+
+// RecoveryCodeHasher derives one HMAC key per purpose and kid. It is deliberately a
+// different purpose from the AEAD sealers: a key never seals a cookie and authenticates a
+// recovery code.
+func (k *Keyring) RecoveryCodeHasher() (*RecoveryCodeHasher, error) {
+	if len(k.keys) > maxRecoveryCodeKeys {
+		return nil, errors.New("auth: too many recovery code keys")
+	}
+	h := &RecoveryCodeHasher{keys: make([]recoveryCodeKey, 0, len(k.keys))}
+	for _, key := range k.keys {
+		macKey, err := deriveKey(key.Secret, PurposeRecoveryCode, key.ID)
+		if err != nil {
+			return nil, fmt.Errorf("derive recovery code key: %w", err)
+		}
+		h.keys = append(h.keys, recoveryCodeKey{id: key.ID, macKey: macKey})
+	}
+	return h, nil
 }
 
 // Sealer seals and opens values with AES-256-GCM. The format is "<kid>.<base64url(nonce||ciphertext)>".

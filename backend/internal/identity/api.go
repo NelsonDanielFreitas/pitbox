@@ -52,11 +52,11 @@ func NewRecoveryCodeDirectory(db store.Querier) *RecoveryCodeDirectory {
 var _ auth.RecoveryCodeStore = (*RecoveryCodeDirectory)(nil)
 
 // Replace deletes all unused codes for the user and inserts the new hashes atomically.
-func (d *RecoveryCodeDirectory) Replace(ctx context.Context, userID string, codeHashes [][]byte) error {
-	return d.codes.Replace(ctx, userID, codeHashes)
+func (d *RecoveryCodeDirectory) Replace(ctx context.Context, userID, keyID string, codeHashes [][]byte) error {
+	return d.codes.Replace(ctx, userID, keyID, codeHashes)
 }
 
-// Consume marks one code as used if it exists and is unused for the user.
-func (d *RecoveryCodeDirectory) Consume(ctx context.Context, userID string, codeHash []byte) (bool, error) {
-	return d.codes.Consume(ctx, userID, codeHash)
+// Consume marks one code as used if any candidate hash exists and is unused for the user.
+func (d *RecoveryCodeDirectory) Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error) {
+	return d.codes.Consume(ctx, userID, codeHashes)
 }

@@ -48,14 +48,15 @@ var ErrStepUpRefused = errors.New("auth: step-up refused")
 
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
-	Provider      *Provider
-	Authn         *Authenticator // for /auth/session
-	Store         *Store
-	LoginCookies  *LoginCookies
-	Users         UserDirectory
-	RecoveryCodes RecoveryCodeStore
-	Audit         Auditor
-	Log           *slog.Logger
+	Provider           *Provider
+	Authn              *Authenticator // for /auth/session
+	Store              *Store
+	LoginCookies       *LoginCookies
+	Users              UserDirectory
+	RecoveryCodes      RecoveryCodeStore
+	RecoveryCodeHasher *RecoveryCodeHasher
+	Audit              Auditor
+	Log                *slog.Logger
 	// Refusals counts callbacks refused before their state was validated (nil: not counted).
 	Refusals       RefusalCounter
 	PublicURL      string // origin the browser sees, without a trailing slash
@@ -741,7 +742,14 @@ func (h *Handler) generateRecoveryCodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	codes, hashes, err := GenerateRecoveryCodes()
+	if h.RecoveryCodeHasher == nil {
+		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "keyring"))
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
+		return
+	}
+
+	codes, hashes, err := h.RecoveryCodeHasher.Generate()
 	if err != nil {
 		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "random"))
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -749,7 +757,7 @@ func (h *Handler) generateRecoveryCodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.RecoveryCodes.Replace(ctx, sess.UserID, hashes); err != nil {
+	if err := h.RecoveryCodes.Replace(ctx, sess.UserID, h.RecoveryCodeHasher.KeyID(), hashes); err != nil {
 		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
@@ -795,19 +803,27 @@ func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code := NormalizeRecoveryCode(req.Code)
-	if code == "" {
-		w.WriteHeader(http.StatusBadRequest)
+	if h.RecoveryCodeHasher == nil {
+		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "keyring"))
+		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 
-	ok, err := h.RecoveryCodes.Consume(ctx, sess.UserID, HashRecoveryCode(code))
+	hashes := h.RecoveryCodeHasher.Hashes(req.Code)
+	if len(hashes) == 0 {
+		h.auditRecoveryFailure(ctx, r, sess)
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	ok, err := h.RecoveryCodes.Consume(ctx, sess.UserID, hashes)
 	if err != nil {
 		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "store"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
 	if !ok {
+		h.auditRecoveryFailure(ctx, r, sess)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
@@ -829,6 +845,18 @@ func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// auditRecoveryFailure records a failed recovery-code attempt with a fixed reason. It never
+// carries the code or its hash.
+func (h *Handler) auditRecoveryFailure(ctx context.Context, r *http.Request, sess Session) {
+	if err := h.Audit.Record(ctx, AuditEvent{
+		Action: "auth.recovery_code_failed", ActorKind: ActorUser, ActorID: sess.UserID,
+		SessionRef: sess.Ref(), Reason: "invalid_code",
+		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
+	}); err != nil {
+		h.Log.ErrorContext(ctx, "audit recovery code failure", slog.String("reason", "audit"))
+	}
 }
 
 // backchannelLogout receives a logout token from the identity provider and terminates the

@@ -84,7 +84,7 @@ O login usa passkeys como método principal, com email + palavra-passe + segundo
 
 - Obrigatório para donos de equipa e administradores; recomendado para os restantes
 - Métodos: passkey, TOTP (app autenticadora); SMS não é suportado
-- 10 códigos de recuperação de uso único, mostrados uma vez e guardados com hash
+- 8 códigos de recuperação de uso único, mostrados uma vez e guardados com HMAC
 
 ### 3.4 Sessões e dispositivos
 

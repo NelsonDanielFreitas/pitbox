@@ -69,6 +69,10 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 	if err != nil {
 		return nil, fmt.Errorf("session sealer: %w", err)
 	}
+	recoveryHasher, err := keyring.RecoveryCodeHasher()
+	if err != nil {
+		return nil, fmt.Errorf("recovery code hasher: %w", err)
+	}
 
 	pool, err := db.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -91,7 +95,8 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 	handler := &auth.Handler{
 		Provider: provider, Store: store, LoginCookies: auth.NewLoginCookies(loginSealer, now),
 		Users: identity.NewLoginDirectory(pool), RecoveryCodes: identity.NewRecoveryCodeDirectory(pool),
-		Audit: auditor, Log: logger, Refusals: refusals,
+		RecoveryCodeHasher: recoveryHasher,
+		Audit:              auditor, Log: logger, Refusals: refusals,
 		PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
 	}
 	authenticator := &auth.Authenticator{Provider: provider, Store: store, Audit: auditor, Log: logger, Now: now}

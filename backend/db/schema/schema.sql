@@ -261,14 +261,17 @@ CREATE TABLE identity.offline_pass (
 );
 CREATE INDEX offline_pass_device_idx ON identity.offline_pass (device_key_id, expires_at);
 
--- Códigos de recuperação de MFA: mostrados uma vez ao utilizador, guardados só como hash.
+-- Códigos de recuperação de MFA: mostrados uma vez ao utilizador, guardados só como HMAC.
+-- key_id identifica a chave do anel que produziu o HMAC; permite retirar chaves antigas.
 CREATE TABLE identity.recovery_code (
   id          uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
   user_id     uuid        NOT NULL REFERENCES identity.user_account (id) ON DELETE CASCADE,
   code_hash   bytea       NOT NULL CHECK (length(code_hash) = 32),
   used_at     timestamptz,
   created_at  timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (user_id, code_hash)
+  key_id      text        NOT NULL,
+  UNIQUE (user_id, code_hash),
+  CONSTRAINT recovery_code_key_id_valid CHECK (key_id ~ '^[a-z0-9][a-z0-9-]{0,15}$')
 );
 CREATE INDEX recovery_code_user_idx ON identity.recovery_code (user_id) WHERE used_at IS NULL;
 
@@ -1658,7 +1661,11 @@ COMMENT ON FUNCTION identity.is_owner(uuid) IS
 -- identity.replace_recovery_codes — substitui os códigos de recuperação não usados do utilizador.
 -- Necessita de SECURITY DEFINER porque a tabela tem RLS por utilizador e a aplicação pode não
 -- ter ainda app.user_id definido no contexto do BFF.
-CREATE OR REPLACE FUNCTION identity.replace_recovery_codes(p_user_id uuid, p_code_hashes bytea[])
+CREATE OR REPLACE FUNCTION identity.replace_recovery_codes(
+  p_user_id uuid,
+  p_code_hashes bytea[],
+  p_key_id text
+)
   RETURNS void
   LANGUAGE plpgsql
   SECURITY DEFINER
@@ -1667,9 +1674,15 @@ AS $$
 DECLARE
   invalid int;
 BEGIN
+  IF p_key_id IS NULL OR p_key_id !~ '^[a-z0-9][a-z0-9-]{0,15}$' THEN
+    RAISE EXCEPTION 'replace_recovery_codes: invalid key id' USING ERRCODE = '22023';
+  END IF;
+  IF p_code_hashes IS NULL OR cardinality(p_code_hashes) NOT BETWEEN 1 AND 16 THEN
+    RAISE EXCEPTION 'replace_recovery_codes: invalid hash count' USING ERRCODE = '22023';
+  END IF;
   SELECT count(*) INTO invalid
   FROM unnest(p_code_hashes) AS h
-  WHERE length(h) != 32;
+  WHERE h IS NULL OR length(h) != 32;
   IF invalid > 0 THEN
     RAISE EXCEPTION 'replace_recovery_codes: invalid hash length' USING ERRCODE = '22023';
   END IF;
@@ -1677,38 +1690,49 @@ BEGIN
   DELETE FROM identity.recovery_code
   WHERE user_id = p_user_id AND used_at IS NULL;
 
-  INSERT INTO identity.recovery_code (user_id, code_hash)
-  SELECT p_user_id, h
+  INSERT INTO identity.recovery_code (user_id, code_hash, key_id)
+  SELECT p_user_id, h, p_key_id
   FROM unnest(p_code_hashes) AS h;
 END
 $$;
 
-REVOKE ALL ON FUNCTION identity.replace_recovery_codes(uuid, bytea[]) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION identity.replace_recovery_codes(uuid, bytea[]) TO pitbox_app;
-COMMENT ON FUNCTION identity.replace_recovery_codes(uuid, bytea[]) IS
+REVOKE ALL ON FUNCTION identity.replace_recovery_codes(uuid, bytea[], text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION identity.replace_recovery_codes(uuid, bytea[], text) TO pitbox_app;
+COMMENT ON FUNCTION identity.replace_recovery_codes(uuid, bytea[], text) IS
   'Substitui os códigos de recuperação não usados de um utilizador. SECURITY DEFINER, só pitbox_app.';
 
--- identity.consume_recovery_code — consome um código de recuperação se existir e não estiver usado.
-CREATE OR REPLACE FUNCTION identity.consume_recovery_code(p_user_id uuid, p_code_hash bytea)
+-- identity.consume_recovery_code — consome um código de recuperação se algum dos candidatos
+-- existir e não estiver usado.
+CREATE OR REPLACE FUNCTION identity.consume_recovery_code(p_user_id uuid, p_code_hashes bytea[])
   RETURNS boolean
-  LANGUAGE sql
+  LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = pg_catalog, pg_temp
 AS $$
-  WITH upd AS (
-    UPDATE identity.recovery_code
-    SET used_at = now()
-    WHERE user_id = p_user_id
-      AND code_hash = p_code_hash
-      AND used_at IS NULL
-    RETURNING id
-  )
-  SELECT count(*) > 0 FROM upd;
+BEGIN
+  IF p_code_hashes IS NULL OR cardinality(p_code_hashes) NOT BETWEEN 1 AND 16 THEN
+    RAISE EXCEPTION 'consume_recovery_code: invalid hash count' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM unnest(p_code_hashes) AS h
+    WHERE h IS NULL OR octet_length(h) <> 32
+  ) THEN
+    RAISE EXCEPTION 'consume_recovery_code: invalid hash length' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE identity.recovery_code
+     SET used_at = now()
+   WHERE user_id = p_user_id
+     AND code_hash = ANY(p_code_hashes)
+     AND used_at IS NULL;
+
+  RETURN FOUND;
+END
 $$;
 
-REVOKE ALL ON FUNCTION identity.consume_recovery_code(uuid, bytea) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION identity.consume_recovery_code(uuid, bytea) TO pitbox_app;
-COMMENT ON FUNCTION identity.consume_recovery_code(uuid, bytea) IS
+REVOKE ALL ON FUNCTION identity.consume_recovery_code(uuid, bytea[]) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION identity.consume_recovery_code(uuid, bytea[]) TO pitbox_app;
+COMMENT ON FUNCTION identity.consume_recovery_code(uuid, bytea[]) IS
   'Consome um código de recuperação de MFA. SECURITY DEFINER, só pitbox_app.';
 
 CREATE OR REPLACE FUNCTION identity.accept_invitation(p_token_hash bytea)

@@ -160,6 +160,16 @@ DO $$ BEGIN
   EXCEPTION WHEN check_violation THEN NULL; END;
 END $$;
 
+-- Códigos de recuperação: a função SECURITY DEFINER limita a lista de candidatos.
+DO $$ BEGIN
+  BEGIN
+    PERFORM identity.consume_recovery_code(
+      '01900000-0000-7000-8000-0000000000a0',
+      array_fill(decode(repeat('00', 32), 'hex'), ARRAY[17]));
+    RAISE EXCEPTION 'FALHOU: lista com 17 hashes aceite';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END $$;
+
 -- Equipa: category e club têm limites de tamanho (alinhados com o protovalidate)
 DO $$ DECLARE v text; BEGIN
   FOREACH v IN ARRAY ARRAY['', repeat('x', 41)] LOOP

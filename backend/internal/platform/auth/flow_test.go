@@ -152,10 +152,13 @@ func newFlowHarness(t *testing.T) *flowHarness {
 			Issuer: idp.srv.URL, ClientID: idp.clientID, ClientSecret: idp.clientSecret,
 			RedirectURL: publicURL + CallbackPath, AllowedAlgs: []string{"ES256"}, Now: clock,
 		}),
-		Store:        store,
-		LoginCookies: NewLoginCookies(sealer(t, PurposeLoginCookie, key("k1", 1)), clock),
-		Users:        f.dir, RecoveryCodes: &fakeRecoveryStore{}, Audit: f.audit,
-		Log: slog.New(slog.NewJSONHandler(logs, nil)), Refusals: f.refusals,
+		Store:              store,
+		LoginCookies:       NewLoginCookies(sealer(t, PurposeLoginCookie, key("k1", 1)), clock),
+		Users:              f.dir,
+		RecoveryCodes:      &fakeRecoveryStore{},
+		RecoveryCodeHasher: recoveryHasher(t, key("k1", 1)),
+		Audit:              f.audit,
+		Log:                slog.New(slog.NewJSONHandler(logs, nil)), Refusals: f.refusals,
 		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock,
 	}
 	f.h.Authn = &Authenticator{Provider: f.h.Provider, Store: store, Audit: f.audit, Log: f.h.Log, Now: clock}
@@ -944,38 +947,44 @@ type fakeRecoveryStore struct {
 	mu     sync.Mutex
 	hashes map[string]map[string]struct{}
 	used   map[string]map[string]struct{}
+	keyIDs map[string]string
 }
 
-func (r *fakeRecoveryStore) Replace(_ context.Context, userID string, codeHashes [][]byte) error {
+func (r *fakeRecoveryStore) Replace(_ context.Context, userID, keyID string, codeHashes [][]byte) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.hashes == nil {
 		r.hashes = map[string]map[string]struct{}{}
 		r.used = map[string]map[string]struct{}{}
+		r.keyIDs = map[string]string{}
 	}
 	r.hashes[userID] = map[string]struct{}{}
 	r.used[userID] = map[string]struct{}{}
+	r.keyIDs[userID] = keyID
 	for _, h := range codeHashes {
 		r.hashes[userID][string(h)] = struct{}{}
 	}
 	return nil
 }
 
-func (r *fakeRecoveryStore) Consume(_ context.Context, userID string, codeHash []byte) (bool, error) {
+func (r *fakeRecoveryStore) Consume(_ context.Context, userID string, codeHashes [][]byte) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	key := string(codeHash)
-	if _, ok := r.hashes[userID][key]; !ok {
-		return false, nil
+	for _, codeHash := range codeHashes {
+		key := string(codeHash)
+		if _, ok := r.hashes[userID][key]; !ok {
+			continue
+		}
+		if _, ok := r.used[userID][key]; ok {
+			continue
+		}
+		if r.used[userID] == nil {
+			r.used[userID] = map[string]struct{}{}
+		}
+		r.used[userID][key] = struct{}{}
+		return true, nil
 	}
-	if _, ok := r.used[userID][key]; ok {
-		return false, nil
-	}
-	if r.used[userID] == nil {
-		r.used[userID] = map[string]struct{}{}
-	}
-	r.used[userID][key] = struct{}{}
-	return true, nil
+	return false, nil
 }
 
 func TestGenerateRecoveryCodesRequiresStrongFactor(t *testing.T) {
@@ -1015,6 +1024,14 @@ func TestGenerateRecoveryCodes(t *testing.T) {
 	if len(fs.hashes["user-sub-bob"]) != 8 {
 		t.Fatalf("stored hashes = %d, want 8", len(fs.hashes["user-sub-bob"]))
 	}
+	if fs.keyIDs["user-sub-bob"] != "k1" {
+		t.Fatalf("stored key id = %q, want k1", fs.keyIDs["user-sub-bob"])
+	}
+	for _, code := range resp.Codes {
+		if strings.Contains(f.logs.String(), code) {
+			t.Fatal("the code was written to the log")
+		}
+	}
 }
 
 func TestConsumeRecoveryCode(t *testing.T) {
@@ -1024,11 +1041,11 @@ func TestConsumeRecoveryCode(t *testing.T) {
 	f.h.RecoveryCodes = fs
 	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
 
-	codes, hashes, err := GenerateRecoveryCodes()
+	codes, hashes, err := f.h.RecoveryCodeHasher.Generate()
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	if err := fs.Replace(context.Background(), "user-sub-bob", hashes); err != nil {
+	if err := fs.Replace(context.Background(), "user-sub-bob", f.h.RecoveryCodeHasher.KeyID(), hashes); err != nil {
 		t.Fatalf("replace: %v", err)
 	}
 
@@ -1064,5 +1081,54 @@ func TestConsumeRecoveryCode(t *testing.T) {
 	f.mux.ServeHTTP(w, r)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403", w.Code)
+	}
+	if !slices.Contains(f.audit.actions(), "auth.recovery_code_failed:invalid_code") {
+		t.Fatalf("failure was not audited: %v", f.audit.actions())
+	}
+
+	// A malformed code gets the same response as a wrong or used one.
+	for _, code := range []string{"not-a-code", strings.Repeat("A", recoveryCodeLength-1)} {
+		body = strings.NewReader(`{"code":"` + code + `"}`)
+		r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath, body)
+		r.Header.Set("Cookie", SessionCookieName+"="+v)
+		r.Header.Set("Content-Type", "application/json")
+		w = httptest.NewRecorder()
+		f.mux.ServeHTTP(w, r)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("malformed code: status %d, want 403", w.Code)
+		}
+		if w.Body.Len() != 0 {
+			t.Fatalf("malformed code leaked a body: %q", w.Body.String())
+		}
+	}
+	if strings.Contains(f.logs.String(), codes[0]) {
+		t.Fatal("the code was written to the log")
+	}
+}
+
+func TestRecoveryCodeSurvivesKeyRotation(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	fs := &fakeRecoveryStore{}
+	f.h.RecoveryCodes = fs
+	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
+
+	codes, hashes, err := f.h.RecoveryCodeHasher.Generate()
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if err := fs.Replace(context.Background(), "user-sub-bob", f.h.RecoveryCodeHasher.KeyID(), hashes); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	f.h.RecoveryCodeHasher = recoveryHasher(t, key("k2", 2), key("k1", 1))
+
+	body := strings.NewReader(`{"code":"` + codes[0] + `"}`)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath, body)
+	r.Header.Set("Cookie", SessionCookieName+"="+v)
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	f.mux.ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("old code after rotation: status %d, want 204", w.Code)
 	}
 }

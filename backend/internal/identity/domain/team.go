@@ -10,6 +10,8 @@ import (
 )
 
 const (
+	// MaxOwnedTeams is the maximum number of teams a user may own.
+	MaxOwnedTeams   = 10
 	DefaultCategory = "1/8 TT nitro"
 	maxName         = 80
 	maxCategory     = 40

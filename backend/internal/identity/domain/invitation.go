@@ -16,6 +16,8 @@ const (
 	// InvitationTTL is the maximum lifetime of an invitation (the database CHECK
 	// enforces the same limit).
 	InvitationTTL = 7 * 24 * time.Hour
+	// MaxPendingInvitations is the maximum number of pending invitations per team.
+	MaxPendingInvitations = 50
 	// tokenBytes is 256 bits of entropy.
 	tokenBytes = 32
 	// TokenLength is the length of the base64url token without padding.

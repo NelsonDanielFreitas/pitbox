@@ -149,6 +149,17 @@ SET LOCAL app.user_id = '01900000-0000-7000-8000-00000000000a';
 SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
 DO $$ BEGIN ASSERT (SELECT count(*) FROM platform.idempotency_key) = 1, 'RLS: A só vê a sua chave'; END $$;
 
+-- Idempotência: expires_at tem de ser posterior a created_at.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO platform.idempotency_key
+      (request_id, user_id, method, request_hash, created_at, expires_at)
+    VALUES
+      ('01900000-0000-7000-8000-0000000000ac', app.current_user_id(), 'x', '\x00', now(), now() - interval '1 second');
+    RAISE EXCEPTION 'FALHOU: expires_at anterior a created_at aceite';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+
 -- Equipa: category e club têm limites de tamanho (alinhados com o protovalidate)
 DO $$ DECLARE v text; BEGIN
   FOREACH v IN ARRAY ARRAY['', repeat('x', 41)] LOOP

@@ -1,6 +1,6 @@
 {
   "source": "docs/03-plano-de-trabalho.md",
-  "generated": "2026-10-20",
+  "generated": "2026-10-24",
   "phases": {
     "0": {
       "title": "Fase 0 — Preparação",
@@ -552,6 +552,44 @@
       "adrs": []
     },
     {
+      "id": "F1-06b",
+      "title": "Limites de propriedade e idempotência",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "backend",
+        "db",
+        "docs"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Limite de 10 equipas dono em `CreateTeam` e `AcceptTransfer`, com lock por conta; `GetIdempotencyKey` respeita `expires_at`; takeover atómico da chave expirada; comparação do `method` no replay; `CHECK (expires_at > created_at)`; testes de concorrência e transferência; token de email mantém-se até ao F5 (#124)",
+      "done_when": [
+        "11.ª equipa recusada na criação e na transferência",
+        "replay de chave viva funciona no limite",
+        "chave expirada não faz replay da equipa antiga",
+        "método diferente é recusado",
+        "make db-test e CI verdes"
+      ],
+      "done_when_raw": "11.ª equipa recusada na criação e na transferência; replay de chave viva funciona no limite; chave expirada não faz replay da equipa antiga; método diferente é recusado; make db-test e CI verdes",
+      "doc_references": [
+        "Spec §3.6",
+        "#123",
+        "#124",
+        "#120"
+      ],
+      "suggested_branch": "f1-06b-limites-e-idempotencia",
+      "issue_title": "F1-06b — Limites, idempotência e token de convite por email",
+      "labels": [
+        "fase-1",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "Limite de recursos aplicado também ao caminho de transferência; lock por conta contra corridas; chave de idempotência expirada não devolve resposta antiga; método comparado no replay; token de email mantém-se na resposta até ao mailer real (#124).",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
       "id": "F1-07a",
       "title": "Motorização e escala extensíveis",
       "phase": "1",
@@ -601,7 +639,7 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico; `Car.scale`/`powertrain` validados contra os catálogos (ADR 0016); inativo só bloqueia criação/mudança",
+      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico; `Car.scale`/`powertrain` validados contra os catálogos (ADR 0016); inativo só bloqueia criação/mudança; a idempotência passa para `platform/idempotency` quando a garagem a usar, em vez de ser copiada",
       "done_when": [
         "CRUD testado com testcontainers",
         "motor não fica em dois carros",

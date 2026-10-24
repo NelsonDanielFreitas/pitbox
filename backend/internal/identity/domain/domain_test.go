@@ -165,6 +165,8 @@ func TestErrorsCarryThePublicSentinel(t *testing.T) {
 	t.Parallel()
 	require.True(t, errors.Is(ErrInvalidInvitation, apperr.ErrNotFound))
 	require.True(t, errors.Is(ErrOwnerRequired, apperr.ErrFailedPrecondition))
+	require.True(t, errors.Is(ErrInvitationLimit, apperr.ErrFailedPrecondition))
+	require.True(t, errors.Is(ErrTeamLimit, apperr.ErrFailedPrecondition))
 	require.True(t, errors.Is(ErrTransferTarget, apperr.ErrFailedPrecondition))
 	require.True(t, errors.Is(ErrConflict, apperr.ErrConflict))
 	require.True(t, errors.Is(ErrForbidden, apperr.ErrPermissionDenied))

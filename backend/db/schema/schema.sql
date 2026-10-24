@@ -1219,7 +1219,8 @@ CREATE TABLE platform.idempotency_key (
   status_code         text,
   created_at          timestamptz NOT NULL DEFAULT now(),
   expires_at          timestamptz NOT NULL DEFAULT now() + interval '7 days',
-  PRIMARY KEY (user_id, request_id)                       -- o request_id só é único por utilizador
+  PRIMARY KEY (user_id, request_id),                      -- o request_id só é único por utilizador
+  CONSTRAINT idempotency_expires_after_created CHECK (expires_at > created_at)
 );
 CREATE INDEX idempotency_key_expiry_idx ON platform.idempotency_key (expires_at);
 

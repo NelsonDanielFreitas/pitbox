@@ -30,3 +30,12 @@ WHERE team_id = $1 AND confirmed_at IS NULL AND cancelled_at IS NULL AND expires
 
 -- name: LockTeamForInvites :one
 SELECT id FROM identity.team WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE;
+
+-- name: LockUserForOwnership :one
+SELECT id FROM identity.user_account WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE;
+
+-- name: CountOwnedTeams :one
+SELECT count(*)
+FROM identity.membership m
+JOIN identity.team t ON t.id = m.team_id AND t.deleted_at IS NULL
+WHERE m.user_id = $1 AND m.role = 'owner';

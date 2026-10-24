@@ -213,6 +213,23 @@ func (Repo) LockTeamForInvites(ctx context.Context, tx db.DBTX, teamID uuid.UUID
 	return nil
 }
 
+func (Repo) LockUserForOwnership(ctx context.Context, tx db.DBTX, userID uuid.UUID) error {
+	if _, err := sqlcgen.New(tx).LockUserForOwnership(ctx, userID); errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock user for ownership: %w", apperr.ErrNotFound)
+	} else if err != nil {
+		return fmt.Errorf("lock user for ownership: %w", err)
+	}
+	return nil
+}
+
+func (Repo) CountOwnedTeams(ctx context.Context, tx db.DBTX, userID uuid.UUID) (int64, error) {
+	n, err := sqlcgen.New(tx).CountOwnedTeams(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("count owned teams: %w", err)
+	}
+	return n, nil
+}
+
 func (Repo) CountPendingInvitations(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (int64, error) {
 	n, err := sqlcgen.New(tx).CountPendingInvitations(ctx, teamID)
 	if err != nil {
@@ -346,15 +363,15 @@ func (Repo) CancelTransfer(ctx context.Context, tx db.DBTX, teamID, id uuid.UUID
 	return nil
 }
 
-func (Repo) GetIdempotencyKey(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID) ([]byte, []byte, error) {
+func (Repo) GetIdempotencyKey(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID) (string, []byte, []byte, error) {
 	row, err := sqlcgen.New(tx).GetIdempotencyKey(ctx, sqlcgen.GetIdempotencyKeyParams{UserID: userID, RequestID: requestID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil, apperr.ErrNotFound
+		return "", nil, nil, fmt.Errorf("get idempotency key: %w", apperr.ErrNotFound)
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("get idempotency key: %w", err)
+		return "", nil, nil, fmt.Errorf("get idempotency key: %w", err)
 	}
-	return row.RequestHash, row.Response, nil
+	return row.Method, row.RequestHash, row.Response, nil
 }
 
 func (Repo) InsertIdempotencyKey(ctx context.Context, tx db.DBTX, requestID, userID uuid.UUID, method string, requestHash []byte) (bool, error) {

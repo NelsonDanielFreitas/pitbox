@@ -102,6 +102,7 @@ O login usa passkeys como método principal, com email + palavra-passe + segundo
 ### 3.6 Equipas e convites
 
 - Criar equipa (nome, categoria, clube)
+- Um utilizador pode ser dono de no máximo 10 equipas; por agora, libertar uma equipa significa transferi-la
 - Convidar por email ou link com papel pré-definido; convite expira em 7 dias e é de uso único
 - Transferir propriedade da equipa (exige confirmação dos dois lados)
 

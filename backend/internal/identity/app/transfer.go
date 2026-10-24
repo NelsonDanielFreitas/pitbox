@@ -52,8 +52,9 @@ func (s *Service) InitiateTransfer(ctx context.Context, user db.UserID, teamID d
 
 // AcceptTransfer confirms a pending transfer. Only its recipient may accept, and
 // the recipient is a member (WithTeamTx). The recipient may own at most
-// domain.MaxOwnedTeams teams. The old owner is demoted before the new one is
-// promoted, so the one-owner index never sees two owners.
+// domain.MaxOwnedTeams teams. Lock order: the transfer row first, then the
+// recipient's account; never the reverse. The old owner is demoted before the
+// new one is promoted, so the one-owner index never sees two owners.
 func (s *Service) AcceptTransfer(ctx context.Context, user db.UserID, teamID db.TeamID, requestID, transferID uuid.UUID) (domain.TeamMembership, error) {
 	var membership domain.TeamMembership
 	var oldOwnerID uuid.UUID

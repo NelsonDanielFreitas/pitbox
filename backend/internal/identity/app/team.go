@@ -77,9 +77,9 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 			return err
 		}
 		if !inserted {
-			// Another request with the same request_id won the race and has
-			// committed (the INSERT waited for it). Replay its team; nothing of
-			// this transaction is kept.
+			// Defensive: the account lock above already serialises this user's
+			// CreateTeam calls, so a lost claim should not happen. If it does,
+			// replay the committed team; nothing of this transaction is kept.
 			existingMethod, existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
 			if err != nil {
 				return err

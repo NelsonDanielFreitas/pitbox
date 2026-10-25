@@ -655,8 +655,12 @@ func mapError(op string, err error) error {
 			}
 		case "23503":
 			return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
-		case "23P01", "23514":
+		case "23P01":
 			return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
+		case "23514":
+			if pgErr.ConstraintName == "engine_mount_check" {
+				return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
+			}
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)

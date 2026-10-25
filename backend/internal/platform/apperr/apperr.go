@@ -29,3 +29,8 @@ var ErrConflict = errors.New("conflict")
 // state that allows it (for example, removing the last owner). The errors
 // interceptor answers FAILED_PRECONDITION with a fixed message.
 var ErrFailedPrecondition = errors.New("failed precondition")
+
+// ErrAlreadyExists means a unique value (for example a transponder number or a tyre
+// label) already belongs to another resource in the same team. The errors interceptor
+// answers ALREADY_EXISTS with a fixed message.
+var ErrAlreadyExists = errors.New("already exists")

@@ -1,18 +1,17 @@
 package app
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity/domain"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/apperr"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/audit"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/idempotency"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
 )
 
@@ -56,12 +55,12 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 		if err := s.store.LockUserForOwnership(ctx, tx, userID); err != nil {
 			return err
 		}
-		existingMethod, existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
-		switch {
-		case err == nil:
-			return s.replayCreateTeam(ctx, tx, existingMethod, existingHash, existingResponse, hash, &result)
-		case !errors.Is(err, errNotFound):
-			return err
+		existingResponse, found, err := s.idempotency.Lookup(ctx, tx, userID, in.RequestID, createTeamMethod, hash)
+		if err != nil {
+			return idempotencyReplayError(err)
+		}
+		if found {
+			return s.replayCreateTeam(ctx, tx, existingResponse, &result)
 		}
 
 		owned, err := s.store.CountOwnedTeams(ctx, tx, userID)
@@ -72,19 +71,22 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 			return domain.ErrTeamLimit
 		}
 
-		inserted, err := s.store.InsertIdempotencyKey(ctx, tx, in.RequestID, userID, createTeamMethod, hash)
+		claimed, err := s.idempotency.Claim(ctx, tx, in.RequestID, userID, createTeamMethod, hash)
 		if err != nil {
 			return err
 		}
-		if !inserted {
+		if !claimed {
 			// Defensive: the account lock above already serialises this user's
 			// CreateTeam calls, so a lost claim should not happen. If it does,
 			// replay the committed team; nothing of this transaction is kept.
-			existingMethod, existingHash, existingResponse, err := s.store.GetIdempotencyKey(ctx, tx, userID, in.RequestID)
+			existingResponse, found, err := s.idempotency.Lookup(ctx, tx, userID, in.RequestID, createTeamMethod, hash)
 			if err != nil {
-				return err
+				return idempotencyReplayError(err)
 			}
-			return s.replayCreateTeam(ctx, tx, existingMethod, existingHash, existingResponse, hash, &result)
+			if !found {
+				return errors.New("idempotency: lost claim without a live key")
+			}
+			return s.replayCreateTeam(ctx, tx, existingResponse, &result)
 		}
 
 		team.ID = uuid.UUID(teamID)
@@ -109,7 +111,7 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 		}); err != nil {
 			return err
 		}
-		if err := s.store.SetIdempotencyResponse(ctx, tx, userID, in.RequestID, created.ID[:]); err != nil {
+		if err := s.idempotency.Save(ctx, tx, userID, in.RequestID, created.ID[:]); err != nil {
 			return err
 		}
 		result = created
@@ -122,10 +124,7 @@ func (s *Service) CreateTeam(ctx context.Context, user db.UserID, in CreateTeamI
 	return result, nil
 }
 
-func (s *Service) replayCreateTeam(ctx context.Context, tx db.DBTX, existingMethod string, existingHash, existingResponse, wantHash []byte, result *domain.Team) error {
-	if existingMethod != createTeamMethod || !bytes.Equal(existingHash, wantHash) {
-		return fmt.Errorf("create team: %w", domain.ErrInvalid)
-	}
+func (s *Service) replayCreateTeam(ctx context.Context, tx db.DBTX, existingResponse []byte, result *domain.Team) error {
 	if len(existingResponse) != 16 {
 		return errors.New("store: idempotency response is not a team id")
 	}
@@ -148,12 +147,7 @@ func hashCreateTeam(in CreateTeamInput) ([]byte, error) {
 		Club        *string `json:"club"`
 		CountryCode string  `json:"country_code"`
 	}{Name: in.Name, Category: in.Category, Club: in.Club, CountryCode: in.CountryCode}
-	raw, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	sum := sha256.Sum256(raw)
-	return sum[:], nil
+	return idempotency.Hash(body)
 }
 
 // ListMyTeams lists the caller's teams. It uses WithUserTx: the RLS team_visible
@@ -222,4 +216,11 @@ func teamAudit(t domain.Team) map[string]any {
 	return map[string]any{
 		"name": t.Name, "category": t.Category, "club": t.Club, "country_code": t.CountryCode, "version": t.Version,
 	}
+}
+
+func idempotencyReplayError(err error) error {
+	if errors.Is(err, apperr.ErrInvalidArgument) {
+		return fmt.Errorf("create team: %w", domain.ErrInvalid)
+	}
+	return err
 }

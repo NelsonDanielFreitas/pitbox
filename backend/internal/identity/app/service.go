@@ -10,37 +10,40 @@ import (
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/idempotency"
 )
 
 // Deps is what the identity service needs. They are interfaces (or the db
 // transaction helper) so tests can use fakes.
 type Deps struct {
-	DB     *db.DB
-	Store  Store
-	Authz  Authorizer
-	Outbox KeyDrainer
-	Clock  clock.Clock
-	Log    *slog.Logger
-	Mailer Mailer
+	DB          *db.DB
+	Store       Store
+	Authz       Authorizer
+	Outbox      KeyDrainer
+	Clock       clock.Clock
+	Log         *slog.Logger
+	Mailer      Mailer
+	Idempotency *idempotency.Store
 }
 
 // Service implements the F1-06 use cases.
 type Service struct {
-	db     *db.DB
-	store  Store
-	authz  Authorizer
-	outbox KeyDrainer
-	clock  clock.Clock
-	log    *slog.Logger
-	mailer Mailer
+	db          *db.DB
+	store       Store
+	authz       Authorizer
+	outbox      KeyDrainer
+	clock       clock.Clock
+	log         *slog.Logger
+	mailer      Mailer
+	idempotency *idempotency.Store
 }
 
 // New validates the dependencies and returns the service.
 func New(d Deps) (*Service, error) {
-	if d.DB == nil || d.Store == nil || d.Authz == nil || d.Outbox == nil || d.Clock == nil || d.Log == nil || d.Mailer == nil {
+	if d.DB == nil || d.Store == nil || d.Authz == nil || d.Outbox == nil || d.Clock == nil || d.Log == nil || d.Mailer == nil || d.Idempotency == nil {
 		return nil, errors.New("identity: missing service dependency")
 	}
-	return &Service{db: d.DB, store: d.Store, authz: d.Authz, outbox: d.Outbox, clock: d.Clock, log: d.Log, mailer: d.Mailer}, nil
+	return &Service{db: d.DB, store: d.Store, authz: d.Authz, outbox: d.Outbox, clock: d.Clock, log: d.Log, mailer: d.Mailer, idempotency: d.Idempotency}, nil
 }
 
 // syncRole drains the membership events of one key after the transaction commits.

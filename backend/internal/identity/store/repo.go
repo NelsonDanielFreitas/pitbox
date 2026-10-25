@@ -363,39 +363,6 @@ func (Repo) CancelTransfer(ctx context.Context, tx db.DBTX, teamID, id uuid.UUID
 	return nil
 }
 
-func (Repo) GetIdempotencyKey(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID) (string, []byte, []byte, error) {
-	row, err := sqlcgen.New(tx).GetIdempotencyKey(ctx, sqlcgen.GetIdempotencyKeyParams{UserID: userID, RequestID: requestID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil, nil, fmt.Errorf("get idempotency key: %w", apperr.ErrNotFound)
-	}
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("get idempotency key: %w", err)
-	}
-	return row.Method, row.RequestHash, row.Response, nil
-}
-
-func (Repo) InsertIdempotencyKey(ctx context.Context, tx db.DBTX, requestID, userID uuid.UUID, method string, requestHash []byte) (bool, error) {
-	_, err := sqlcgen.New(tx).InsertIdempotencyKey(ctx, sqlcgen.InsertIdempotencyKeyParams{
-		RequestID: requestID, UserID: userID, Method: method, RequestHash: requestHash,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("insert idempotency key: %w", err)
-	}
-	return true, nil
-}
-
-func (Repo) SetIdempotencyResponse(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID, response []byte) error {
-	if err := sqlcgen.New(tx).SetIdempotencyResponse(ctx, sqlcgen.SetIdempotencyResponseParams{
-		UserID: userID, RequestID: requestID, Response: response,
-	}); err != nil {
-		return fmt.Errorf("set idempotency response: %w", err)
-	}
-	return nil
-}
-
 // --- mapping ---------------------------------------------------------------
 
 func teamFromCreate(r sqlcgen.CreateTeamRow) domain.Team {

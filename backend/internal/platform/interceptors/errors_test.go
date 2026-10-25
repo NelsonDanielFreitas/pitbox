@@ -41,6 +41,8 @@ func TestPublicError(t *testing.T) {
 		{name: "version conflict keeps the cause private", err: fmt.Errorf("team 0190: %w", apperr.ErrConflict), wantCode: connect.CodeAborted, wantMessage: publicConflictMessage, leak: "0190"},
 		{name: "failed precondition, bare", err: apperr.ErrFailedPrecondition, wantCode: connect.CodeFailedPrecondition, wantMessage: publicPreconditionMessage},
 		{name: "failed precondition keeps the cause private", err: fmt.Errorf("last owner 0190: %w", apperr.ErrFailedPrecondition), wantCode: connect.CodeFailedPrecondition, wantMessage: publicPreconditionMessage, leak: "0190"},
+		{name: "already exists, bare", err: apperr.ErrAlreadyExists, wantCode: connect.CodeAlreadyExists, wantMessage: publicAlreadyExistsMessage},
+		{name: "already exists keeps the cause private", err: fmt.Errorf("label 0190: %w", apperr.ErrAlreadyExists), wantCode: connect.CodeAlreadyExists, wantMessage: publicAlreadyExistsMessage, leak: "0190"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

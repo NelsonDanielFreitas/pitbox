@@ -145,7 +145,7 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 - Validação declarativa com protovalidate (intervalos, formatos, obrigatórios), aplicada por interceptor antes do handler
 - Versão no pacote (`v1`, `v2`); campos nunca reutilizados; remoções só com `reserved`
 - Paginação por cursor opaco em todas as listas; máximo de 200 itens por página
-- Idempotência: todas as escritas aceitam `request_id` (UUIDv7) guardado durante 7 dias
+- Idempotência: todas as escritas aceitam `request_id` (UUIDv7) guardado durante 7 dias; a lógica comum vive em `platform/idempotency`
 - Erros: códigos Connect/gRPC padrão; mensagens sem informação interna. Só um `*connect.Error` escrito de propósito chega ao cliente; qualquer outro erro vira `Internal` com a mensagem fixa "internal error" e a causa fica no log (ADR 0012)
 - Erros de validação: detalhe `buf.validate.Violations` (caminho do campo e `rule_id`, nunca o valor enviado), tal como o interceptor do protovalidate o devolve; a app traduz por `rule_id`. Não se converte para `google.rpc.BadRequest`
 - Leituras novas declaram `option idempotency_level = NO_SIDE_EFFECTS;`; sem essa marca, um RPC conta como escrita (auditoria)
@@ -247,7 +247,7 @@ type setup
     define annotator: member from team
 ```
 
-- O mesmo padrão aplica-se a `engine`, `tyre_set`, `event`, `session`, `device`
+- O mesmo padrão aplica-se a `engine`, `tyre_set`, `event`, `session`, `device`. **F1-07:** os recursos da garagem usam o `Check` da relação `team` (`member`/`mechanic`) + RLS/FKs; só recursos com partilha (setups) ganham tuplos por recurso.
 - Cada caso de uso chama `Check(user, relation, object)` antes de tocar nos dados; listas usam `ListObjects` ou filtram por equipa já verificada
 - Testes de autorização: um ficheiro de asserções OpenFGA por tipo, corrido no CI; e um teste de integração por endpoint com um utilizador de outra equipa, que tem de receber `PERMISSION_DENIED` ou `NOT_FOUND`
 

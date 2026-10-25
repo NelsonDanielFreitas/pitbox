@@ -41,10 +41,6 @@ type Store interface {
 
 	GetPendingTransfer(ctx context.Context, tx db.DBTX, teamID uuid.UUID) (domain.OwnershipTransfer, error)
 
-	GetIdempotencyKey(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID) (method string, requestHash, response []byte, err error)
-	InsertIdempotencyKey(ctx context.Context, tx db.DBTX, requestID, userID uuid.UUID, method string, requestHash []byte) (bool, error)
-	SetIdempotencyResponse(ctx context.Context, tx db.DBTX, userID, requestID uuid.UUID, response []byte) error
-
 	LockTeamForInvites(ctx context.Context, tx db.DBTX, teamID uuid.UUID) error
 	LockUserForOwnership(ctx context.Context, tx db.DBTX, userID uuid.UUID) error
 	CountOwnedTeams(ctx context.Context, tx db.DBTX, userID uuid.UUID) (int64, error)

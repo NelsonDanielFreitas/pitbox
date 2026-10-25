@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity/domain"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/cursor"
 )
 
 func TestCursorRoundTrip(t *testing.T) {
@@ -34,7 +35,7 @@ func TestCursorRoundTrip(t *testing.T) {
 func TestCursorRejectsGarbage(t *testing.T) {
 	t.Parallel()
 
-	for _, token := range []string{"x", "!!!!", "ew", string(make([]byte, maxPageToken+1))} {
+	for _, token := range []string{"x", "!!!!", "ew", string(make([]byte, cursor.MaxTokenLength+1))} {
 		var c teamsCursor
 		err := decodeCursor(token, &c)
 		if err == nil || !errors.Is(err, domain.ErrInvalid) {

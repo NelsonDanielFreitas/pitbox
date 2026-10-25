@@ -14,13 +14,14 @@ import (
 // Fixed, public texts. Anything else a client could read would have to be written
 // here on purpose.
 const (
-	publicDeadlineMessage     = "deadline exceeded"
-	publicCanceledMessage     = "canceled"
-	publicNotFoundMessage     = "not found"
-	publicInvalidMessage      = "invalid argument"
-	publicPermissionMessage   = "permission denied"
-	publicConflictMessage     = "conflict"
-	publicPreconditionMessage = "failed precondition"
+	publicDeadlineMessage      = "deadline exceeded"
+	publicCanceledMessage      = "canceled"
+	publicNotFoundMessage      = "not found"
+	publicInvalidMessage       = "invalid argument"
+	publicPermissionMessage    = "permission denied"
+	publicConflictMessage      = "conflict"
+	publicPreconditionMessage  = "failed precondition"
+	publicAlreadyExistsMessage = "already exists"
 )
 
 // Errors makes sure the only errors that leave the server are ones written for the
@@ -71,6 +72,8 @@ func publicError(err error) error {
 		return connect.NewError(connect.CodeInvalidArgument, publicInvalidMessage).WithCause(err)
 	case errors.Is(err, apperr.ErrPermissionDenied):
 		return connect.NewError(connect.CodePermissionDenied, publicPermissionMessage).WithCause(err)
+	case errors.Is(err, apperr.ErrAlreadyExists):
+		return connect.NewError(connect.CodeAlreadyExists, publicAlreadyExistsMessage).WithCause(err)
 	case errors.Is(err, context.DeadlineExceeded):
 		return connect.NewError(connect.CodeDeadlineExceeded, publicDeadlineMessage).WithCause(err)
 	case errors.Is(err, context.Canceled):

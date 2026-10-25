@@ -49,3 +49,7 @@ A decisão mantém-se. O F1-06 acrescenta duas variantes de transação, porque 
 - **Uma exceção estreita, revista:** o `archtest` só permite chamar estas duas variantes em `internal/identity/app`; o `WithTeamTx` continua a ser o caminho normal. O `identity.accept_invitation` entra na lista exata de funções `SECURITY DEFINER` e só `pitbox_app` o executa.
 - **Um só dono por equipa** é garantido na base (`membership_one_owner_uq`, índice único parcial por `team_id` onde `role = 'owner'`); a transferência despromove o dono antigo antes de promover o novo, na mesma transação.
 - **Prova:** `backend/internal/platform/db/tx_test.go` (`TestNewTeamTx`, `TestJoinTeamTx`), `backend/internal/archtest`, `backend/db/tests/rls_and_constraints_test.sql` e `backend/internal/identity/app/integration_test.go`.
+
+## Emenda (2026-10-25, F1-07)
+
+A garagem usa `Check` na relação `team` (`member` para ler, `mechanic` para escrever) + RLS e FKs compostas. Não cria tuplos por carro, motor, pneu ou peça: esses recursos não têm partilha granular. O `type car` do modelo OpenFGA fica reservado para recursos com partilha; os setups (F1-08) podem usar tuplos por recurso. A decisão mantém as duas barreiras e evita um consumidor de tuplos por recurso no worker nesta fase.

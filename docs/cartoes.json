@@ -677,7 +677,7 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico; `Car.scale`/`powertrain` validados contra os catálogos (ADR 0016); inativo só bloqueia criação/mudança; a idempotência passa para `platform/idempotency` quando a garagem a usar, em vez de ser copiada",
+      "todo": "`CarService`, `EngineService`, `TyreService`, `PartService` com queries sqlc; montagem de motor com histórico; `Car.scale`/`powertrain` validados contra os catálogos (ADR 0016); inativo só bloqueia criação/mudança; autorização `team` (`member`/`mechanic`) + RLS, sem tuplos por recurso; custos omitidos ao piloto; `garage/api.go` (`CarExists`, catálogo); idempotência movida para `platform/idempotency`",
       "done_when": [
         "CRUD testado com testcontainers",
         "motor não fica em dois carros",

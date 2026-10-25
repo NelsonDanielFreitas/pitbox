@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package pitbox.garage.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "pitbox/garage/v1/garage.proto";
+
+// CarService manages a team's chassis. Reads accept any team member (owner,
+// mechanic or pilot); writes require a mechanic or owner. Another team is
+// NOT_FOUND, a pilot trying to write is PERMISSION_DENIED, and a stale version
+// is ABORTED.
+service CarService {
+  rpc GetCar(GetCarRequest) returns (GetCarResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListCars(ListCarsRequest) returns (ListCarsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateCar(CreateCarRequest) returns (CreateCarResponse);
+  rpc UpdateCar(UpdateCarRequest) returns (UpdateCarResponse);
+  rpc DeleteCar(DeleteCarRequest) returns (DeleteCarResponse);
+}
+
+message Car {
+  string id = 1;
+  string make = 2;
+  string model = 3;
+  optional int32 model_year = 4;
+  optional string serial_number = 5;
+  optional string nickname = 6;
+  optional string transponder_number = 7;
+  AssetStatus status = 8;
+  string scale = 9;
+  string powertrain = 10;
+  optional string notes = 11;
+  google.protobuf.Timestamp created_at = 12;
+  int32 version = 13;
+}
+
+message GetCarRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string car_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message GetCarResponse {
+  Car car = 1;
+}
+
+message ListCarsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListCarsResponse {
+  repeated Car cars = 1;
+  string next_page_token = 2;
+}
+
+message CreateCarRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string make = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  string model = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  optional int32 model_year = 5 [(buf.validate.field).int32 = {
+    gte: 1990
+    lte: 2100
+  }];
+  optional string serial_number = 6 [(buf.validate.field).string.max_len = 64];
+  optional string nickname = 7 [(buf.validate.field).string.max_len = 40];
+  optional string transponder_number = 8 [(buf.validate.field).string.max_len = 64];
+  AssetStatus status = 9 [(buf.validate.field).enum.defined_only = true];
+  string scale = 10 [(buf.validate.field).string.max_len = 16];
+  string powertrain = 11 [(buf.validate.field).string.max_len = 32];
+  optional string notes = 12 [(buf.validate.field).string.max_len = 2000];
+}
+
+message CreateCarResponse {
+  Car car = 1;
+}
+
+message UpdateCarRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 version = 3 [(buf.validate.field).int32.gte = 1];
+  google.protobuf.FieldMask update_mask = 4 [(buf.validate.field).required = true];
+  string make = 5 [(buf.validate.field).string.max_len = 80];
+  string model = 6 [(buf.validate.field).string.max_len = 80];
+  optional int32 model_year = 7 [(buf.validate.field).int32 = {
+    gte: 1990
+    lte: 2100
+  }];
+  optional string serial_number = 8 [(buf.validate.field).string.max_len = 64];
+  optional string nickname = 9 [(buf.validate.field).string.max_len = 40];
+  optional string transponder_number = 10 [(buf.validate.field).string.max_len = 64];
+  AssetStatus status = 11 [(buf.validate.field).enum.defined_only = true];
+  string scale = 12 [(buf.validate.field).string.max_len = 16];
+  string powertrain = 13 [(buf.validate.field).string.max_len = 32];
+  optional string notes = 14 [(buf.validate.field).string.max_len = 2000];
+  string car_id = 15 [(buf.validate.field).string.uuid = true];
+}
+
+message UpdateCarResponse {
+  Car car = 1;
+}
+
+message DeleteCarRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string car_id = 3 [(buf.validate.field).string.uuid = true];
+  int32 version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message DeleteCarResponse {}

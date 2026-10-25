@@ -11,6 +11,7 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity/transport"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/idempotency"
 )
 
 // Deps is what the identity module needs from the composition root.
@@ -33,7 +34,7 @@ type Module struct {
 func New(d Deps) (*Module, error) {
 	svc, err := app.New(app.Deps{
 		DB: d.DB, Store: store.NewRepo(), Authz: d.Authz, Outbox: d.Outbox,
-		Clock: d.Clock, Log: d.Log, Mailer: app.NoopMailer{},
+		Clock: d.Clock, Log: d.Log, Mailer: app.NoopMailer{}, Idempotency: idempotency.NewStore(),
 	})
 	if err != nil {
 		return nil, err

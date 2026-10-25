@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package pitbox.garage.v1;
+
+// AssetStatus mirrors garage.asset_status.
+enum AssetStatus {
+  ASSET_STATUS_UNSPECIFIED = 0;
+  ASSET_STATUS_ACTIVE = 1;
+  ASSET_STATUS_SPARE = 2;
+  ASSET_STATUS_RETIRED = 3;
+}
+
+// TyreStatus mirrors garage.tyre_status.
+enum TyreStatus {
+  TYRE_STATUS_UNSPECIFIED = 0;
+  TYRE_STATUS_NEW = 1;
+  TYRE_STATUS_USED = 2;
+  TYRE_STATUS_WORN = 3;
+  TYRE_STATUS_RETIRED = 4;
+}
+
+// PartKind mirrors garage.part_kind.
+enum PartKind {
+  PART_KIND_UNSPECIFIED = 0;
+  PART_KIND_GLOW_PLUG = 1;
+  PART_KIND_CLUTCH_SHOE = 2;
+  PART_KIND_CLUTCH_SPRING = 3;
+  PART_KIND_CLUTCH_BELL = 4;
+  PART_KIND_BEARING = 5;
+  PART_KIND_CONROD = 6;
+  PART_KIND_PISTON_SLEEVE = 7;
+  PART_KIND_AIR_FILTER = 8;
+  PART_KIND_SHOCK_OIL = 9;
+  PART_KIND_DIFF_OIL = 10;
+  PART_KIND_FUEL = 11;
+  PART_KIND_SPRING = 12;
+  PART_KIND_TYRE = 13;
+  PART_KIND_INSERT = 14;
+  PART_KIND_BODY = 15;
+  PART_KIND_WING = 16;
+  PART_KIND_OTHER = 17;
+}
+
+// StockReason mirrors garage.stock_reason.
+enum StockReason {
+  STOCK_REASON_UNSPECIFIED = 0;
+  STOCK_REASON_PURCHASE = 1;
+  STOCK_REASON_CONSUMED = 2;
+  STOCK_REASON_INSTALLED = 3;
+  STOCK_REASON_ADJUSTMENT = 4;
+  STOCK_REASON_LOST = 5;
+  STOCK_REASON_RETURNED = 6;
+}

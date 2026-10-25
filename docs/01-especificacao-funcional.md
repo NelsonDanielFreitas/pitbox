@@ -49,7 +49,7 @@ As permissões são atribuídas por equipa: o mesmo utilizador pode ser mecânic
 | --- | --- | --- | --- |
 | Dono da equipa | Quem criou a equipa | Tudo; convidar e remover membros; mudar papéis; apagar a equipa; exportar dados | Remover-se se for o único dono |
 | Mecânico | Responsável técnico | Criar e editar carros, motores, setups, manutenção, provas, finais; gerir módulos de telemetria | Gerir membros; apagar a equipa |
-| Piloto | Quem conduz | Ver tudo; adicionar notas de comportamento às sessões; editar o próprio perfil de piloto | Alterar setups, motores ou estratégia |
+| Piloto | Quem conduz | Ver tudo exceto custos de peças; adicionar notas de comportamento às sessões; editar o próprio perfil de piloto | Alterar setups, motores, custos ou estratégia |
 | Convidado | Amigo, outra equipa | Ver apenas os setups e provas que lhe forem partilhados, só leitura | Ver motores, custos, telemetria ou notas |
 | Administrador da plataforma | Operador do sistema | Suporte, suspensão de contas, métricas agregadas | Ler dados de equipas sem pedido de suporte registado e consentido |
 
@@ -140,7 +140,7 @@ Cada peça importante tem identidade própria e contador de uso, para que motore
 ### 4.4 Peças e consumíveis
 
 - Catálogo próprio da equipa: velas, sapatas, molas de embraiagem, rolamentos, bielas, filtros, óleos (com viscosidade), combustível (% nitro)
-- Stock com quantidade mínima e alerta quando abaixo
+- Stock com quantidade mínima e alerta quando abaixo; o stock pode ficar negativo, porque o modo offline regista a realidade primeiro e a UI sinaliza o valor abaixo do mínimo
 - Peça com vida útil (ex.: vela, sapatas) pode ser "montada" num carro ou motor e passa a contar uso
 - Custo opcional por peça, para ver o custo de uma época
 

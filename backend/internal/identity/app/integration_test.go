@@ -20,6 +20,7 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/idempotency"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
 )
@@ -93,7 +94,7 @@ func newHarness(t *testing.T) *harness {
 	require.NoError(t, err)
 	svc, err := app.New(app.Deps{
 		DB: db.New(pool), Store: store.NewRepo(), Authz: az, Outbox: proc, Clock: clock.Real(),
-		Log: log, Mailer: app.NoopMailer{},
+		Log: log, Mailer: app.NoopMailer{}, Idempotency: idempotency.NewStore(),
 	})
 	require.NoError(t, err)
 	return &harness{pg: pg, pool: pool, svc: svc, authz: az, ctx: context.Background()}

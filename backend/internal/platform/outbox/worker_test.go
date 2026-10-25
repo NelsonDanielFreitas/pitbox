@@ -359,3 +359,24 @@ func TestDrainKeyReschedulesWithACancelledContext(t *testing.T) {
 	// much shorter backoff even though the request context is already cancelled.
 	require.True(t, lockedUntil.Before(time.Now().Add(5*time.Second)), "locked_until = %s", lockedUntil)
 }
+
+func TestWorkerAcknowledgesStockLowWithoutSideEffects(t *testing.T) {
+	pg := testutil.StartPostgres(t)
+	pool := openPool(t, pg.URL)
+	ctx := context.Background()
+	roles := &recordingRoles{}
+	proc := newProcessor(t, pool, roles)
+
+	team := uuid.Must(uuid.NewV7())
+	part := uuid.Must(uuid.NewV7())
+	require.NoError(t, outbox.Record(ctx, pool, outbox.Event{
+		TeamID: team, Aggregate: "garage.part", AggregateID: part,
+		Type:    outbox.EventStockLow,
+		Payload: map[string]any{"part_id": part.String(), "qty_centi": 1},
+	}))
+	require.NoError(t, proc.ProcessBatch(ctx))
+	require.Empty(t, roles.snapshot())
+	var published bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT published_at IS NOT NULL FROM platform.outbox WHERE aggregate_id = $1`, part).Scan(&published))
+	require.True(t, published)
+}

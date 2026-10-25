@@ -1,0 +1,4 @@
+# esbuild's postinstall is required by Vite; with pnpm 12 the install fails when it is ignored.
+allowBuilds:
+  esbuild: true
+minimumReleaseAge: 4320

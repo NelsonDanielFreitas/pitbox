@@ -433,7 +433,7 @@ A produção começa em contentores geridos sem cluster para operar (fase 1) e p
 | Identidade | Zitadel Cloud (região UE) | UE |
 | Autorização | OpenFGA em Cloud Run | UE |
 | Objetos | Cloud Storage ou Cloudflare R2 (jurisdição UE) | UE |
-| App web | Cloudflare Pages (estático) atrás da CDN | Global |
+| App web + BFF | **Mesma origem** (ADR 0017): estático atrás da CDN e `/auth/*` + `/pitbox.*` para o Cloud Run | Global |
 | Borda | Cloudflare: DNS, TLS, WAF, proteção DDoS, rate limiting | Global |
 | Segredos | Secret Manager + KMS | UE |
 | Infraestrutura como código | OpenTofu, estado remoto cifrado | — |
@@ -472,7 +472,7 @@ A segurança segue o modelo de defesa em profundidade: cada camada assume que a 
 | Camada | Controlos |
 | --- | --- |
 | Borda | Cloudflare WAF (OWASP CRS), anti-DDoS, bot management, TLS 1.3 + HSTS preload; a origem só aceita tráfego da Cloudflare (autenticação de origem / mTLS) |
-| API | Rate limiting por IP, utilizador e equipa; limites de tamanho; deadlines; CORS só para o domínio da app; reflection desligado |
+| API | Rate limiting por IP, utilizador e equipa; limites de tamanho; deadlines; web na mesma origem (ADR 0017), CORS só para o Capacitor no F2-06; reflection desligado |
 | Identidade | OIDC + PKCE, passkeys, MFA obrigatório para donos; tokens de 10 min; step-up para operações sensíveis |
 | Autorização | OpenFGA por chamada + RLS no Postgres; testes de acesso cruzado entre equipas em cada endpoint |
 | Dados | TLS até à base de dados; cifra em repouso; cifra por envelope em campos sensíveis; backups cifrados e imutáveis |

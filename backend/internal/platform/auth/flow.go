@@ -362,6 +362,12 @@ func (h *Handler) landing(w http.ResponseWriter, returnTo string) {
 	if !ok {
 		target = "/"
 	}
+	refreshPage(w, target)
+}
+
+// refreshPage answers with a minimal 200 page that navigates immediately. The link is
+// the fallback for browsers that do not follow meta refresh (or block it).
+func refreshPage(w http.ResponseWriter, target string) {
 	noStore(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
@@ -517,7 +523,11 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	ClearSessionCookie(w)
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	// Do not answer with a 303 to the identity provider: Chrome applies the app's
+	// `form-action 'self'` CSP to the redirect target of a form POST, so the browser
+	// would clear the BFF cookie but stay on /teams without ending the Zitadel SSO
+	// session. A 200 page with a meta refresh is a new navigation and is allowed.
+	refreshPage(w, redirect)
 }
 
 // endSessionURL is where the identity provider ends its own session. id_token_hint is
@@ -560,11 +570,11 @@ func (h *Handler) revoke(ctx context.Context, refreshToken string) error {
 	return nil
 }
 
-func (h *Handler) signedOut(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) signedOut(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
-	_, _ = w.Write([]byte(`<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>PitBox</title></head><body><p>Sessão terminada.</p><p><a href="/">Voltar</a></p></body></html>`))
+	// The app owns the login screen. A 303 here is safe: the session and its
+	// cookie were already removed before the IdP logout redirect.
+	http.Redirect(w, r, h.PublicURL+"/login?logged_out=1", http.StatusSeeOther)
 }
 
 // sessionInfo tells the app whether it is signed in and who it is, so it can decide between
@@ -589,12 +599,16 @@ func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
 		return
 	}
+	amr := p.AMR
+	if amr == nil {
+		amr = []string{}
+	}
 	_ = json.NewEncoder(w).Encode(struct {
 		Authenticated bool      `json:"authenticated"`
 		UserID        string    `json:"user_id"`
 		AMR           []string  `json:"amr"`
 		AuthTime      time.Time `json:"auth_time"`
-	}{true, p.UserID, p.AMR, p.AuthTime})
+	}{true, p.UserID, amr, p.AuthTime})
 }
 
 // listSessions returns the active sessions of the authenticated user. It never includes

@@ -7,6 +7,7 @@ confuso. Esta verificação falha cedo e diz o que alinhar.
 
 Uso: python3 -I scripts/check-tool-versions.py [raiz]   (raiz por omissão: diretório do repositório)
 """
+import json
 import re
 import sys
 import tomllib
@@ -36,6 +37,8 @@ def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
     tools = tomllib.loads((root / "mise.toml").read_text())["tools"]
     required = go_mod_versions((root / "backend/go.mod").read_text())
+    package = json.loads((root / "app/package.json").read_text())
+    app_deps = {**package.get("dependencies", {}), **package.get("devDependencies", {})}
 
     problems = []
     for tool, module in PAIRS:
@@ -49,6 +52,20 @@ def main() -> int:
             problems.append(f"backend/go.mod não exige {module}")
         elif want.removeprefix("v") != str(spec).removeprefix("v"):
             problems.append(f"{tool} = {spec} em mise.toml, mas {module} = {want} em backend/go.mod: alinhar os dois")
+    # The app's Buf generator and runtime have to move together, for the same reason as
+    # the Go generator/runtime pair.
+    if app_deps.get("@bufbuild/protoc-gen-es") != app_deps.get("@bufbuild/protobuf"):
+        problems.append(
+            "@bufbuild/protoc-gen-es and @bufbuild/protobuf must have the same version "
+            f"({app_deps.get('@bufbuild/protoc-gen-es')} != {app_deps.get('@bufbuild/protobuf')})"
+        )
+
+    # Node's runtime major and @types/node's major must match.
+    node = str(tools.get("node", "")).split(".")[0]
+    types_node = str(app_deps.get("@types/node", "")).split(".")[0]
+    if node != types_node:
+        problems.append(f"node {tools.get('node')} and @types/node {app_deps.get('@types/node')} differ in major")
+
     for p in problems:
         print(f"check-tool-versions: {p}", file=sys.stderr)
     if not problems:

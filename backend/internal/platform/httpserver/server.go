@@ -98,6 +98,8 @@ func New(o Options) (*Server, error) {
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }),
 	)
 
+	handler = securityHeaders(handler)
+
 	// Requests derive from this context, not from the signal context, so that
 	// in-flight requests can finish during a graceful shutdown.
 	baseCtx, cancel := context.WithCancel(context.Background())
@@ -167,6 +169,19 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 		return fmt.Errorf("shutdown: %w", err)
 	}
 	return nil
+}
+
+// securityHeaders applies the API-wide hardening headers. The app is served
+// separately; these headers also cover Connect and /auth/session responses.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleHealth is liveness: the process is up. It says nothing else on purpose

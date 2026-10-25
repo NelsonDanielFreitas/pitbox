@@ -3,7 +3,7 @@
 - **Estado:** Aceite
 - **Data:** 2026-10-13
 - **Cartão:** F1-03 (a: login e logout; b: utilizador no primeiro login; c: passkeys, MFA e sessões)
-- **Relacionado:** [ADR 0004](0004-zitadel-bff.md) (Zitadel e BFF), emendado em conjunto com este.
+- **Relacionado:** [ADR 0004](0004-zitadel-bff.md) (Zitadel e BFF), emendado em conjunto com este; [ADR 0017](0017-app-web-bff-mesma-origem.md) (app web e BFF na mesma origem).
 
 ## Contexto
 
@@ -77,6 +77,19 @@ Sem este lock, dois pedidos em paralelo enviariam o mesmo refresh token rodado e
 ### Logout
 
 `POST` com `Origin` verificado (nunca GET). Ordem: (1) revoga o refresh token no servidor (`/oauth/v2/revoke`, como cliente confidencial); (2) apaga a sessão e o cookie; (3) **303** para `end_session` com `id_token_hint` (o Zitadel aceita-o expirado) e `post_logout_redirect_uri` registado.
+
+### Emenda 2026-10-25 (F1-09)
+
+O Chrome aplica o `form-action 'self'` da app ao URL de destino do redirect que se segue a um
+`POST` de formulário. O `303` para o `end_session` externo era, por isso, bloqueado: o cookie
+do BFF desaparecia, mas o browser ficava na app e a sessão SSO do Zitadel continuava viva.
+
+O logout passa a responder **200 com uma página mínima e meta refresh** para o `end_session`
+(com `id_token_hint`, `client_id` e `post_logout_redirect_uri`); a navegação do meta refresh
+não é abrangida por `form-action`. O `/auth/signed-out` continua a responder **303** para
+`/login?logged_out=1`. A página de logout tem `Cache-Control: no-store`,
+`Referrer-Policy: no-referrer` e CSP `default-src 'none'`, como a landing do callback. Ver
+também o ADR 0017.
 
 ### Step-up (F1-03c)
 

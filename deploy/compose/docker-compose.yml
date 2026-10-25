@@ -145,6 +145,10 @@ services:
       ZITADEL_EXTERNALPORT: ${ZITADEL_PORT:-8080}
       ZITADEL_EXTERNALSECURE: "false"
       ZITADEL_TLS_ENABLED: "false"
+      # O Zitadel recusa `localhost` no back-channel logout (denylist HTTP), mesmo em
+      # developmentMode e mesmo com a app OIDC a permitir redirects para localhost. Esta
+      # variável substitui a denylist por um valor inofensivo; só local, nunca produção.
+      ZITADEL_HTTPCLIENT_DENYLIST: "pitbox-local"
       ZITADEL_DATABASE_POSTGRES_DSN: postgresql://zitadel:${ZITADEL_DB_PASSWORD:?}@postgres:5432/zitadel?sslmode=disable
       # Tudo o que segue (admin, chaves, tempos, utilizador do provisionamento) só se aplica
       # no primeiro arranque do volume vazio: para mudar, `make reset`. O projeto e a app

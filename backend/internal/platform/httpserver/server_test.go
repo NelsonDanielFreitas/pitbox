@@ -142,6 +142,11 @@ func TestProbes(t *testing.T) {
 				if resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 					t.Errorf("missing hardening headers: %v", resp.Header)
 				}
+				if resp.Header.Get("Content-Security-Policy") != "default-src 'none'; frame-ancestors 'none'" ||
+					resp.Header.Get("Permissions-Policy") != "camera=(), microphone=(), geolocation=()" ||
+					resp.Header.Get("Referrer-Policy") != "no-referrer" {
+					t.Errorf("missing API security headers: %v", resp.Header)
+				}
 			}
 		})
 	}

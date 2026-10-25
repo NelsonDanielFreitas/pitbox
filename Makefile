@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go breaking test fuzz app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -96,7 +96,7 @@ sqlc-check: ## Falha se o SQL gerado (sqlc) não corresponder às queries e ao s
 	@test -z "$$(git status --porcelain -- 'backend/internal/*/store/sqlcgen' 'backend/internal/platform/*/sqlcgen')" || \
 	  { git status --porcelain -- 'backend/internal/*/store/sqlcgen' 'backend/internal/platform/*/sqlcgen'; echo "generated SQL is stale: run make sqlc-check and commit"; exit 1; }
 
-lint: lint-proto lint-go ## buf lint + buf format + golangci-lint (eslint e clippy entram com a app e o firmware)
+lint: lint-proto lint-go app-lint ## buf lint + buf format + golangci-lint + eslint
 
 lint-proto:
 	buf lint
@@ -108,8 +108,10 @@ lint-go:
 breaking: ## buf breaking contra o branch local main (no CI cria-se com git branch --force main origin/main)
 	buf breaking --against '.git#branch=main'
 
-test: test-scripts ## Testes do backend com -race e dos scripts (app e firmware entram mais tarde)
+test: test-scripts ## Testes do backend e dos scripts (app: make app-test)
 	cd backend && go test -race ./...
+
+test-app: app-test ## Alias para os testes da app
 
 fuzz: ## Fuzzers do setup (1 min cada): validação, comparação e conversão de Struct
 	cd backend && go test -run=^$$ -fuzz=FuzzValidateV1 -fuzztime=1m ./internal/setup/domain
@@ -119,9 +121,27 @@ fuzz: ## Fuzzers do setup (1 min cada): validação, comparação e conversão d
 test-scripts: ## Testes dos scripts Python (Zitadel falso, sem Docker)
 	python3 -I -m unittest discover -s scripts -p 'test_*.py'
 
-app-typecheck: ## tsc --noEmit ao TypeScript gerado
+app-install: ## Instala as dependências da app
+	cd app && pnpm install --frozen-lockfile
+
+app-dev: ## Corre o Vite em 127.0.0.1:5173 (proxy para a API)
+	cd app && pnpm dev
+
+app-lint: ## ESLint da app
+	cd app && pnpm lint
+
+app-typecheck: ## tsc --noEmit da app
 	@test -x app/node_modules/.bin/tsc || (cd app && pnpm install --frozen-lockfile)
-	cd app && pnpm exec tsc --noEmit
+	cd app && pnpm typecheck
+
+app-test: ## Testes Vitest da app
+	cd app && pnpm test
+
+app-build: ## Build de produção da app
+	cd app && pnpm build
+
+app-e2e: app-build ## Playwright sobre o build de produção
+	cd app && pnpm e2e
 
 secrets: ## gitleaks sobre o histórico completo do Git
 	gitleaks git --config .gitleaks.toml --redact --no-banner
@@ -178,7 +198,7 @@ db-migrate: ## Aplica as migrações ao Postgres do compose (make up) como pitbo
 authz-test: ## Asserções do modelo OpenFGA
 	fga model test --tests backend/authz/model.fga.yaml
 
-ci: lint test gen-check sqlc-check app-typecheck secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
+ci: lint test gen-check sqlc-check app-install app-typecheck app-test app-build app-e2e secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
 
 hooks: ## Ativa os hooks de .githooks (pre-push: gitleaks antes de cada push)
 	git config core.hooksPath .githooks

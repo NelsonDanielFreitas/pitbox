@@ -14,6 +14,10 @@ import (
 
 func newTestLimiter(t *testing.T, cfg Config) *Limiter {
 	t.Helper()
+	// The default 50ms is for the API's request budget. CI runs many testcontainers in
+	// parallel; a slow Valkey there must not turn a quota assertion into an "unavailable"
+	// fallback that silently allows the request.
+	cfg.ValkeyTimeout = time.Second
 	vk := testutil.StartValkey(t)
 	client, err := valkey.NewClient(valkey.ClientOption{
 		InitAddress:  []string{vk.Addr},

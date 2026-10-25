@@ -732,7 +732,7 @@
         "app"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Feito",
       "todo": "Vite + React + TypeScript strict, TanStack Router e Query, Tailwind, cliente Connect gerado, login via BFF",
       "done_when": [
         "App abre, faz login e mostra a lista de equipas"

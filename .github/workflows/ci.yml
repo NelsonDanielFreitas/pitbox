@@ -76,8 +76,80 @@ jobs:
       - name: Generated code is up to date
         run: make gen-check
 
-      - name: Type-check generated TypeScript
-        run: make app-typecheck
+  app:
+    name: app
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Node and pnpm only
+        uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
+        with:
+          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          install_args: --locked node pnpm
+
+      - name: Cache pnpm store
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('app/pnpm-lock.yaml') }}
+
+      - name: Read Playwright version
+        id: playwright
+        run: echo "version=$(jq -r '.devDependencies["@playwright/test"]' package.json)" >> "$GITHUB_OUTPUT"
+        working-directory: app
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install app dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: app
+
+      - name: Generate routes
+        run: pnpm routes:gen
+        working-directory: app
+
+      - name: Route tree is committed
+        run: git diff --exit-code -- src/app/routeTree.gen.ts
+        working-directory: app
+
+      - name: Lint
+        run: pnpm lint
+        working-directory: app
+
+      - name: Type-check
+        run: pnpm typecheck
+        working-directory: app
+
+      - name: Unit tests
+        run: pnpm test
+        working-directory: app
+
+      - name: Production build
+        run: pnpm build
+        working-directory: app
+
+      - name: Install Chromium headless shell
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+        working-directory: app
+
+      - name: E2E tests
+        run: pnpm e2e
+        working-directory: app
+
+      - name: Dependency audit
+        run: pnpm audit --audit-level high
+        working-directory: app
 
   backend:
     name: backend
@@ -224,7 +296,7 @@ jobs:
     # always(): sem isto, se um job falhar o ci-ok fica "skipped" e um check
     # obrigatório "skipped" conta como passado.
     if: always()
-    needs: [contracts, backend, authz, secrets, workflows, database]
+    needs: [contracts, app, backend, authz, secrets, workflows, database]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions: {}

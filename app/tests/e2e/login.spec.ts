@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("login, teams, no tokens, logout", async ({ page }) => {
+test("login, teams, team home, no tokens, logout", async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on("console", (message) => {
     if (message.type() === "error" && /Content Security Policy|Refused to/.test(message.text())) {
@@ -11,14 +11,20 @@ test("login, teams, no tokens, logout", async ({ page }) => {
 
   await page.goto("/");
   await expect(page).toHaveURL(/\/login(\?.*)?$/);
-  await expect(page.getByRole("heading", { name: "Entrar no PitBox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Setups, motores/ })).toBeVisible();
 
-  await page.getByRole("link", { name: "Entrar com Zitadel" }).click();
+  await page.getByRole("link", { name: "Entrar" }).click();
   await expect(page).toHaveURL(/\/teams$/);
-  await expect(page.getByRole("heading", { name: "As minhas equipas" })).toBeVisible();
-  await expect(page.getByText("Equipa Alpha")).toBeVisible();
-  await expect(page.getByText("Equipa Beta")).toBeVisible();
-  await expect(page.getByText("Dono")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Escolhe a equipa" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Equipa Alpha/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Equipa Beta/ })).toBeVisible();
+
+  await page.getByRole("link", { name: /Equipa Alpha/ }).click();
+  await expect(page).toHaveURL(/\/teams\/0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61$/);
+  await expect(page.getByRole("link", { name: /tocar para mudar/ })).toBeVisible();
+  await expect(page.getByText("Início em preparação")).toBeVisible();
+  await page.getByRole("link", { name: /tocar para mudar/ }).click();
+  await expect(page).toHaveURL(/\/teams$/);
 
   const csp = (await page.request.get("/")).headers()["content-security-policy"];
   expect(csp).toContain("script-src 'self'");

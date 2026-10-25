@@ -1,31 +1,28 @@
 import { useTranslation } from "react-i18next";
 
 import { loginHref } from "@/auth/session";
+import { Alert } from "@/shared/ui/Alert";
 import { Button } from "@/shared/ui/Button";
-import { Card } from "@/shared/ui/Card";
+import { Logo } from "@/shared/ui/Logo";
 
 export function LoginPage({ returnTo, loggedOut }: { returnTo: string; loggedOut: boolean }) {
   const { t } = useTranslation();
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-md">
-        <p className="text-sm font-semibold uppercase tracking-widest text-pitbox-accent">
-          {t("app.name")}
-        </p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-pitbox-ink">
-          {t("auth.title")}
-        </h1>
-        <p className="mt-3 text-pitbox-muted">{t("auth.description")}</p>
+    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-10">
+      <div className="flex w-full max-w-md flex-col items-center text-center">
+        <Logo size="lg" />
+        <h1 className="mt-8 text-3xl font-bold tracking-tight text-fg">{t("auth.title")}</h1>
+        <p className="mt-4 text-base text-muted">{t("auth.description")}</p>
         {loggedOut ? (
-          <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
+          <Alert tone="ok" className="mt-6 w-full text-left">
             {t("auth.loggedOut")}
-          </p>
+          </Alert>
         ) : null}
-        <Button asChild className="mt-6 w-full">
+        <Button asChild size="lg" full className="mt-8">
           <a href={loginHref(returnTo)}>{t("auth.cta")}</a>
         </Button>
-      </Card>
+      </div>
     </main>
   );
 }

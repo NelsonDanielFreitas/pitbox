@@ -8,3 +8,13 @@ export interface Team {
   countryCode: string;
   role: TeamRole;
 }
+
+export function teamInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}

@@ -16,7 +16,7 @@ export function TeamsPage({ repository }: { repository: TeamsRepository }) {
 
   if (teams.isPending) {
     return (
-      <div aria-busy="true" role="status" className="flex items-center gap-3 text-pitbox-muted">
+      <div aria-busy="true" role="status" className="flex items-center gap-3 text-muted">
         <Spinner />
         <span>{t("teams.loading")}</span>
       </div>
@@ -39,7 +39,7 @@ export function TeamsPage({ repository }: { repository: TeamsRepository }) {
       {teams.data.length === 0 ? (
         <EmptyState title={t("teams.emptyTitle")} body={t("teams.emptyBody")} />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-3">
           {teams.data.map((team) => (
             <li key={team.id}>
               <TeamCard team={team} />

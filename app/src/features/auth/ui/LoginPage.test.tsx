@@ -8,7 +8,7 @@ import { LoginPage } from "./LoginPage";
 describe("LoginPage", () => {
   it("links to the BFF with an internal return path", () => {
     renderWithQuery(<LoginPage returnTo="/teams" loggedOut={false} />);
-    expect(screen.getByRole("link", { name: "Entrar com Zitadel" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Entrar" })).toHaveAttribute(
       "href",
       "/auth/login?return_to=%2Fteams",
     );

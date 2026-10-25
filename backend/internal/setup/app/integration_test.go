@@ -565,6 +565,15 @@ func TestPaginationAuditAndExpiredLink(t *testing.T) {
 		RequestID: uuid.Must(uuid.NewV7()), SetupID: setup, Expiry: domain.ShareExpiry24h,
 	})
 	require.NoError(t, err)
+	expired, expiredToken, err := h.svc.CreateShareLink(h.ctx, uid(owner), tid(team), app.CreateShareLinkInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setup, Expiry: domain.ShareExpiry7d,
+	})
+	require.NoError(t, err)
+	// Expiry is decided by the database clock, not the test's clock.
+	h.pg.Exec(t, fmt.Sprintf(`UPDATE setup.share_link SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE id = '%s'`, expired.ID))
+	_, err = h.svc.OpenShareLink(h.ctx, expiredToken)
+	require.ErrorIs(t, err, domain.ErrNotFound)
+
 	requestID := uuid.Must(uuid.NewV7())
 	require.NoError(t, h.svc.RevokeShareLink(h.ctx, uid(owner), tid(team), setup, uuid.MustParse(link.ID), requestID))
 	require.NoError(t, h.svc.RevokeShareLink(h.ctx, uid(owner), tid(team), setup, uuid.MustParse(link.ID), uuid.Must(uuid.NewV7())))
@@ -576,11 +585,6 @@ func TestPaginationAuditAndExpiredLink(t *testing.T) {
 	require.Equal(t, "1", h.pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM audit.audit_log WHERE team_id = '%s' AND action = 'share_link.revoke'`, team)))
 	require.Equal(t, "0", h.pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM audit.audit_log WHERE team_id = '%s' AND (after::text LIKE '%%%s%%' OR before::text LIKE '%%%s%%')`, team, tokenValue, tokenValue)))
 	_ = ref
-
-	// Expiry is decided by the database clock, not the test's clock.
-	h.pg.Exec(t, fmt.Sprintf(`UPDATE setup.share_link SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE id = '%s'`, link.ID))
-	_, err = h.svc.OpenShareLink(h.ctx, tokenValue)
-	require.ErrorIs(t, err, domain.ErrNotFound)
 }
 
 func TestRealGarageReferences(t *testing.T) {

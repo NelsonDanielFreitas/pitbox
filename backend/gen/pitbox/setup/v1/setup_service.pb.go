@@ -1099,14 +1099,14 @@ const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"\x10_source_setup_idB\x11\n" +
 	"\x0f_source_version\"C\n" +
 	"\x13CreateSetupResponse\x12,\n" +
-	"\x05setup\x18\x01 \x01(\v2\x16.pitbox.setup.v1.SetupR\x05setup\"\xa9\x02\n" +
+	"\x05setup\x18\x01 \x01(\v2\x16.pitbox.setup.v1.SetupR\x05setup\"\xb1\x02\n" +
 	"\x14CreateVersionRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
 	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12#\n" +
 	"\bsetup_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\asetupId\x12*\n" +
-	"\fbase_version\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\vbaseVersion\x12+\n" +
-	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04data\x124\n" +
+	"\fbase_version\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\vbaseVersion\x123\n" +
+	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructB\x06\xbaH\x03\xc8\x01\x01R\x04data\x124\n" +
 	"\x0echange_summary\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\rchangeSummary\x88\x01\x01B\x11\n" +
 	"\x0f_change_summary\"S\n" +
 	"\x15CreateVersionResponse\x12:\n" +

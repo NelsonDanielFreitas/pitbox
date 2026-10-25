@@ -140,6 +140,9 @@ func (s *Service) CreateVersion(ctx context.Context, user db.UserID, team db.Tea
 	if in.BaseVersion < 1 {
 		return domain.VersionRef{}, fmt.Errorf("base version: %w", domain.ErrInvalid)
 	}
+	if in.Data == nil {
+		return domain.VersionRef{}, fmt.Errorf("version data: %w", domain.ErrInvalid)
+	}
 	data, err := domain.MarshalV1(in.Data)
 	if err != nil {
 		return domain.VersionRef{}, err
@@ -259,6 +262,9 @@ func (s *Service) ListVersions(ctx context.Context, user db.UserID, team db.Team
 	limit := pageSize(size)
 	var out []domain.VersionRef
 	err := s.withMemberReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, _ string) error {
+		if _, err := s.store.GetSetup(ctx, tx, uuid.UUID(team), setupID); err != nil {
+			return err
+		}
 		var err error
 		out, err = s.store.ListVersions(ctx, tx, uuid.UUID(team), setupID, before, limit+1)
 		return err
@@ -321,7 +327,7 @@ func (s *Service) CreateShareLink(ctx context.Context, user db.UserID, team db.T
 			return err
 		}
 		token = t
-		created, err := s.store.CreateShareLink(ctx, tx, uuid.UUID(team), in.SetupID, uuid.UUID(user), in.PinnedVersion, h, string(in.Expiry))
+		created, err := s.store.CreateShareLink(ctx, tx, uuid.UUID(team), in.SetupID, uuid.UUID(user), in.PinnedVersion, h, shareTTL(in.Expiry))
 		if err != nil {
 			return err
 		}
@@ -349,8 +355,19 @@ func (s *Service) ListShareLinks(ctx context.Context, user db.UserID, team db.Te
 
 func (s *Service) RevokeShareLink(ctx context.Context, user db.UserID, team db.TeamID, setupID, linkID uuid.UUID, requestID uuid.UUID) error {
 	return s.withMechanicTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, _ string) error {
-		if err := s.store.RevokeShareLink(ctx, tx, uuid.UUID(team), setupID, linkID); err != nil {
+		changed, err := s.store.RevokeShareLink(ctx, tx, uuid.UUID(team), setupID, linkID)
+		if err != nil {
 			return err
+		}
+		if !changed {
+			link, err := s.store.GetShareLink(ctx, tx, uuid.UUID(team), setupID, linkID)
+			if err != nil {
+				return err
+			}
+			if link.RevokedAt != nil {
+				return nil
+			}
+			return domain.ErrNotFound
 		}
 		return s.audit(ctx, tx, "share_link.revoke", "share_link", linkID.String(), nil, map[string]any{
 			"share_link_id": linkID.String(), "setup_id": setupID.String(),

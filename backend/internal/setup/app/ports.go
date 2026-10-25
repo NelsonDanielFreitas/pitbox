@@ -22,11 +22,11 @@ type Store interface {
 	GetVersion(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID, version int32) (domain.Version, error)
 	ListVersions(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID, before, limit int32) ([]domain.VersionRef, error)
 
-	CreateShareLink(ctx context.Context, tx db.DBTX, team, setupID, user uuid.UUID, pinned *int32, tokenHash []byte, expiry string) (domain.ShareLink, error)
+	CreateShareLink(ctx context.Context, tx db.DBTX, team, setupID, user uuid.UUID, pinned *int32, tokenHash []byte, ttl *string) (domain.ShareLink, error)
 	ListShareLinks(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID) ([]domain.ShareLink, error)
 	CountActiveShareLinks(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID) (int32, error)
 	GetShareLink(ctx context.Context, tx db.DBTX, team, setupID, id uuid.UUID) (domain.ShareLink, error)
-	RevokeShareLink(ctx context.Context, tx db.DBTX, team, setupID, id uuid.UUID) error
+	RevokeShareLink(ctx context.Context, tx db.DBTX, team, setupID, id uuid.UUID) (bool, error)
 }
 
 // Authorizer is the subset of OpenFGA used by the setup use cases.

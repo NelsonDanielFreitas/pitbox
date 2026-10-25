@@ -80,15 +80,50 @@ func ValidateData(version int, data map[string]any) (map[string]any, error) {
 	if err := validateBars(data); err != nil {
 		return nil, err
 	}
-	return data, nil
+	return normalizeMap(data), nil
+}
+
+// normalizeMap removes empty groups so {"bars": {}} and {} have the same
+// canonical representation. It copies the map; the caller's value is untouched.
+func normalizeMap(data map[string]any) map[string]any {
+	out := make(map[string]any, len(data))
+	for key, value := range data {
+		switch v := value.(type) {
+		case map[string]any:
+			if normalized := normalizeMap(v); len(normalized) > 0 {
+				out[key] = normalized
+			}
+		case []any:
+			out[key] = normalizeSlice(v)
+		default:
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func normalizeSlice(values []any) []any {
+	out := make([]any, len(values))
+	for i, value := range values {
+		switch v := value.(type) {
+		case map[string]any:
+			out[i] = normalizeMap(v)
+		case []any:
+			out[i] = normalizeSlice(v)
+		default:
+			out[i] = value
+		}
+	}
+	return out
 }
 
 // MarshalV1 validates and returns the canonical JSON stored in setup_version.data.
 func MarshalV1(data map[string]any) ([]byte, error) {
-	if _, err := ValidateV1(data); err != nil {
+	validated, err := ValidateV1(data)
+	if err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(validated)
 	if err != nil {
 		return nil, &ValidationError{Path: "data", RuleID: RuleType}
 	}

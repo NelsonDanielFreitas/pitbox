@@ -4,12 +4,11 @@ INSERT INTO setup.share_link (
 )
 VALUES (
   $1, $2, $3, $4,
-  CASE $5::text
-    WHEN '24h' THEN now() + interval '24 hours'
-    WHEN '7d'  THEN now() + interval '7 days'
-    ELSE NULL
+  CASE
+    WHEN sqlc.narg('ttl')::text IS NULL THEN NULL
+    ELSE now() + sqlc.narg('ttl')::text::interval
   END,
-  $6
+  $5
 )
 RETURNING id, setup_id, pinned_version, expires_at, revoked_at, last_used_at,
           use_count, created_at;
@@ -19,7 +18,8 @@ SELECT id, setup_id, pinned_version, expires_at, revoked_at, last_used_at,
        use_count, created_at
 FROM setup.share_link
 WHERE team_id = $1 AND setup_id = $2
-ORDER BY created_at DESC, id DESC;
+ORDER BY created_at DESC, id DESC
+LIMIT 100;
 
 -- name: CountActiveShareLinks :one
 SELECT count(*)::integer
@@ -36,6 +36,6 @@ WHERE team_id = $1 AND setup_id = $2 AND id = $3;
 
 -- name: RevokeShareLink :one
 UPDATE setup.share_link
-SET revoked_at = COALESCE(revoked_at, now())
-WHERE team_id = $1 AND setup_id = $2 AND id = $3
+SET revoked_at = now()
+WHERE team_id = $1 AND setup_id = $2 AND id = $3 AND revoked_at IS NULL
 RETURNING id;

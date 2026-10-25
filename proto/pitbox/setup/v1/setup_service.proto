@@ -55,7 +55,7 @@ message CreateVersionRequest {
   string request_id = 2 [(buf.validate.field).string.uuid = true];
   string setup_id = 3 [(buf.validate.field).string.uuid = true];
   int32 base_version = 4 [(buf.validate.field).int32.gte = 1];
-  google.protobuf.Struct data = 5;
+  google.protobuf.Struct data = 5 [(buf.validate.field).required = true];
   optional string change_summary = 6 [(buf.validate.field).string.max_len = 500];
 }
 

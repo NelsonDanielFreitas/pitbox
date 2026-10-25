@@ -39,12 +39,11 @@ INSERT INTO setup.share_link (
 )
 VALUES (
   $1, $2, $3, $4,
-  CASE $5::text
-    WHEN '24h' THEN now() + interval '24 hours'
-    WHEN '7d'  THEN now() + interval '7 days'
-    ELSE NULL
+  CASE
+    WHEN $6::text IS NULL THEN NULL
+    ELSE now() + $6::text::interval
   END,
-  $6
+  $5
 )
 RETURNING id, setup_id, pinned_version, expires_at, revoked_at, last_used_at,
           use_count, created_at
@@ -55,8 +54,8 @@ type CreateShareLinkParams struct {
 	SetupID       uuid.UUID
 	PinnedVersion pgtype.Int4
 	TokenHash     []byte
-	Column5       string
 	CreatedBy     uuid.UUID
+	Ttl           *string
 }
 
 type CreateShareLinkRow struct {
@@ -76,8 +75,8 @@ func (q *Queries) CreateShareLink(ctx context.Context, arg CreateShareLinkParams
 		arg.SetupID,
 		arg.PinnedVersion,
 		arg.TokenHash,
-		arg.Column5,
 		arg.CreatedBy,
+		arg.Ttl,
 	)
 	var i CreateShareLinkRow
 	err := row.Scan(
@@ -139,6 +138,7 @@ SELECT id, setup_id, pinned_version, expires_at, revoked_at, last_used_at,
 FROM setup.share_link
 WHERE team_id = $1 AND setup_id = $2
 ORDER BY created_at DESC, id DESC
+LIMIT 100
 `
 
 type ListShareLinksParams struct {
@@ -188,8 +188,8 @@ func (q *Queries) ListShareLinks(ctx context.Context, arg ListShareLinksParams) 
 
 const revokeShareLink = `-- name: RevokeShareLink :one
 UPDATE setup.share_link
-SET revoked_at = COALESCE(revoked_at, now())
-WHERE team_id = $1 AND setup_id = $2 AND id = $3
+SET revoked_at = now()
+WHERE team_id = $1 AND setup_id = $2 AND id = $3 AND revoked_at IS NULL
 RETURNING id
 `
 

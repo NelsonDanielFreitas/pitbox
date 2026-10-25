@@ -139,10 +139,10 @@ func (Repo) ListVersions(ctx context.Context, tx db.DBTX, team, setupID uuid.UUI
 	return out, nil
 }
 
-func (Repo) CreateShareLink(ctx context.Context, tx db.DBTX, team, setupID, user uuid.UUID, pinned *int32, tokenHash []byte, expiry string) (domain.ShareLink, error) {
+func (Repo) CreateShareLink(ctx context.Context, tx db.DBTX, team, setupID, user uuid.UUID, pinned *int32, tokenHash []byte, ttl *string) (domain.ShareLink, error) {
 	row, err := sqlcgen.New(tx).CreateShareLink(ctx, sqlcgen.CreateShareLinkParams{
 		TeamID: team, SetupID: setupID, PinnedVersion: int4(pinned),
-		TokenHash: tokenHash, Column5: expiry, CreatedBy: user,
+		TokenHash: tokenHash, CreatedBy: user, Ttl: ttl,
 	})
 	if err != nil {
 		return domain.ShareLink{}, mapError("create share link", err)
@@ -181,15 +181,15 @@ func (Repo) GetShareLink(ctx context.Context, tx db.DBTX, team, setupID, id uuid
 	return shareLinkFromGet(row), nil
 }
 
-func (Repo) RevokeShareLink(ctx context.Context, tx db.DBTX, team, setupID, id uuid.UUID) error {
+func (Repo) RevokeShareLink(ctx context.Context, tx db.DBTX, team, setupID, id uuid.UUID) (bool, error) {
 	_, err := sqlcgen.New(tx).RevokeShareLink(ctx, sqlcgen.RevokeShareLinkParams{TeamID: team, SetupID: setupID, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("revoke share link: %w", domain.ErrNotFound)
+		return false, nil
 	}
 	if err != nil {
-		return fmt.Errorf("revoke share link: %w", err)
+		return false, fmt.Errorf("revoke share link: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 // ShareReader reads one setup through the SECURITY DEFINER function, without a

@@ -2,7 +2,6 @@ package transport
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
 
@@ -220,6 +219,6 @@ func expiryFromProto(v setupv1.ShareLinkExpiry) (domain.ShareExpiry, error) {
 	case setupv1.ShareLinkExpiry_SHARE_LINK_EXPIRY_NEVER:
 		return domain.ShareExpiryNever, nil
 	default:
-		return "", errors.New("invalid share link expiry")
+		return "", domain.ErrInvalid
 	}
 }

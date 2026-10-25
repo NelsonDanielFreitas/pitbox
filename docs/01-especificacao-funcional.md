@@ -49,7 +49,7 @@ As permissões são atribuídas por equipa: o mesmo utilizador pode ser mecânic
 | --- | --- | --- | --- |
 | Dono da equipa | Quem criou a equipa | Tudo; convidar e remover membros; mudar papéis; apagar a equipa; exportar dados | Remover-se se for o único dono |
 | Mecânico | Responsável técnico | Criar e editar carros, motores, setups, manutenção, provas, finais; gerir módulos de telemetria | Gerir membros; apagar a equipa |
-| Piloto | Quem conduz | Ver tudo; adicionar notas de comportamento às sessões; editar o próprio perfil de piloto | Alterar setups, motores ou estratégia |
+| Piloto | Quem conduz | Ver tudo exceto custos de peças; adicionar notas de comportamento às sessões; editar o próprio perfil de piloto | Alterar setups, motores, custos ou estratégia |
 | Convidado | Amigo, outra equipa | Ver apenas os setups e provas que lhe forem partilhados, só leitura | Ver motores, custos, telemetria ou notas |
 | Administrador da plataforma | Operador do sistema | Suporte, suspensão de contas, métricas agregadas | Ler dados de equipas sem pedido de suporte registado e consentido |
 

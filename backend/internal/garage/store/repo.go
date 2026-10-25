@@ -145,6 +145,22 @@ func (Repo) CarExists(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (bool
 	return ok, nil
 }
 
+func (Repo) EngineExists(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (bool, error) {
+	ok, err := sqlcgen.New(tx).EngineExists(ctx, sqlcgen.EngineExistsParams{TeamID: team, ID: id})
+	if err != nil {
+		return false, fmt.Errorf("engine exists: %w", err)
+	}
+	return ok, nil
+}
+
+func (Repo) TyreSetExists(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (bool, error) {
+	ok, err := sqlcgen.New(tx).TyreSetExists(ctx, sqlcgen.TyreSetExistsParams{TeamID: team, ID: id})
+	if err != nil {
+		return false, fmt.Errorf("tyre set exists: %w", err)
+	}
+	return ok, nil
+}
+
 // --- engines -----------------------------------------------------------------
 
 func (Repo) CreateEngine(ctx context.Context, tx db.DBTX, team, user uuid.UUID, e domain.Engine) (domain.Engine, error) {

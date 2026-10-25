@@ -53,3 +53,7 @@ A decisão mantém-se. O F1-06 acrescenta duas variantes de transação, porque 
 ## Emenda (2026-10-25, F1-07)
 
 A garagem usa `Check` na relação `team` (`member` para ler, `mechanic` para escrever) + RLS e FKs compostas. Não cria tuplos por carro, motor, pneu ou peça: esses recursos não têm partilha granular. O `type car` do modelo OpenFGA fica reservado para recursos com partilha; os setups (F1-08) podem usar tuplos por recurso. A decisão mantém as duas barreiras e evita um consumidor de tuplos por recurso no worker nesta fase.
+
+## Emenda (2026-10-25, F1-08)
+
+O F1-08 implementa os setups com o mesmo padrão da garagem: `Check` na relação `team` (`member` para ler, `mechanic` para escrever) + RLS e FKs compostas. Os tuplos por recurso do tipo `setup` ficam adiados até existir partilha direta (`shared_with`), que está fora de âmbito. O link público não passa pelo OpenFGA: é lido por `setup.open_share_link`, uma função `SECURITY DEFINER` estreita, com hash de token e só `pitbox_app` a executar. Quando a partilha direta chegar, um cartão próprio acrescenta `setup.team` à outbox e migra os setups existentes; não é necessária uma alteração estrutural à tabela.

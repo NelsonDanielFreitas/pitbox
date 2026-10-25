@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "fields": {
+    "diffs": {
+      "type": "group",
+      "fields": {
+        "front_cst": {"type": "int", "min": 100, "max": 1000000},
+        "center_cst": {"type": "int", "min": 100, "max": 1000000},
+        "rear_cst": {"type": "int", "min": 100, "max": 1000000},
+        "front_ml": {"type": "number", "min": 0, "max": 1000},
+        "center_ml": {"type": "number", "min": 0, "max": 1000},
+        "rear_ml": {"type": "number", "min": 0, "max": 1000},
+        "fill_notes": {"type": "string", "max_len": 500}
+      }
+    },
+    "shocks": {
+      "type": "group",
+      "fields": {
+        "front": {
+          "type": "group",
+          "fields": {
+            "oil_cst": {"type": "int", "min": 100, "max": 2000},
+            "piston_holes": {"type": "int", "min": 1, "max": 10},
+            "piston_diameter_mm": {"type": "number", "min": 0.1, "max": 5},
+            "spring_brand": {"type": "string", "max_len": 40},
+            "spring_color": {"type": "string", "max_len": 40},
+            "spring_rate_gf_mm": {"type": "number", "min": 0, "max": 200},
+            "limiters_mm": {"type": "number", "min": 0, "max": 200},
+            "length_mm": {"type": "number", "min": 0, "max": 200},
+            "tower_position": {"type": "string", "max_len": 40},
+            "arm_position": {"type": "string", "max_len": 40},
+            "membrane_type": {"type": "string", "max_len": 40}
+          }
+        },
+        "rear": {
+          "type": "group",
+          "fields": {
+            "oil_cst": {"type": "int", "min": 100, "max": 2000},
+            "piston_holes": {"type": "int", "min": 1, "max": 10},
+            "piston_diameter_mm": {"type": "number", "min": 0.1, "max": 5},
+            "spring_brand": {"type": "string", "max_len": 40},
+            "spring_color": {"type": "string", "max_len": 40},
+            "spring_rate_gf_mm": {"type": "number", "min": 0, "max": 200},
+            "limiters_mm": {"type": "number", "min": 0, "max": 200},
+            "length_mm": {"type": "number", "min": 0, "max": 200},
+            "tower_position": {"type": "string", "max_len": 40},
+            "arm_position": {"type": "string", "max_len": 40},
+            "membrane_type": {"type": "string", "max_len": 40}
+          }
+        }
+      }
+    },
+    "geometry": {
+      "type": "group",
+      "fields": {
+        "front_camber_deg": {"type": "number", "min": -5, "max": 2},
+        "rear_camber_deg": {"type": "number", "min": -5, "max": 2},
+        "front_toe_deg": {"type": "number", "min": -5, "max": 5},
+        "rear_toe_deg": {"type": "number", "min": -5, "max": 5},
+        "caster_deg": {"type": "number", "min": 0, "max": 30},
+        "ride_height_mm": {"type": "number", "min": 0, "max": 100},
+        "front_droop_mm": {"type": "number", "min": 0, "max": 50},
+        "rear_droop_mm": {"type": "number", "min": 0, "max": 50},
+        "ackermann": {"type": "string", "max_len": 40},
+        "rear_hub_position": {"type": "string", "max_len": 40}
+      }
+    },
+    "bars": {
+      "type": "group",
+      "fields": {
+        "front_mm": {"type": "number", "min": 0, "max": 10},
+        "front_removed": {"type": "bool"},
+        "rear_mm": {"type": "number", "min": 0, "max": 10},
+        "rear_removed": {"type": "bool"}
+      }
+    },
+    "aero": {
+      "type": "group",
+      "fields": {
+        "wing_model": {"type": "string", "max_len": 80},
+        "wing_angle_deg": {"type": "number", "min": -10, "max": 30},
+        "gurney_mm": {"type": "number", "min": 0, "max": 20},
+        "body": {"type": "string", "max_len": 80}
+      }
+    },
+    "transmission": {
+      "type": "group",
+      "fields": {
+        "clutch_bell_teeth": {"type": "int", "min": 8, "max": 60},
+        "spur_teeth": {"type": "int", "min": 8, "max": 60},
+        "clutch_shoe_material": {"type": "string", "max_len": 40},
+        "clutch_spring": {"type": "string", "max_len": 40},
+        "clutch_clearance_mm": {"type": "number", "min": 0, "max": 10}
+      }
+    },
+    "engine": {
+      "type": "group",
+      "fields": {
+        "engine_id": {"type": "uuid"},
+        "high_needle_turns": {"type": "number", "min": 0, "max": 20},
+        "low_needle_turns": {"type": "number", "min": 0, "max": 20},
+        "glow_plug_brand": {"type": "string", "max_len": 80},
+        "glow_plug_temp": {"type": "string", "max_len": 40},
+        "fuel_brand": {"type": "string", "max_len": 80},
+        "fuel_nitro_pct": {"type": "number", "min": 0, "max": 50},
+        "exhaust": {"type": "string", "max_len": 80},
+        "manifold": {"type": "string", "max_len": 80},
+        "air_filter": {"type": "string", "max_len": 80},
+        "target_head_temp_c": {"type": "number", "min": 0, "max": 200}
+      }
+    },
+    "tyres": {
+      "type": "group",
+      "fields": {
+        "tyre_set_id": {"type": "uuid"},
+        "glue_pressure_kpa": {"type": "number", "min": 0, "max": 500},
+        "prep_additive": {"type": "string", "max_len": 80},
+        "prep_time_min": {"type": "number", "min": 0, "max": 120}
+      }
+    },
+    "weight": {
+      "type": "group",
+      "fields": {
+        "total_g": {"type": "number", "min": 0, "max": 10000},
+        "ballast_g": {"type": "number", "min": 0, "max": 10000},
+        "ballast_position": {"type": "string", "max_len": 80}
+      }
+    },
+    "radio": {
+      "type": "group",
+      "fields": {
+        "steering_epa_pct": {"type": "number", "min": 0, "max": 150},
+        "steering_expo_pct": {"type": "number", "min": -100, "max": 100},
+        "steering_dual_rate_pct": {"type": "number", "min": 0, "max": 150},
+        "throttle_epa_pct": {"type": "number", "min": 0, "max": 150},
+        "throttle_expo_pct": {"type": "number", "min": -100, "max": 100},
+        "throttle_dual_rate_pct": {"type": "number", "min": 0, "max": 150},
+        "brake_pct": {"type": "number", "min": 0, "max": 150}
+      }
+    }
+  }
+}

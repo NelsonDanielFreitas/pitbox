@@ -78,6 +78,25 @@ func (q *Queries) CreateEngine(ctx context.Context, arg CreateEngineParams) (Cre
 	return i, err
 }
 
+const engineExists = `-- name: EngineExists :one
+SELECT EXISTS (
+  SELECT 1 FROM garage.engine
+  WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
+)
+`
+
+type EngineExistsParams struct {
+	TeamID uuid.UUID
+	ID     uuid.UUID
+}
+
+func (q *Queries) EngineExists(ctx context.Context, arg EngineExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, engineExists, arg.TeamID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const getEngine = `-- name: GetEngine :one
 SELECT id, make, model, serial_number, COALESCE(purchased_on::text, '')::text AS purchased_on,
        status::text AS status, (tanks_total * 100)::bigint AS tanks_centi,

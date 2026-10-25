@@ -15,6 +15,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 	"go.opentelemetry.io/otel"
 
+	setupv1connect "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/setup/v1/setupv1connect"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/audit"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth"
@@ -103,8 +104,8 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 	handler.Authn = authenticator
 
 	return &authStack{
-		// No public procedures yet: every RPC needs a session.
-		interceptor: auth.Interceptor(authenticator, origin),
+		// Only the share-link reader is public; every other RPC needs a session.
+		interceptor: auth.Interceptor(authenticator, origin, setupv1connect.SharedSetupServiceGetSharedSetupProcedure),
 		mount:       handler.Mount,
 		pool:        pool,
 		close: func() {

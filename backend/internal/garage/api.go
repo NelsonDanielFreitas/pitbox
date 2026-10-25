@@ -24,6 +24,24 @@ func (d *CarDirectory) Exists(ctx context.Context, tx db.DBTX, teamID db.TeamID,
 	return d.repo.CarExists(ctx, tx, uuid.UUID(teamID), carID)
 }
 
+// EngineDirectory answers whether an engine exists in a team.
+type EngineDirectory struct{ repo *store.Repo }
+
+func NewEngineDirectory() *EngineDirectory { return &EngineDirectory{repo: store.NewRepo()} }
+
+func (d *EngineDirectory) Exists(ctx context.Context, tx db.DBTX, teamID db.TeamID, engineID uuid.UUID) (bool, error) {
+	return d.repo.EngineExists(ctx, tx, uuid.UUID(teamID), engineID)
+}
+
+// TyreSetDirectory answers whether a tyre set exists in a team.
+type TyreSetDirectory struct{ repo *store.Repo }
+
+func NewTyreSetDirectory() *TyreSetDirectory { return &TyreSetDirectory{repo: store.NewRepo()} }
+
+func (d *TyreSetDirectory) Exists(ctx context.Context, tx db.DBTX, teamID db.TeamID, tyreSetID uuid.UUID) (bool, error) {
+	return d.repo.TyreSetExists(ctx, tx, uuid.UUID(teamID), tyreSetID)
+}
+
 // Scale is one global scale entry.
 type Scale struct {
 	Code      string
@@ -103,4 +121,29 @@ func boolString(v bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// Directory groups the team-scoped existence checks used by other modules.
+type Directory struct {
+	cars    *CarDirectory
+	engines *EngineDirectory
+	tyres   *TyreSetDirectory
+}
+
+func NewDirectory() *Directory {
+	return &Directory{
+		cars: NewCarDirectory(), engines: NewEngineDirectory(), tyres: NewTyreSetDirectory(),
+	}
+}
+
+func (d *Directory) CarExists(ctx context.Context, tx db.DBTX, teamID db.TeamID, id uuid.UUID) (bool, error) {
+	return d.cars.Exists(ctx, tx, teamID, id)
+}
+
+func (d *Directory) EngineExists(ctx context.Context, tx db.DBTX, teamID db.TeamID, id uuid.UUID) (bool, error) {
+	return d.engines.Exists(ctx, tx, teamID, id)
+}
+
+func (d *Directory) TyreSetExists(ctx context.Context, tx db.DBTX, teamID db.TeamID, id uuid.UUID) (bool, error) {
+	return d.tyres.Exists(ctx, tx, teamID, id)
 }

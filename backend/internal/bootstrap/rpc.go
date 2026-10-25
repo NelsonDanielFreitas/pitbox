@@ -13,6 +13,7 @@ import (
 
 	garagev1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1"
 	identityv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
+	setupv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/setup/v1"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
@@ -46,6 +47,10 @@ func requestMessages() []proto.Message {
 		&garagev1.CreateTyreSetRequest{}, &garagev1.GetTyreSetRequest{}, &garagev1.ListTyreSetsRequest{}, &garagev1.UpdateTyreSetRequest{}, &garagev1.DeleteTyreSetRequest{},
 		&garagev1.CreatePartRequest{}, &garagev1.GetPartRequest{}, &garagev1.ListPartsRequest{}, &garagev1.UpdatePartRequest{}, &garagev1.DeletePartRequest{},
 		&garagev1.ListStockMovementsRequest{}, &garagev1.AddStockMovementRequest{},
+		&setupv1.CreateSetupRequest{}, &setupv1.CreateVersionRequest{}, &setupv1.GetVersionRequest{},
+		&setupv1.ListSetupsRequest{}, &setupv1.ListVersionsRequest{}, &setupv1.CompareVersionsRequest{},
+		&setupv1.CreateShareLinkRequest{}, &setupv1.ListShareLinksRequest{}, &setupv1.RevokeShareLinkRequest{},
+		&setupv1.GetSharedSetupRequest{},
 	}
 }
 

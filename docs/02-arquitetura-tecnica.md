@@ -247,7 +247,7 @@ type setup
     define annotator: member from team
 ```
 
-- O mesmo padrão aplica-se a `engine`, `tyre_set`, `event`, `session`, `device`. **F1-07:** os recursos da garagem usam o `Check` da relação `team` (`member`/`mechanic`) + RLS/FKs; só recursos com partilha (setups) ganham tuplos por recurso.
+- O mesmo padrão aplica-se a `engine`, `tyre_set`, `event`, `session`, `device`. **F1-07:** os recursos da garagem usam o `Check` da relação `team` (`member`/`mechanic`) + RLS/FKs; **F1-08:** os setups usam o mesmo padrão nesta fase e os tuplos por recurso ficam para a partilha direta (`shared_with`), que ainda não tem cartão.
 - Cada caso de uso chama `Check(user, relation, object)` antes de tocar nos dados; listas usam `ListObjects` ou filtram por equipa já verificada
 - Testes de autorização: um ficheiro de asserções OpenFGA por tipo, corrido no CI; e um teste de integração por endpoint com um utilizador de outra equipa, que tem de receber `PERMISSION_DENIED` ou `NOT_FOUND`
 

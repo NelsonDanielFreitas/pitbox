@@ -114,7 +114,7 @@ END $$;
 -- 7. pitbox_readonly: lista exata de tabelas que NÃO pode ler (sensíveis ou sem RLS por equipa).
 --    Uma tabela nova passa a ser legível por omissão (default privileges): se for sensível, a
 --    migração faz REVOKE e acrescenta-a aqui; se não, este teste obriga a decidir.
-DO $$ DECLARE got text; want text := 'platform.idempotency_key, platform.outbox, platform.push_subscription'; BEGIN
+DO $$ DECLARE got text; want text := 'platform.idempotency_key, platform.outbox, platform.push_subscription, setup.share_link'; BEGIN
   SELECT string_agg(c.oid::regclass::text, ', ' ORDER BY c.oid::regclass::text) INTO got
   FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind IN ('r','p')
@@ -143,7 +143,7 @@ DO $$ DECLARE got text; bad text; BEGIN
   SELECT string_agg(p.oid::regprocedure::text, ', ' ORDER BY p.oid::regprocedure::text) INTO got
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit');
-  ASSERT got = 'identity.accept_invitation(bytea), identity.consume_recovery_code(uuid,bytea[]), identity.is_owner(uuid), identity.replace_recovery_codes(uuid,bytea[],text), identity.resolve_login(text,citext,text)', format('funções SECURITY DEFINER: %s', got);
+  ASSERT got = 'identity.accept_invitation(bytea), identity.consume_recovery_code(uuid,bytea[]), identity.is_owner(uuid), identity.replace_recovery_codes(uuid,bytea[],text), identity.resolve_login(text,citext,text), setup.open_share_link(bytea)', format('funções SECURITY DEFINER: %s', got);
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit')

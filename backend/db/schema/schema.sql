@@ -587,8 +587,15 @@ CREATE TABLE setup.share_link (
   use_count           integer     NOT NULL DEFAULT 0,
   created_by          uuid        NOT NULL REFERENCES identity.user_account (id),
   created_at          timestamptz NOT NULL DEFAULT now(),
-  FOREIGN KEY (team_id, setup_id) REFERENCES setup.setup (team_id, id) ON DELETE CASCADE
+  CONSTRAINT share_link_team_id_uq UNIQUE (team_id, id),
+  FOREIGN KEY (team_id, setup_id) REFERENCES setup.setup (team_id, id) ON DELETE CASCADE,
+  CONSTRAINT share_link_pinned_version_fk
+    FOREIGN KEY (team_id, setup_id, pinned_version)
+    REFERENCES setup.setup_version (team_id, setup_id, version) ON DELETE CASCADE,
+  CONSTRAINT share_link_expiry_ck
+    CHECK (expires_at IS NULL OR expires_at > created_at)
 );
+CREATE INDEX share_link_setup_idx ON setup.share_link (team_id, setup_id);
 
 ALTER TABLE garage.car
   ADD CONSTRAINT car_base_setup_fk
@@ -1544,6 +1551,7 @@ REVOKE UPDATE, DELETE ON garage.stock_movement      FROM pitbox_app;
 REVOKE INSERT, UPDATE, DELETE ON telemetry.firmware_release FROM pitbox_app;
 REVOKE SELECT ON platform.idempotency_key           FROM pitbox_readonly;
 REVOKE SELECT ON platform.push_subscription         FROM pitbox_readonly;   -- endpoints e chaves de push
+REVOKE SELECT ON setup.share_link                   FROM pitbox_readonly;   -- hashes de tokens e metadados de partilha
 REVOKE SELECT ON platform.outbox                    FROM pitbox_readonly;   -- eventos de todas as equipas, sem RLS
 -- Catálogos globais de referência (ADR 0016): a aplicação só lê; só as migrações escrevem.
 REVOKE INSERT, UPDATE, DELETE ON garage.scale, garage.powertrain FROM pitbox_app;
@@ -1818,6 +1826,60 @@ REVOKE ALL ON FUNCTION identity.accept_invitation(bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION identity.accept_invitation(bytea) TO pitbox_app;
 COMMENT ON FUNCTION identity.accept_invitation(bytea) IS
   'Aceita um convite pelo hash do token, sem contexto de equipa. SECURITY DEFINER, só pitbox_app.';
+
+-- setup.open_share_link — leitura pública de um setup partilhado (F1-08b).
+-- Fica depois do bloco de GRANT EXECUTE ON ALL FUNCTIONS para o pitbox_readonly
+-- não herdar EXECUTE no schema.sql. A função corre como dona, sem contexto de
+-- equipa: a RLS de setup.* não se aplica. Só devolve uma linha quando o link,
+-- a equipa, o setup e a versão são válidos; caso contrário devolve zero linhas.
+CREATE OR REPLACE FUNCTION setup.open_share_link(p_token_hash bytea)
+  RETURNS TABLE (
+    name text,
+    version integer,
+    schema_version integer,
+    data jsonb,
+    change_summary text,
+    version_created_at timestamptz
+  )
+  LANGUAGE sql
+  VOLATILE
+  SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+AS $$
+  WITH opened AS (
+    UPDATE setup.share_link l
+       SET last_used_at = now(), use_count = use_count + 1
+     WHERE l.token_hash = p_token_hash
+       AND octet_length(p_token_hash) = 32
+       AND l.revoked_at IS NULL
+       AND (l.expires_at IS NULL OR l.expires_at > now())
+       AND EXISTS (
+         SELECT 1
+           FROM setup.setup s
+           JOIN identity.team t ON t.id = l.team_id AND t.deleted_at IS NULL
+           JOIN setup.setup_version v
+             ON v.team_id = s.team_id
+            AND v.setup_id = s.id
+            AND v.version = COALESCE(l.pinned_version, s.current_version)
+          WHERE s.team_id = l.team_id
+            AND s.id = l.setup_id
+            AND s.deleted_at IS NULL
+       )
+    RETURNING l.team_id, l.setup_id, l.pinned_version
+  )
+  SELECT s.name, v.version, v.schema_version, v.data, v.change_summary, v.created_at
+    FROM opened o
+    JOIN setup.setup s ON s.team_id = o.team_id AND s.id = o.setup_id
+    JOIN setup.setup_version v
+      ON v.team_id = s.team_id
+     AND v.setup_id = s.id
+     AND v.version = COALESCE(o.pinned_version, s.current_version);
+$$;
+
+REVOKE ALL ON FUNCTION setup.open_share_link(bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION setup.open_share_link(bytea) TO pitbox_app;
+COMMENT ON FUNCTION setup.open_share_link(bytea) IS
+  'Abre um link de partilha pelo hash do token, sem contexto de equipa. SECURITY DEFINER, só pitbox_app.';
 
 -- =============================================================================
 -- TimescaleDB: hypertable e retenção da telemetria

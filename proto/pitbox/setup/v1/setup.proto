@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package pitbox.setup.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// Setup is the live identity of a versioned setup sheet.
+message Setup {
+  string id = 1;
+  string car_id = 2;
+  string name = 3;
+  int32 current_version = 4;
+  optional string notes = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  int32 version = 8;
+}
+
+// SetupVersionRef identifies one immutable version without carrying its data.
+// GetVersion carries the data; the write responses carry only this reference.
+message SetupVersionRef {
+  string setup_id = 1;
+  int32 version = 2;
+  int32 schema_version = 3;
+  optional string based_on_setup_id = 4;
+  optional int32 based_on_version = 5;
+  optional string change_summary = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// SetupVersion is one immutable snapshot of a setup sheet.
+message SetupVersion {
+  SetupVersionRef ref = 1;
+  google.protobuf.Struct data = 2;
+}
+
+// DifferenceKind says how a field changed between two versions.
+enum DifferenceKind {
+  DIFFERENCE_KIND_UNSPECIFIED = 0;
+  DIFFERENCE_KIND_ADDED = 1;
+  DIFFERENCE_KIND_REMOVED = 2;
+  DIFFERENCE_KIND_CHANGED = 3;
+}
+
+// SetupDifference is one leaf difference between two setup versions.
+message SetupDifference {
+  string path = 1;
+  google.protobuf.Value before = 2;
+  google.protobuf.Value after = 3;
+  DifferenceKind kind = 4;
+}
+
+// ShareLinkExpiry is the requested lifetime of a public share link.
+enum ShareLinkExpiry {
+  SHARE_LINK_EXPIRY_UNSPECIFIED = 0;
+  SHARE_LINK_EXPIRY_24H = 1;
+  SHARE_LINK_EXPIRY_7D = 2;
+  SHARE_LINK_EXPIRY_NEVER = 3;
+}
+
+// ShareLink is the listable metadata of a read-only public link. It never
+// contains the token or its hash.
+message ShareLink {
+  string id = 1;
+  string setup_id = 2;
+  optional int32 pinned_version = 3;
+  optional google.protobuf.Timestamp expires_at = 4;
+  optional google.protobuf.Timestamp revoked_at = 5;
+  optional google.protobuf.Timestamp last_used_at = 6;
+  int32 use_count = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// ShareLinkWithToken is returned only once, when the link is created.
+message ShareLinkWithToken {
+  ShareLink share_link = 1;
+  string token = 2;
+}
+
+// SetupDataViolation is attached to INVALID_ARGUMENT when setup data breaks
+// schema v1. It never carries the rejected value.
+message SetupDataViolation {
+  string path = 1;
+  string rule_id = 2;
+}
+
+// SharedSetup is the public, read-only view of a setup through a share link.
+// It deliberately exposes neither internal ids nor references to the garage.
+message SharedSetup {
+  string name = 1;
+  int32 version = 2;
+  int32 schema_version = 3;
+  google.protobuf.Struct data = 4;
+  optional string change_summary = 5;
+  google.protobuf.Timestamp version_created_at = 6;
+}

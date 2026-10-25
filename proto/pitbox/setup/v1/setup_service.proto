@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package pitbox.setup.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/struct.proto";
+import "pitbox/setup/v1/setup.proto";
+
+// SetupService manages a team's versioned setup sheets.
+//
+// Reads accept any team member (owner, mechanic or pilot). Writes require a
+// mechanic or owner. Another team is NOT_FOUND and a pilot trying to write is
+// PERMISSION_DENIED. Versions are immutable; a stale base_version is ABORTED.
+service SetupService {
+  rpc CreateSetup(CreateSetupRequest) returns (CreateSetupResponse);
+  rpc CreateVersion(CreateVersionRequest) returns (CreateVersionResponse);
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListSetups(ListSetupsRequest) returns (ListSetupsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CompareVersions(CompareVersionsRequest) returns (CompareVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateShareLink(CreateShareLinkRequest) returns (CreateShareLinkResponse);
+  rpc ListShareLinks(ListShareLinksRequest) returns (ListShareLinksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc RevokeShareLink(RevokeShareLinkRequest) returns (RevokeShareLinkResponse);
+}
+
+message CreateSetupRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string car_id = 3 [(buf.validate.field).string.uuid = true];
+  string name = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 120
+  }];
+  optional string notes = 5 [(buf.validate.field).string.max_len = 2000];
+  optional string source_setup_id = 6 [(buf.validate.field).string.uuid = true];
+  optional int32 source_version = 7 [(buf.validate.field).int32.gte = 1];
+}
+
+message CreateSetupResponse {
+  Setup setup = 1;
+}
+
+message CreateVersionRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string setup_id = 3 [(buf.validate.field).string.uuid = true];
+  int32 base_version = 4 [(buf.validate.field).int32.gte = 1];
+  google.protobuf.Struct data = 5;
+  optional string change_summary = 6 [(buf.validate.field).string.max_len = 500];
+}
+
+message CreateVersionResponse {
+  SetupVersionRef version = 1;
+}
+
+message GetVersionRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string setup_id = 2 [(buf.validate.field).string.uuid = true];
+  optional int32 version = 3 [(buf.validate.field).int32.gte = 1];
+}
+
+message GetVersionResponse {
+  SetupVersion version = 1;
+}
+
+message ListSetupsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  optional string car_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListSetupsResponse {
+  repeated Setup setups = 1;
+  string next_page_token = 2;
+}
+
+message ListVersionsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string setup_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListVersionsResponse {
+  repeated SetupVersionRef versions = 1;
+  string next_page_token = 2;
+}
+
+message CompareVersionsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string setup_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 from_version = 3 [(buf.validate.field).int32.gte = 1];
+  int32 to_version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message CompareVersionsResponse {
+  repeated SetupDifference differences = 1;
+  int32 from_version = 2;
+  int32 to_version = 3;
+}
+
+message CreateShareLinkRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string setup_id = 3 [(buf.validate.field).string.uuid = true];
+  ShareLinkExpiry expires_in = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  optional int32 pinned_version = 5 [(buf.validate.field).int32.gte = 1];
+}
+
+message CreateShareLinkResponse {
+  // This RPC is intentionally not idempotent: a retry creates another link.
+  // ListShareLinks shows the extra link and RevokeShareLink removes it.
+  ShareLinkWithToken share_link = 1;
+}
+
+message ListShareLinksRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string setup_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message ListShareLinksResponse {
+  repeated ShareLink share_links = 1;
+}
+
+message RevokeShareLinkRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string setup_id = 3 [(buf.validate.field).string.uuid = true];
+  string share_link_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeShareLinkResponse {}

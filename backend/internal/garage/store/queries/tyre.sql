@@ -33,3 +33,9 @@ UPDATE garage.tyre_set
 SET deleted_at = now()
 WHERE team_id = $1 AND id = $2 AND version = $3 AND deleted_at IS NULL
 RETURNING id;
+
+-- name: TyreSetExists :one
+SELECT EXISTS (
+  SELECT 1 FROM garage.tyre_set
+  WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
+);

@@ -1,5 +1,4 @@
 import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -9,11 +8,7 @@ import {
   TeamSchema,
 } from "@/gen/pitbox/identity/v1/team_service_pb";
 
-import {
-  ConnectTeamsRepository,
-  isUnauthenticated,
-  roleFromProto,
-} from "./connect-teams-repository";
+import { ConnectTeamsRepository, roleFromProto } from "./connect-teams-repository";
 
 function membership(name: string, role: TeamRole) {
   return create(TeamMembershipSchema, {
@@ -64,10 +59,5 @@ describe("ConnectTeamsRepository", () => {
 
     await expect(repository.listMyTeams()).resolves.toEqual([]);
     expect(list).toHaveBeenCalledTimes(5);
-  });
-
-  it("detects unauthenticated Connect errors", () => {
-    expect(isUnauthenticated(new ConnectError("no session", Code.Unauthenticated))).toBe(true);
-    expect(isUnauthenticated(new ConnectError("other", Code.Internal))).toBe(false);
   });
 });

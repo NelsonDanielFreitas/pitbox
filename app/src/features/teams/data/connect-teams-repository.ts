@@ -1,4 +1,4 @@
-import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
+import { createClient, type Client } from "@connectrpc/connect";
 
 import { TeamRole as ProtoTeamRole } from "@/gen/pitbox/identity/v1/team_service_pb";
 import { TeamService } from "@/gen/pitbox/identity/v1/team_service_pb";
@@ -61,8 +61,4 @@ export function roleFromProto(role: ProtoTeamRole): TeamRole {
     default:
       return "unknown";
   }
-}
-
-export function isUnauthenticated(error: unknown): boolean {
-  return error instanceof ConnectError && error.code === Code.Unauthenticated;
 }

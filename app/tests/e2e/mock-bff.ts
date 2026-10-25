@@ -16,6 +16,7 @@ const appOrigin = process.env.PITBOX_E2E_ORIGIN ?? "http://localhost:4173";
 const cookieName = "__Host-pitbox_session";
 const cookieValue = "mock-session";
 const userId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60";
+let expireRpc = false;
 
 function teams() {
   return [
@@ -116,6 +117,9 @@ const rpcHandler = connectNodeAdapter({
             !context.requestHeader.get("cookie")?.includes(`${cookieName}=${cookieValue}`)) {
           throw new ConnectError("unauthenticated", Code.Unauthenticated);
         }
+        if (expireRpc) {
+          throw new ConnectError("session revoked", Code.Unauthenticated);
+        }
         return create(ListMyTeamsResponseSchema, { teams: teams() });
       },
     });
@@ -131,7 +135,15 @@ const server = createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/__test/expire-rpc" && req.method === "POST") {
+    expireRpc = true;
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
   if (url.pathname === "/auth/login") {
+    expireRpc = false;
     const returnTo = safeReturnTo(url.searchParams.get("return_to"));
     res.writeHead(302, {
       Location: `/auth/callback?return_to=${encodeURIComponent(returnTo)}`,

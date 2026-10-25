@@ -9,6 +9,5 @@ export function teamsQueryOptions(repository: TeamsRepository) {
     queryKey: teamsQueryKey,
     queryFn: () => repository.listMyTeams(),
     staleTime: 30_000,
-    retry: 1,
   });
 }

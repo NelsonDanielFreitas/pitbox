@@ -55,6 +55,77 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 
+
+-- ---------- F1-08: links de partilha e leitura pública ----------
+-- Versão 2 para provar que um link fixado não segue a versão atual.
+INSERT INTO setup.setup_version (team_id, setup_id, version, data, schema_version)
+VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000d1', 2,
+        '{"diffs":{"front_cst":8000}}', 1);
+UPDATE setup.setup SET current_version = 2 WHERE id = '01900000-0000-7000-8000-0000000000d1';
+
+INSERT INTO setup.share_link (team_id, setup_id, pinned_version, token_hash, expires_at, created_by)
+VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000d1', 1,
+        decode(repeat('aa', 32), 'hex'), now() + interval '1 day', app.current_user_id());
+INSERT INTO setup.share_link (team_id, setup_id, pinned_version, token_hash, expires_at, created_by)
+VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000d1', NULL,
+        decode(repeat('bb', 32), 'hex'), NULL, app.current_user_id());
+INSERT INTO setup.share_link (team_id, setup_id, pinned_version, token_hash, created_at, expires_at, created_by)
+VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000d1', 1,
+        decode(repeat('cc', 32), 'hex'), now() - interval '2 hours',
+        now() - interval '1 hour', app.current_user_id());
+
+-- A função pública corre como dona, sem contexto de equipa, e distingue o pin.
+SET LOCAL app.team_id = '';
+DO $$ BEGIN
+  ASSERT (SELECT version FROM setup.open_share_link(decode(repeat('aa', 32), 'hex'))) = 1, 'link fixado na versão 1';
+  ASSERT (SELECT version FROM setup.open_share_link(decode(repeat('bb', 32), 'hex'))) = 2, 'link sem pin segue a versão atual';
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('cc', 32), 'hex'))) = 0, 'link expirado não abre';
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('dd', 32), 'hex'))) = 0, 'token inexistente não abre';
+END $$;
+
+-- Revogado e token inválido devolvem zero linhas; o contador só sobe no sucesso.
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
+UPDATE setup.share_link SET revoked_at = now()
+WHERE token_hash = decode(repeat('bb', 32), 'hex');
+SET LOCAL app.team_id = '';
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('bb', 32), 'hex'))) = 0, 'link revogado não abre';
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('aa', 32), 'hex')) WHERE version = 1) = 1, 'link pin continua a abrir';
+END $$;
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
+DO $$ BEGIN
+  ASSERT (SELECT use_count FROM setup.share_link WHERE token_hash = decode(repeat('bb', 32), 'hex')) = 1, 'revogado não incrementa';
+END $$;
+
+-- A FK do pin e o CHECK de expiração recusam valores inválidos.
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO setup.share_link (team_id, setup_id, pinned_version, token_hash, created_by)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000d1', 999,
+            decode(repeat('ee', 32), 'hex'), app.current_user_id());
+    RAISE EXCEPTION 'FALHOU: versão fixada inexistente';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO setup.share_link (team_id, setup_id, token_hash, created_at, expires_at, created_by)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000d1',
+            decode(repeat('ff', 32), 'hex'), now(), now() - interval '1 hour', app.current_user_id());
+    RAISE EXCEPTION 'FALHOU: expiração antes da criação';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
+
+-- Setup apagado e equipa apagada também não servem links.
+UPDATE setup.setup SET deleted_at = now() WHERE id = '01900000-0000-7000-8000-0000000000d1';
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('aa', 32), 'hex'))) = 0, 'setup apagado não abre';
+END $$;
+UPDATE setup.setup SET deleted_at = NULL WHERE id = '01900000-0000-7000-8000-0000000000d1';
+UPDATE identity.team SET deleted_at = now() WHERE id = '01900000-0000-7000-8000-0000000000a1';
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('aa', 32), 'hex'))) = 0, 'equipa apagada não abre';
+END $$;
+UPDATE identity.team SET deleted_at = NULL WHERE id = '01900000-0000-7000-8000-0000000000a1';
+
 -- Um motor não pode estar em dois sítios ao mesmo tempo
 INSERT INTO garage.car (id, team_id, make, model) VALUES ('01900000-0000-7000-8000-0000000000c2', app.current_team_id(), 'Xray', 'XB8');
 INSERT INTO garage.engine_mount (team_id, engine_id, car_id, mounted_at)
@@ -85,6 +156,7 @@ INSERT INTO identity.membership (team_id, user_id, role) VALUES (app.current_tea
 DO $$ BEGIN
   ASSERT (SELECT count(*) FROM garage.car) = 0,           'RLS: B não vê carros de A';
   ASSERT (SELECT count(*) FROM setup.setup_version) = 0,  'RLS: B não vê setups de A';
+  ASSERT (SELECT count(*) FROM setup.share_link) = 0,     'RLS: B não vê links de A';
   ASSERT (SELECT count(*) FROM events.lap) = 0,           'RLS: B não vê voltas de A';
   ASSERT (SELECT count(*) FROM events.track) = 0,         'RLS: pista privada de A invisível';
   ASSERT (SELECT count(*) FROM identity.team) = 1,        'RLS: B só vê a sua equipa';

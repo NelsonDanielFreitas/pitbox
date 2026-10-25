@@ -217,6 +217,25 @@ func (q *Queries) SoftDeleteTyreSet(ctx context.Context, arg SoftDeleteTyreSetPa
 	return id, err
 }
 
+const tyreSetExists = `-- name: TyreSetExists :one
+SELECT EXISTS (
+  SELECT 1 FROM garage.tyre_set
+  WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
+)
+`
+
+type TyreSetExistsParams struct {
+	TeamID uuid.UUID
+	ID     uuid.UUID
+}
+
+func (q *Queries) TyreSetExists(ctx context.Context, arg TyreSetExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tyreSetExists, arg.TeamID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const updateTyreSet = `-- name: UpdateTyreSet :one
 UPDATE garage.tyre_set
 SET label = $1, make = $2, model = $3, compound = $4, insert_type = $5,

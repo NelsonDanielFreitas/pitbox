@@ -122,8 +122,10 @@ Elementos: endpoint público de links de setup (arquitetura §6.3).
 | ID | STRIDE | Ameaça | Mitigação | Estado | Prova ou cartão | Prio |
 | --- | --- | --- | --- | --- | --- | --- |
 | TM-SHARE-01 | I | Enumeração ou adivinhação de tokens | Token aleatório de 256 bits; só o hash SHA-256 guardado (`CHECK length = 32`) | implementado | `backend/db/schema/schema.sql` (`setup.share_link`) | M |
-| TM-SHARE-02 | I | Distinguir token inexistente de expirado | Resposta idêntica; rate limiting próprio; endpoint separado | planeado | F1-08 | M |
-| TM-SHARE-03 | I | Link dá mais do que o prometido | Ligação a um único setup, só leitura, com validade e revogável | planeado | F1-08 | M |
+| TM-SHARE-02 | I | Distinguir token inexistente de expirado | Resposta idêntica; rate limiting próprio; endpoint separado | implementado | F1-08; `backend/db/tests/rls_and_constraints_test.sql`; `backend/internal/setup/app/integration_test.go` | M |
+| TM-SHARE-03 | I | Link dá mais do que o prometido | Ligação a um único setup, só leitura, com validade e revogável | implementado | F1-08; `backend/internal/setup/transport/shared.go`; `backend/internal/setup/app/integration_test.go` | M |
+
+Risco aceite até ao F5-05: o limite público é um balde global por procedimento (10 RPS, burst 20). Um cliente com tokens falsos pode esgotá-lo e fazer os links legítimos devolver `RESOURCE_EXHAUSTED`; a mitigação definitiva é uma regra por IP na borda. As quotas de volume (versões por setup, setups por equipa) ficam para um cartão futuro (API4).
 
 ## Live timing (DF-08)
 

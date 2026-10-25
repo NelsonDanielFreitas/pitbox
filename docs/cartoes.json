@@ -705,7 +705,7 @@
         "backend"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Feito",
       "todo": "`SetupService`: criar, nova versão, comparar duas versões, link de partilha; esquema JSON v1 dos campos 1/8 TT",
       "done_when": [
         "Diferenças entre versões corretas",

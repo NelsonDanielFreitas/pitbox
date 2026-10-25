@@ -37,3 +37,9 @@ UPDATE garage.engine
 SET deleted_at = now()
 WHERE team_id = $1 AND id = $2 AND version = $3 AND deleted_at IS NULL
 RETURNING id;
+
+-- name: EngineExists :one
+SELECT EXISTS (
+  SELECT 1 FROM garage.engine
+  WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
+);

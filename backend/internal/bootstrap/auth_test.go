@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 
 	identityv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
 	"github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
+	setupv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/setup/v1"
+	"github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/setup/v1/setupv1connect"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
@@ -86,8 +89,11 @@ func TestAuthStackWiring(t *testing.T) {
 		}
 		return &identityv1.CreateTeamResponse{}, nil
 	}}
+	shared := &fakeSharedSetup{}
 	api, err := newRPCServer(cfg, logger, noop.NewTracerProvider(), stack.interceptor, noOpRateLimit(), nil, nil, func(s *connect.Server) {
 		identityv1connect.RegisterTeamServiceHandler(s, teams)
+		setupv1connect.RegisterSharedSetupServiceHandler(s, shared)
+		setupv1connect.RegisterSetupServiceHandler(s, setupv1connect.UnimplementedSetupServiceHandler{})
 	})
 	if err != nil {
 		t.Fatalf("newRPCServer: %v", err)
@@ -119,7 +125,39 @@ func TestAuthStackWiring(t *testing.T) {
 		c := &http.Client{Transport: headerTransport{base: ts.Client().Transport, headers: headers}}
 		return identityv1connect.NewTeamServiceClient(connect.NewClient(connecthttp.NewTransport(c, ts.URL))).CreateTeam(context.Background(), validRequest())
 	}
+	sharedRPC := func(headers map[string]string) error {
+		c := &http.Client{Transport: headerTransport{base: ts.Client().Transport, headers: headers}}
+		client := setupv1connect.NewSharedSetupServiceClient(connect.NewClient(connecthttp.NewTransport(c, ts.URL)))
+		_, err := client.GetSharedSetup(context.Background(), &setupv1.GetSharedSetupRequest{Token: "abc"})
+		return err
+	}
+	setupRPC := func(headers map[string]string) error {
+		c := &http.Client{Transport: headerTransport{base: ts.Client().Transport, headers: headers}}
+		client := setupv1connect.NewSetupServiceClient(connect.NewClient(connecthttp.NewTransport(c, ts.URL)))
+		_, err := client.GetVersion(context.Background(), &setupv1.GetVersionRequest{
+			TeamId:  "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60",
+			SetupId: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61",
+		})
+		return err
+	}
 
+	t.Run("the share-link reader is public and ignores a session principal", func(t *testing.T) {
+		if err := sharedRPC(nil); err != nil {
+			t.Fatalf("public without session: %v", err)
+		}
+		if err := sharedRPC(map[string]string{"Cookie": auth.SessionCookieName + "=" + token}); err != nil {
+			t.Fatalf("public with session: %v", err)
+		}
+		if shared.calls.Load() != 2 || shared.principal.Load() {
+			t.Fatalf("public calls=%d principal=%v", shared.calls.Load(), shared.principal.Load())
+		}
+	})
+	t.Run("the setup service is not public", func(t *testing.T) {
+		got := setupRPC(nil)
+		if code, _ := codeAndMessage(t, got); code != connect.CodeUnauthenticated {
+			t.Fatalf("setup without session: %v", got)
+		}
+	})
 	t.Run("without a session the service is not reached", func(t *testing.T) {
 		before := teams.calls.Load()
 		_, err := rpc(nil)
@@ -187,4 +225,18 @@ func TestUnconfiguredAuthenticationRefusesEverything(t *testing.T) {
 	} else if code, _ := codeAndMessage(t, err); code != connect.CodeUnauthenticated {
 		t.Errorf("code %v", code)
 	}
+}
+
+type fakeSharedSetup struct {
+	setupv1connect.UnimplementedSharedSetupServiceHandler
+	calls     atomic.Int32
+	principal atomic.Bool
+}
+
+func (f *fakeSharedSetup) GetSharedSetup(ctx context.Context, _ *setupv1.GetSharedSetupRequest) (*setupv1.GetSharedSetupResponse, error) {
+	f.calls.Add(1)
+	if _, ok := auth.PrincipalFrom(ctx); ok {
+		f.principal.Store(true)
+	}
+	return &setupv1.GetSharedSetupResponse{}, nil
 }

@@ -25,6 +25,7 @@ import (
 	platformotel "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/otel"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/ratelimit"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/setup"
 	"go.opentelemetry.io/otel"
 )
 
@@ -117,6 +118,15 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up garage: %w", err)
 	}
 
+	setupModule, err := setup.New(setup.Deps{
+		DB: db.New(authn.pool), Authz: authzClient, Clock: clock.Real(), Log: logger,
+		Shares: authn.pool, Garage: garage.NewDirectory(),
+	})
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up setups: %w", err)
+	}
+
 	// Step-up: transfers need a recent strong authentication; CreateTeam needs a
 	// strong factor (MFA) but no recency, so a password-only session cannot make
 	// the caller an owner. The lists are part of the security surface.
@@ -130,7 +140,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		},
 	})
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, identityModule.Register, garageModule.Register)
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, identityModule.Register, garageModule.Register, setupModule.Register)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

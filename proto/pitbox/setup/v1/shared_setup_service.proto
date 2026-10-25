@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package pitbox.setup.v1;
+
+import "buf/validate/validate.proto";
+import "pitbox/setup/v1/setup.proto";
+
+// SharedSetupService is the only public setup surface. It reads one setup
+// through a share-link token and never lists, writes or exposes team metadata.
+service SharedSetupService {
+  rpc GetSharedSetup(GetSharedSetupRequest) returns (GetSharedSetupResponse);
+}
+
+message GetSharedSetupRequest {
+  // The token is the base64url encoding of 32 random bytes. It is sent in the
+  // body, never in the URL.
+  string token = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+}
+
+message GetSharedSetupResponse {
+  SharedSetup setup = 1;
+}

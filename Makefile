@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go breaking test app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go breaking test fuzz app-typecheck secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -110,6 +110,11 @@ breaking: ## buf breaking contra o branch local main (no CI cria-se com git bran
 
 test: test-scripts ## Testes do backend com -race e dos scripts (app e firmware entram mais tarde)
 	cd backend && go test -race ./...
+
+fuzz: ## Fuzzers do setup (1 min cada): validação, comparação e conversão de Struct
+	cd backend && go test -run=^$$ -fuzz=FuzzValidateV1 -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz=FuzzCompare -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz=FuzzDataFromProto -fuzztime=1m ./internal/setup/transport
 
 test-scripts: ## Testes dos scripts Python (Zitadel falso, sem Docker)
 	python3 -I -m unittest discover -s scripts -p 'test_*.py'

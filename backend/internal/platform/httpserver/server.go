@@ -171,8 +171,6 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	return nil
 }
 
-// handleHealth is liveness: the process is up. It says nothing else on purpose
-// (no version, no dependency state): it is for the platform, not for people.
 // securityHeaders applies the API-wide hardening headers. The app is served
 // separately; these headers also cover Connect and /auth/session responses.
 func securityHeaders(next http.Handler) http.Handler {
@@ -186,6 +184,8 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// handleHealth is liveness: the process is up. It says nothing else on purpose
+// (no version, no dependency state): it is for the platform, not for people.
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeProbe(w, http.StatusOK, "ok\n")
 }

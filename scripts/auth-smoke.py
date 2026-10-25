@@ -8,7 +8,7 @@ Faz o que o browser faria, passo a passo, e confirma cada passo:
      criar sessão com utilizador + palavra-passe, e finalizar o auth request);
   5. entrega o callback à API: cria o utilizador no primeiro login e a sessão (cookie __Host-);
   6. /auth/session responde com o utilizador; um callback sem cookie e um com state errado dão 400;
-  7. logout (POST com Origin) -> 303 para o end_session do Zitadel; /auth/session passa a 401;
+  7. logout (POST com Origin) -> 200 com meta refresh para o end_session do Zitadel; /auth/session passa a 401;
   8. segundo login do mesmo utilizador -> o MESMO user_id (não duplica);
   9. refresh a sério: encurta o access token para 5 s no Zitadel, espera que expire e confirma que
      a API renova (a geração da sessão no Valkey sobe) sem pedir novo login; depois desativa o
@@ -20,6 +20,7 @@ Usa o PAT do login-client (só sessões) para o login e o do provisionamento só
 o utilizador de teste. Nenhum PAT nem palavra-passe é impresso. Só biblioteca padrão.
 """
 import base64
+import html
 import http.client
 import importlib.util
 import json
@@ -75,6 +76,14 @@ def http_call(method, url, headers=None, body=None):
         return e.code, e.headers, e.read()
 
 
+def meta_refresh_target(body: str) -> str:
+    """Extrai o URL de uma página 200 com meta refresh (logout/landing)."""
+    m = re.search(r'http-equiv="refresh" content="0;url=([^"]+)"', body)
+    if not m:
+        fail("resposta sem meta refresh")
+    return html.unescape(m.group(1))
+
+
 def cookies_of(headers) -> dict:
     out = {}
     for raw in headers.get_all("Set-Cookie") or []:
@@ -93,9 +102,14 @@ def main() -> int:
     if not ENV_FILE.exists():
         fail("falta deploy/compose/.env (make init)")
     env = provision.parse_env(ENV_FILE.read_text())
-    for k in ("PITBOX_OIDC_CLIENT_ID", "PITBOX_OIDC_CLIENT_SECRET", "PITBOX_AUTH_KEYS", "VALKEY_API_PASSWORD", "PITBOX_API_PASSWORD"):
+    for k in (
+        "PITBOX_OIDC_CLIENT_ID", "PITBOX_OIDC_CLIENT_SECRET", "PITBOX_AUTH_KEYS",
+        "VALKEY_API_PASSWORD", "PITBOX_API_PASSWORD",
+        "PITBOX_OPENFGA_ADDR", "PITBOX_OPENFGA_PRESHARED_KEY",
+        "PITBOX_OPENFGA_STORE_ID", "PITBOX_OPENFGA_MODEL_ID",
+    ):
         if not env.get(k):
-            fail(f"falta {k} no .env (make init; make zitadel-provision)")
+            fail(f"falta {k} no .env (make init; make zitadel-provision; make openfga-provision)")
     zport = env.get("ZITADEL_PORT", "8080")
     zitadel = f"http://localhost:{zport}"
 
@@ -115,6 +129,10 @@ def main() -> int:
         "PITBOX_OIDC_CLIENT_SECRET": env["PITBOX_OIDC_CLIENT_SECRET"], "PITBOX_AUTH_KEYS": env["PITBOX_AUTH_KEYS"],
         "PITBOX_VALKEY_ADDR": f"127.0.0.1:{env.get('VALKEY_PORT', '6379')}", "PITBOX_VALKEY_PASSWORD": env["VALKEY_API_PASSWORD"],
         "PITBOX_DATABASE_URL": f"postgres://pitbox_api:{env['PITBOX_API_PASSWORD']}@127.0.0.1:{env.get('POSTGRES_PORT', '5432')}/pitbox?sslmode=disable",
+        "PITBOX_OPENFGA_ADDR": env["PITBOX_OPENFGA_ADDR"],
+        "PITBOX_OPENFGA_PRESHARED_KEY": env["PITBOX_OPENFGA_PRESHARED_KEY"],
+        "PITBOX_OPENFGA_STORE_ID": env["PITBOX_OPENFGA_STORE_ID"],
+        "PITBOX_OPENFGA_MODEL_ID": env["PITBOX_OPENFGA_MODEL_ID"],
     }
     logf = open(logpath, "w")
     proc = subprocess.Popen([binary], env=child_env, stdout=logf, stderr=subprocess.STDOUT)
@@ -212,15 +230,16 @@ def main() -> int:
         check(bad_logout[0] == 403, "logout com Origin errado -> 403 (a sessão continua)")
         check(whoami(session_cookie, 200)[0][0] == 200, "a sessão sobreviveu ao logout recusado")
         lo = http_call("POST", API + "/auth/logout", {"Cookie": cookie_header(**{"__Host-pitbox_session": session_cookie}), "Origin": API}, b"")
-        check(lo[0] == 303 and lo[1]["Location"].startswith(zitadel + "/oidc/v1/end_session?"), "logout -> 303 para o end_session do Zitadel")
-        lq = urllib.parse.parse_qs(urllib.parse.urlparse(lo[1]["Location"]).query)
+        logout_url = meta_refresh_target(lo[2].decode()) if lo[0] == 200 else ""
+        check(lo[0] == 200 and logout_url.startswith(zitadel + "/oidc/v1/end_session?"), "logout -> 200 com meta refresh para o end_session do Zitadel")
+        lq = urllib.parse.parse_qs(urllib.parse.urlparse(logout_url).query)
         check("id_token_hint" in lq and lq["post_logout_redirect_uri"] == [API + "/auth/signed-out"], "id_token_hint e post_logout_redirect_uri")
         hint = lq["id_token_hint"][0].split(".")
         claims = json.loads(base64.urlsafe_b64decode(hint[1] + "=" * (-len(hint[1]) % 4)))
         check(not {"email", "email_verified", "name", "given_name", "family_name", "preferred_username"} & set(claims),
               "o id_token_hint (vai para o histórico do browser) não leva email nem nome")
         check("sub" in claims and "amr" in claims and "auth_time" in claims, "mas leva sub, amr e auth_time (a sessão precisa deles)")
-        es = http_call("GET", lo[1]["Location"])
+        es = http_call("GET", logout_url)
         check(es[0] in (200, 302, 303), "o Zitadel aceita o end_session")
         check(whoami(session_cookie, 401)[0][0] == 401, "/auth/session -> 401 depois do logout")
 

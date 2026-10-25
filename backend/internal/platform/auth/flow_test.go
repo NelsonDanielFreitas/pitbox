@@ -10,10 +10,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"html"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -754,12 +756,12 @@ func TestLogout(t *testing.T) {
 	}
 
 	w := f.do(http.MethodPost, LogoutPath, []*http.Cookie{sc}, map[string]string{"Origin": publicURL})
-	if w.Code != http.StatusSeeOther {
+	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}
-	loc, _ := url.Parse(w.Header().Get("Location"))
+	loc := refreshTarget(t, w)
 	if loc.Scheme+"://"+loc.Host+loc.Path != f.idp.srv.URL+"/end_session" {
-		t.Errorf("location = %s", loc)
+		t.Errorf("refresh target = %s", loc)
 	}
 	q := loc.Query()
 	if q.Get("id_token_hint") == "" || q.Get("client_id") != "pitbox-client" || q.Get("post_logout_redirect_uri") != publicURL+SignedOutPath {
@@ -779,13 +781,33 @@ func TestLogout(t *testing.T) {
 	}
 }
 
+func refreshTarget(t *testing.T, w *httptest.ResponseRecorder) *url.URL {
+	t.Helper()
+	const prefix = `<meta http-equiv="refresh" content="0;url=`
+	body := w.Body.String()
+	i := strings.Index(body, prefix)
+	if i < 0 {
+		t.Fatalf("no meta refresh in body: %s", body)
+	}
+	rest := body[i+len(prefix):]
+	j := strings.IndexByte(rest, '"')
+	if j < 0 {
+		t.Fatalf("unterminated meta refresh in body: %s", body)
+	}
+	u, err := url.Parse(html.UnescapeString(rest[:j]))
+	if err != nil {
+		t.Fatalf("parse refresh target: %v", err)
+	}
+	return u
+}
+
 func TestLogoutStillEndsTheSessionWhenRevocationFails(t *testing.T) {
 	t.Parallel()
 	f := newFlowHarness(t)
 	sc := f.signIn("ana")
 	f.idp.revokeStatus = http.StatusInternalServerError
 	w := f.do(http.MethodPost, LogoutPath, []*http.Cookie{sc}, map[string]string{"Origin": publicURL})
-	if w.Code != http.StatusSeeOther {
+	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}
 	if _, err := f.store.Get(context.Background(), sc.Value); !errors.Is(err, ErrNoSession) {
@@ -800,20 +822,20 @@ func TestLogoutWithoutASessionStillClearsTheCookie(t *testing.T) {
 	t.Parallel()
 	f := newFlowHarness(t)
 	w := f.do(http.MethodPost, LogoutPath, nil, map[string]string{"Origin": publicURL})
-	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != publicURL+SignedOutPath {
-		t.Fatalf("status %d location %q", w.Code, w.Header().Get("Location"))
+	if w.Code != http.StatusOK || refreshTarget(t, w).String() != publicURL+SignedOutPath {
+		t.Fatalf("status %d target %q", w.Code, refreshTarget(t, w))
 	}
 	if c := cookieNamed(w, SessionCookieName); c == nil || c.MaxAge >= 0 {
 		t.Errorf("cookie not cleared: %+v", c)
 	}
 }
 
-func TestSignedOutPage(t *testing.T) {
+func TestSignedOutRedirectsToTheAppLogin(t *testing.T) {
 	t.Parallel()
 	f := newFlowHarness(t)
 	w := f.do(http.MethodGet, SignedOutPath, nil, nil)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Sessão terminada") {
-		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != publicURL+"/login?logged_out=1" {
+		t.Fatalf("status %d location %q", w.Code, w.Header().Get("Location"))
 	}
 }
 
@@ -854,6 +876,38 @@ func TestSessionInfo(t *testing.T) {
 	f.store.c.Close()
 	if w := f.do(http.MethodGet, SessionPath, []*http.Cookie{sc}, nil); w.Code != http.StatusServiceUnavailable {
 		t.Errorf("store outage: status %d, want 503 (not 401: the user is not signed out)", w.Code)
+	}
+}
+
+func TestSessionInfoFixture(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+
+	// A session without AMR must still serialize as []string{}, not null.
+	token, err := f.store.Create(context.Background(), Session{
+		UserID: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60", Subject: "sub-anonymous-factor",
+		AuthTime: t0, AccessExpires: t0.Add(10 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	ck := &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+	w := f.do(http.MethodGet, SessionPath, []*http.Cookie{ck}, map[string]string{"Sec-Fetch-Site": "same-origin"})
+	fixture, err := os.ReadFile("testdata/session_authenticated.json")
+	if err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	if got, want := strings.TrimSpace(w.Body.String()), strings.TrimSpace(string(fixture)); got != want {
+		t.Fatalf("authenticated session body = %s, want %s", got, want)
+	}
+
+	unauth := f.do(http.MethodGet, SessionPath, nil, nil)
+	fixture, err = os.ReadFile("testdata/session_unauthenticated.json")
+	if err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	if got, want := strings.TrimSpace(unauth.Body.String()), strings.TrimSpace(string(fixture)); got != want {
+		t.Fatalf("unauthenticated session body = %s, want %s", got, want)
 	}
 }
 

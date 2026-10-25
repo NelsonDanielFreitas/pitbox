@@ -8,8 +8,24 @@ export type Locale = "pt-PT" | "en";
 
 const storageKey = "pitbox.locale";
 
+function readStoredLocale(): string | null {
+  try {
+    return window.localStorage.getItem(storageKey);
+  } catch {
+    return null;
+  }
+}
+
+function storeLocale(locale: Locale): void {
+  try {
+    window.localStorage.setItem(storageKey, locale);
+  } catch {
+    // Storage can be blocked (private mode, policy). The app still works in memory.
+  }
+}
+
 function initialLocale(): Locale {
-  const stored = window.localStorage.getItem(storageKey);
+  const stored = readStoredLocale();
   if (stored === "en" || stored === "pt-PT") {
     return stored;
   }
@@ -31,7 +47,7 @@ document.documentElement.lang = i18n.language;
 
 export function setLocale(locale: Locale): void {
   void i18n.changeLanguage(locale);
-  window.localStorage.setItem(storageKey, locale);
+  storeLocale(locale);
   document.documentElement.lang = locale;
 }
 

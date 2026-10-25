@@ -73,6 +73,15 @@ export default tseslint.config(
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/i18n/**"],
     rules: {
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "localStorage",
+          message: "localStorage is reserved for the non-sensitive language preference.",
+        },
+        { name: "sessionStorage", message: "sessionStorage is not allowed." },
+        { name: "indexedDB", message: "indexedDB is not allowed here." },
+      ],
       "no-restricted-syntax": [
         "error",
         {

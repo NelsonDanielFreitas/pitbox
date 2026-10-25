@@ -25,6 +25,9 @@ import (
 const (
 	AggregateMembership    = "identity.membership"
 	EventMembershipChanged = "membership.changed"
+	// EventStockLow is produced by the garage. Until F2-04 it is acknowledged with no
+	// external side effect; the real notification consumer replaces that handler.
+	EventStockLow = "garage.stock_low"
 )
 
 var (
@@ -265,6 +268,13 @@ func (p *Processor) DrainKey(ctx context.Context, teamID, aggregateID uuid.UUID)
 }
 
 func (p *Processor) apply(ctx context.Context, row claimedRow) error {
+	if row.EventType == EventStockLow {
+		if !row.TeamID.Valid || !row.AggregateID.Valid {
+			return errPayloadBroken
+		}
+		p.log.DebugContext(ctx, "outbox event acknowledged", slog.String("event_type", row.EventType))
+		return nil
+	}
 	if row.Aggregate != AggregateMembership || row.EventType != EventMembershipChanged {
 		return errUnknownEvent
 	}

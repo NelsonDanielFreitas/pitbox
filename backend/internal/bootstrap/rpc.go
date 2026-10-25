@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 
+	garagev1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1"
 	identityv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
@@ -39,6 +40,12 @@ func requestMessages() []proto.Message {
 		&identityv1.InitiateTransferRequest{},
 		&identityv1.AcceptTransferRequest{},
 		&identityv1.CancelTransferRequest{},
+		&garagev1.CreateCarRequest{}, &garagev1.GetCarRequest{}, &garagev1.ListCarsRequest{}, &garagev1.UpdateCarRequest{}, &garagev1.DeleteCarRequest{},
+		&garagev1.CreateEngineRequest{}, &garagev1.GetEngineRequest{}, &garagev1.ListEnginesRequest{}, &garagev1.UpdateEngineRequest{}, &garagev1.DeleteEngineRequest{},
+		&garagev1.ListEngineMountsRequest{}, &garagev1.MountEngineRequest{}, &garagev1.UnmountEngineRequest{}, &garagev1.MoveEngineRequest{},
+		&garagev1.CreateTyreSetRequest{}, &garagev1.GetTyreSetRequest{}, &garagev1.ListTyreSetsRequest{}, &garagev1.UpdateTyreSetRequest{}, &garagev1.DeleteTyreSetRequest{},
+		&garagev1.CreatePartRequest{}, &garagev1.GetPartRequest{}, &garagev1.ListPartsRequest{}, &garagev1.UpdatePartRequest{}, &garagev1.DeletePartRequest{},
+		&garagev1.ListStockMovementsRequest{}, &garagev1.AddStockMovementRequest{},
 	}
 }
 

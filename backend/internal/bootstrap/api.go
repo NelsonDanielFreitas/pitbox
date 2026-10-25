@@ -14,6 +14,7 @@ import (
 	"time"
 
 	identityv1connect "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/garage"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
@@ -108,6 +109,14 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up identity: %w", err)
 	}
 
+	garageModule, err := garage.New(garage.Deps{
+		DB: db.New(authn.pool), Authz: authzClient, Clock: clock.Real(), Log: logger,
+	})
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up garage: %w", err)
+	}
+
 	// Step-up: transfers need a recent strong authentication; CreateTeam needs a
 	// strong factor (MFA) but no recency, so a password-only session cannot make
 	// the caller an owner. The lists are part of the security surface.
@@ -121,7 +130,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		},
 	})
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, identityModule.Register)
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, identityModule.Register, garageModule.Register)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

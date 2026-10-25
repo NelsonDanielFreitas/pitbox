@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package pitbox.garage.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "pitbox/garage/v1/garage.proto";
+
+// TyreService manages sets of four wheels. Labels are unique per team among
+// non-deleted, non-retired sets. Counters are read-only in F1.
+service TyreService {
+  rpc GetTyreSet(GetTyreSetRequest) returns (GetTyreSetResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListTyreSets(ListTyreSetsRequest) returns (ListTyreSetsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateTyreSet(CreateTyreSetRequest) returns (CreateTyreSetResponse);
+  rpc UpdateTyreSet(UpdateTyreSetRequest) returns (UpdateTyreSetResponse);
+  rpc DeleteTyreSet(DeleteTyreSetRequest) returns (DeleteTyreSetResponse);
+}
+
+message TyreSet {
+  string id = 1;
+  string label = 2;
+  string make = 3;
+  string model = 4;
+  optional string compound = 5;
+  optional string insert_type = 6;
+  optional string glued_on = 7;
+  TyreStatus status = 8;
+  int32 sessions_total = 9;
+  int32 run_seconds_total = 10;
+  optional string wear_notes = 11;
+  google.protobuf.Timestamp created_at = 12;
+  int32 version = 13;
+}
+
+message GetTyreSetRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string tyre_set_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message GetTyreSetResponse {
+  TyreSet tyre_set = 1;
+}
+
+message ListTyreSetsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListTyreSetsResponse {
+  repeated TyreSet tyre_sets = 1;
+  string next_page_token = 2;
+}
+
+message CreateTyreSetRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string label = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 20
+  }];
+  string make = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  string model = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  optional string compound = 6 [(buf.validate.field).string.max_len = 40];
+  optional string insert_type = 7 [(buf.validate.field).string.max_len = 40];
+  optional string glued_on = 8 [(buf.validate.field).string.pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"];
+  TyreStatus status = 9 [(buf.validate.field).enum.defined_only = true];
+  optional string wear_notes = 10 [(buf.validate.field).string.max_len = 2000];
+}
+
+message CreateTyreSetResponse {
+  TyreSet tyre_set = 1;
+}
+
+message UpdateTyreSetRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 version = 3 [(buf.validate.field).int32.gte = 1];
+  google.protobuf.FieldMask update_mask = 4 [(buf.validate.field).required = true];
+  string label = 5 [(buf.validate.field).string.max_len = 20];
+  string make = 6 [(buf.validate.field).string.max_len = 80];
+  string model = 7 [(buf.validate.field).string.max_len = 80];
+  optional string compound = 8 [(buf.validate.field).string.max_len = 40];
+  optional string insert_type = 9 [(buf.validate.field).string.max_len = 40];
+  optional string glued_on = 10 [(buf.validate.field).string.pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"];
+  TyreStatus status = 11 [(buf.validate.field).enum.defined_only = true];
+  optional string wear_notes = 12 [(buf.validate.field).string.max_len = 2000];
+  string tyre_set_id = 13 [(buf.validate.field).string.uuid = true];
+}
+
+message UpdateTyreSetResponse {
+  TyreSet tyre_set = 1;
+}
+
+message DeleteTyreSetRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string tyre_set_id = 3 [(buf.validate.field).string.uuid = true];
+  int32 version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message DeleteTyreSetResponse {}

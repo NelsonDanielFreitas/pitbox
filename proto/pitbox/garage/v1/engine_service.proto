@@ -1,0 +1,169 @@
+syntax = "proto3";
+
+package pitbox.garage.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "pitbox/garage/v1/garage.proto";
+
+// EngineService manages engines and their car mounting history. Counters are
+// read-only in F1; F2-04 updates them from sessions. A retired engine or car
+// cannot be mounted. Mount operations are serialized by the application and
+// protected by the database EXCLUDE constraints.
+service EngineService {
+  rpc GetEngine(GetEngineRequest) returns (GetEngineResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListEngines(ListEnginesRequest) returns (ListEnginesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListEngineMounts(ListEngineMountsRequest) returns (ListEngineMountsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreateEngine(CreateEngineRequest) returns (CreateEngineResponse);
+  rpc UpdateEngine(UpdateEngineRequest) returns (UpdateEngineResponse);
+  rpc DeleteEngine(DeleteEngineRequest) returns (DeleteEngineResponse);
+  rpc MountEngine(MountEngineRequest) returns (MountEngineResponse);
+  rpc UnmountEngine(UnmountEngineRequest) returns (UnmountEngineResponse);
+  rpc MoveEngine(MoveEngineRequest) returns (MoveEngineResponse);
+}
+
+message Engine {
+  string id = 1;
+  string make = 2;
+  string model = 3;
+  optional string serial_number = 4;
+  optional string purchased_on = 5;
+  AssetStatus status = 6;
+  int64 tanks_centi = 7;
+  int32 run_seconds_total = 8;
+  int32 sessions_total = 9;
+  optional string notes = 10;
+  google.protobuf.Timestamp created_at = 11;
+  int32 version = 12;
+}
+
+message EngineMount {
+  string id = 1;
+  string engine_id = 2;
+  string car_id = 3;
+  google.protobuf.Timestamp mounted_at = 4;
+  optional google.protobuf.Timestamp unmounted_at = 5;
+}
+
+message GetEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string engine_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message GetEngineResponse {
+  Engine engine = 1;
+}
+
+message ListEnginesRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListEnginesResponse {
+  repeated Engine engines = 1;
+  string next_page_token = 2;
+}
+
+message ListEngineMountsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string engine_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListEngineMountsResponse {
+  repeated EngineMount mounts = 1;
+  string next_page_token = 2;
+}
+
+message CreateEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string make = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  string model = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  optional string serial_number = 5 [(buf.validate.field).string.max_len = 64];
+  optional string purchased_on = 6 [(buf.validate.field).string.pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"];
+  AssetStatus status = 7 [(buf.validate.field).enum.defined_only = true];
+  optional string notes = 8 [(buf.validate.field).string.max_len = 2000];
+}
+
+message CreateEngineResponse {
+  Engine engine = 1;
+}
+
+message UpdateEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 version = 3 [(buf.validate.field).int32.gte = 1];
+  google.protobuf.FieldMask update_mask = 4 [(buf.validate.field).required = true];
+  string make = 5 [(buf.validate.field).string.max_len = 80];
+  string model = 6 [(buf.validate.field).string.max_len = 80];
+  optional string serial_number = 7 [(buf.validate.field).string.max_len = 64];
+  optional string purchased_on = 8 [(buf.validate.field).string.pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"];
+  AssetStatus status = 9 [(buf.validate.field).enum.defined_only = true];
+  optional string notes = 10 [(buf.validate.field).string.max_len = 2000];
+  string engine_id = 11 [(buf.validate.field).string.uuid = true];
+}
+
+message UpdateEngineResponse {
+  Engine engine = 1;
+}
+
+message DeleteEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string engine_id = 3 [(buf.validate.field).string.uuid = true];
+  int32 version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message DeleteEngineResponse {}
+
+message MountEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string engine_id = 3 [(buf.validate.field).string.uuid = true];
+  string car_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+message MountEngineResponse {
+  EngineMount mount = 1;
+}
+
+message UnmountEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string engine_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message UnmountEngineResponse {}
+
+message MoveEngineRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string engine_id = 3 [(buf.validate.field).string.uuid = true];
+  string car_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+message MoveEngineResponse {
+  EngineMount mount = 1;
+}

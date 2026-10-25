@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package pitbox.garage.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "pitbox/garage/v1/garage.proto";
+
+// PartService manages the parts catalogue and its append-only stock movements.
+// Quantities are hundredths of the part's unit (qty_centi); costs are cents.
+// The unit cost is omitted for pilots. A movement that crosses the minimum
+// writes one garage.stock_low event.
+service PartService {
+  rpc GetPart(GetPartRequest) returns (GetPartResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListParts(ListPartsRequest) returns (ListPartsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListStockMovements(ListStockMovementsRequest) returns (ListStockMovementsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc CreatePart(CreatePartRequest) returns (CreatePartResponse);
+  rpc UpdatePart(UpdatePartRequest) returns (UpdatePartResponse);
+  rpc DeletePart(DeletePartRequest) returns (DeletePartResponse);
+  rpc AddStockMovement(AddStockMovementRequest) returns (AddStockMovementResponse);
+}
+
+message Part {
+  string id = 1;
+  PartKind kind = 2;
+  optional string brand = 3;
+  optional string reference = 4;
+  string description = 5;
+  string unit = 6;
+  google.protobuf.Struct specs = 7;
+  int64 min_stock_centi = 8;
+  optional int32 unit_cost_cents = 9;
+  string currency = 10;
+  bool has_service_life = 11;
+  int64 qty_centi = 12;
+  bool below_min = 13;
+  google.protobuf.Timestamp created_at = 14;
+  int32 version = 15;
+}
+
+message StockMovement {
+  string id = 1;
+  string part_id = 2;
+  int64 qty_delta_centi = 3;
+  StockReason reason = 4;
+  optional string note = 5;
+  google.protobuf.Timestamp occurred_at = 6;
+}
+
+message GetPartRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string part_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message GetPartResponse {
+  Part part = 1;
+}
+
+message ListPartsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListPartsResponse {
+  repeated Part parts = 1;
+  string next_page_token = 2;
+}
+
+message ListStockMovementsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string part_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListStockMovementsResponse {
+  repeated StockMovement movements = 1;
+  string next_page_token = 2;
+}
+
+message CreatePartRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  PartKind kind = 3 [(buf.validate.field).enum.defined_only = true];
+  optional string brand = 4 [(buf.validate.field).string.max_len = 80];
+  optional string reference = 5 [(buf.validate.field).string.max_len = 80];
+  string description = 6 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  string unit = 7 [(buf.validate.field).string.max_len = 16];
+  google.protobuf.Struct specs = 8;
+  int64 min_stock_centi = 9 [(buf.validate.field).int64.gte = 0];
+  optional int32 unit_cost_cents = 10 [(buf.validate.field).int32.gte = 0];
+  string currency = 11 [(buf.validate.field).string.max_len = 3];
+  bool has_service_life = 12;
+  int64 initial_qty_centi = 13 [(buf.validate.field).int64.gte = 0];
+}
+
+message CreatePartResponse {
+  Part part = 1;
+}
+
+message UpdatePartRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  int32 version = 3 [(buf.validate.field).int32.gte = 1];
+  google.protobuf.FieldMask update_mask = 4 [(buf.validate.field).required = true];
+  PartKind kind = 5 [(buf.validate.field).enum.defined_only = true];
+  optional string brand = 6 [(buf.validate.field).string.max_len = 80];
+  optional string reference = 7 [(buf.validate.field).string.max_len = 80];
+  string description = 8 [(buf.validate.field).string.max_len = 200];
+  string unit = 9 [(buf.validate.field).string.max_len = 16];
+  google.protobuf.Struct specs = 10;
+  int64 min_stock_centi = 11 [(buf.validate.field).int64.gte = 0];
+  optional int32 unit_cost_cents = 12 [(buf.validate.field).int32.gte = 0];
+  string currency = 13 [(buf.validate.field).string.max_len = 3];
+  bool has_service_life = 14;
+  string part_id = 15 [(buf.validate.field).string.uuid = true];
+}
+
+message UpdatePartResponse {
+  Part part = 1;
+}
+
+message DeletePartRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string part_id = 3 [(buf.validate.field).string.uuid = true];
+  int32 version = 4 [(buf.validate.field).int32.gte = 1];
+}
+
+message DeletePartResponse {}
+
+message AddStockMovementRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string part_id = 3 [(buf.validate.field).string.uuid = true];
+  int64 qty_delta_centi = 4;
+  StockReason reason = 5 [(buf.validate.field).enum.defined_only = true];
+  optional string note = 6 [(buf.validate.field).string.max_len = 500];
+}
+
+message AddStockMovementResponse {
+  Part part = 1;
+  StockMovement movement = 2;
+}

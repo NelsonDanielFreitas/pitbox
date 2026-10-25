@@ -41,8 +41,12 @@ func TestSetupContract(t *testing.T) {
 
 	version := &setupv1.CreateVersionRequest{
 		TeamId: testID, RequestId: testID, SetupId: testID, BaseVersion: 1,
+		Data: &structpb.Struct{Fields: map[string]*structpb.Value{}},
 	}
 	require.NoError(t, v.Validate(version))
+	version.Data = nil
+	require.Error(t, v.Validate(version))
+	version.Data = &structpb.Struct{Fields: map[string]*structpb.Value{}}
 	version.BaseVersion = 0
 	require.Error(t, v.Validate(version))
 
@@ -103,15 +107,32 @@ func TestSetupErrorCarriesOnlyRuleAndPath(t *testing.T) {
 }
 
 func FuzzDataFromProto(f *testing.F) {
-	f.Add([]byte{})
-	f.Add([]byte(`{"diffs":{"front_cst":500}}`))
-	f.Add([]byte(`{"bars":{"front_removed":true}}`))
+	add := func(s *structpb.Struct) {
+		raw, err := proto.Marshal(s)
+		if err != nil {
+			f.Fatalf("marshal seed: %v", err)
+		}
+		f.Add(raw)
+	}
+	good, _ := structpb.NewStruct(map[string]any{"diffs": map[string]any{"front_cst": 500.0}})
+	add(good)
+	withBar, _ := structpb.NewStruct(map[string]any{"bars": map[string]any{"front_removed": true}})
+	add(withBar)
+	add(&structpb.Struct{Fields: map[string]*structpb.Value{
+		"diffs": {Kind: &structpb.Value_StructValue{StructValue: &structpb.Struct{Fields: map[string]*structpb.Value{
+			"front_cst": {Kind: &structpb.Value_NumberValue{NumberValue: math.NaN()}},
+		}}}},
+	}})
 	f.Fuzz(func(t *testing.T, raw []byte) {
 		var s structpb.Struct
 		if err := proto.Unmarshal(raw, &s); err != nil {
 			return
 		}
-		_, _ = structToMap(&s)
+		data, err := structToMap(&s)
+		if err != nil {
+			return
+		}
+		_, _ = domain.ValidateV1(data)
 	})
 }
 

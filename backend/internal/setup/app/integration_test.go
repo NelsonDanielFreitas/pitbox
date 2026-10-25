@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/garage"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
@@ -74,6 +75,10 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
+	return newHarnessWithGarage(t, fakeGarage{})
+}
+
+func newHarnessWithGarage(t *testing.T, g app.Garage) *harness {
 	t.Helper()
 	pg := testutil.StartPostgres(t)
 	pool, err := db.Open(context.Background(), pg.URL)
@@ -83,7 +88,7 @@ func newHarness(t *testing.T) *harness {
 	svc, err := app.New(app.Deps{
 		DB: db.New(pool), Store: store.NewRepo(), Authz: az, Clock: clock.Real(),
 		Log: slog.New(slog.DiscardHandler), Idempotency: idempotency.NewStore(),
-		Garage: fakeGarage{}, Shares: store.NewShareReader(pool),
+		Garage: g, Shares: store.NewShareReader(pool),
 	})
 	require.NoError(t, err)
 	return &harness{pg: pg, pool: pool, svc: svc, authz: az, ctx: context.Background()}
@@ -118,6 +123,22 @@ func (h *harness) car(t *testing.T, team uuid.UUID) uuid.UUID {
 	id := uuid.Must(uuid.NewV7())
 	h.pg.Exec(t, fmt.Sprintf(
 		`INSERT INTO garage.car (id, team_id, make, model) VALUES ('%s', '%s', 'Mugen', 'MBX8R')`, id, team))
+	return id
+}
+
+func (h *harness) engine(t *testing.T, team uuid.UUID) uuid.UUID {
+	t.Helper()
+	id := uuid.Must(uuid.NewV7())
+	h.pg.Exec(t, fmt.Sprintf(
+		`INSERT INTO garage.engine (id, team_id, make, model) VALUES ('%s', '%s', 'REDS', 'R7')`, id, team))
+	return id
+}
+
+func (h *harness) tyreSet(t *testing.T, team uuid.UUID) uuid.UUID {
+	t.Helper()
+	id := uuid.Must(uuid.NewV7())
+	h.pg.Exec(t, fmt.Sprintf(
+		`INSERT INTO garage.tyre_set (id, team_id, label, make, model) VALUES ('%s', '%s', 'A', 'X', 'Y')`, id, team))
 	return id
 }
 
@@ -294,11 +315,316 @@ func TestInvalidDataIsRejectedWithoutValue(t *testing.T) {
 	require.Equal(t, "setup.data.range", ve.RuleID)
 }
 
-func TestIDs(t *testing.T) {
-	t.Parallel()
-	// UUIDv7 values are accepted by the service; this also keeps the test's
-	// generated ids recognisable in logs if a failure needs investigating.
-	_ = uuid.Must(uuid.NewV7())
+func TestAuthorizationMatrix(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	pilot := h.user(t, "pilot")
+	h.member(t, team, pilot, "pilot")
+	guest := h.user(t, "guest")
+	h.member(t, team, guest, "guest")
+	other := h.user(t, "other")
+	otherTeam := h.team(t, other, "owner")
+	car := h.car(t, team)
+	otherCar := h.car(t, otherTeam)
+
+	setup, err := h.svc.CreateSetup(h.ctx, uid(owner), tid(team), app.CreateSetupInput{
+		RequestID: uuid.Must(uuid.NewV7()), CarID: car, Name: "A",
+	})
+	require.NoError(t, err)
+	otherSetup, err := h.svc.CreateSetup(h.ctx, uid(other), tid(otherTeam), app.CreateSetupInput{
+		RequestID: uuid.Must(uuid.NewV7()), CarID: otherCar, Name: "B",
+	})
+	require.NoError(t, err)
+	link, _, err := h.svc.CreateShareLink(h.ctx, uid(owner), tid(team), app.CreateShareLinkInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: uuid.MustParse(setup.ID), Expiry: domain.ShareExpiry24h,
+	})
+	require.NoError(t, err)
+
+	otherCalls := []struct {
+		name string
+		call func() error
+	}{
+		{"CreateVersion", func() error {
+			_, err := h.svc.CreateVersion(h.ctx, uid(other), tid(otherTeam), app.CreateVersionInput{
+				RequestID: uuid.Must(uuid.NewV7()), SetupID: uuid.MustParse(setup.ID), BaseVersion: 1, Data: map[string]any{},
+			})
+			return err
+		}},
+		{"CompareVersions", func() error {
+			_, err := h.svc.CompareVersions(h.ctx, uid(other), tid(otherTeam), uuid.MustParse(setup.ID), 1, 1)
+			return err
+		}},
+		{"ListVersions", func() error {
+			_, _, err := h.svc.ListVersions(h.ctx, uid(other), tid(otherTeam), uuid.MustParse(setup.ID), 10, "")
+			return err
+		}},
+		{"CreateShareLink", func() error {
+			_, _, err := h.svc.CreateShareLink(h.ctx, uid(other), tid(otherTeam), app.CreateShareLinkInput{
+				RequestID: uuid.Must(uuid.NewV7()), SetupID: uuid.MustParse(setup.ID), Expiry: domain.ShareExpiry24h,
+			})
+			return err
+		}},
+		{"ListShareLinks", func() error {
+			_, err := h.svc.ListShareLinks(h.ctx, uid(other), tid(otherTeam), uuid.MustParse(setup.ID))
+			return err
+		}},
+		{"RevokeShareLink", func() error {
+			return h.svc.RevokeShareLink(h.ctx, uid(other), tid(otherTeam), uuid.MustParse(setup.ID), uuid.MustParse(link.ID), uuid.Must(uuid.NewV7()))
+		}},
+		{"CreateSetup with foreign source", func() error {
+			_, err := h.svc.CreateSetup(h.ctx, uid(owner), tid(team), app.CreateSetupInput{
+				RequestID: uuid.Must(uuid.NewV7()), CarID: car, Name: "copy",
+				SourceSetupID: ptrUUID(uuid.MustParse(otherSetup.ID)),
+			})
+			return err
+		}},
+	}
+	for _, tc := range otherCalls {
+		t.Run("other team "+tc.name, func(t *testing.T) {
+			require.ErrorIs(t, tc.call(), domain.ErrNotFound)
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"read", func() error {
+			_, err := h.svc.GetVersion(h.ctx, uid(guest), tid(team), uuid.MustParse(setup.ID), nil)
+			return err
+		}},
+		{"write", func() error {
+			_, err := h.svc.CreateVersion(h.ctx, uid(guest), tid(team), app.CreateVersionInput{
+				RequestID: uuid.Must(uuid.NewV7()), SetupID: uuid.MustParse(setup.ID), BaseVersion: 1, Data: map[string]any{},
+			})
+			return err
+		}},
+	} {
+		t.Run("guest "+tc.name, func(t *testing.T) {
+			require.ErrorIs(t, tc.call(), domain.ErrNotFound)
+		})
+	}
+
+	pilotCalls := []struct {
+		name string
+		call func() error
+	}{
+		{"CreateSetup", func() error {
+			_, err := h.svc.CreateSetup(h.ctx, uid(pilot), tid(team), app.CreateSetupInput{
+				RequestID: uuid.Must(uuid.NewV7()), CarID: car, Name: "pilot",
+			})
+			return err
+		}},
+		{"CreateShareLink", func() error {
+			_, _, err := h.svc.CreateShareLink(h.ctx, uid(pilot), tid(team), app.CreateShareLinkInput{
+				RequestID: uuid.Must(uuid.NewV7()), SetupID: uuid.MustParse(setup.ID), Expiry: domain.ShareExpiry24h,
+			})
+			return err
+		}},
+		{"ListShareLinks", func() error {
+			_, err := h.svc.ListShareLinks(h.ctx, uid(pilot), tid(team), uuid.MustParse(setup.ID))
+			return err
+		}},
+		{"RevokeShareLink", func() error {
+			return h.svc.RevokeShareLink(h.ctx, uid(pilot), tid(team), uuid.MustParse(setup.ID), uuid.MustParse(link.ID), uuid.Must(uuid.NewV7()))
+		}},
+	}
+	for _, tc := range pilotCalls {
+		t.Run("pilot "+tc.name, func(t *testing.T) {
+			require.ErrorIs(t, tc.call(), domain.ErrForbidden)
+		})
+	}
+}
+
+func TestConcurrencyIdempotencyAndDemotion(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	mechanic := h.user(t, "mechanic")
+	h.member(t, team, mechanic, "mechanic")
+	car := h.car(t, team)
+	setup, err := h.svc.CreateSetup(h.ctx, uid(owner), tid(team), app.CreateSetupInput{
+		RequestID: uuid.Must(uuid.NewV7()), CarID: car, Name: "race",
+	})
+	require.NoError(t, err)
+	setupID := uuid.MustParse(setup.ID)
+
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setupID, BaseVersion: 1, Data: nil,
+	})
+	require.ErrorIs(t, err, domain.ErrInvalid)
+
+	// Six versions from the same base: exactly one wins.
+	var wg sync.WaitGroup
+	errs := make(chan error, 6)
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+				RequestID: uuid.Must(uuid.NewV7()), SetupID: setupID, BaseVersion: 1,
+				Data: map[string]any{"diffs": map[string]any{"front_cst": float64(500 + i)}},
+			})
+			errs <- err
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	ok, conflicts := 0, 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			ok++
+		case errors.Is(err, domain.ErrConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected concurrent error: %v", err)
+		}
+	}
+	require.Equal(t, 1, ok)
+	require.Equal(t, 5, conflicts)
+
+	// A stale base is ABORTED.
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setupID, BaseVersion: 1, Data: map[string]any{},
+	})
+	require.ErrorIs(t, err, domain.ErrConflict)
+
+	// Same request id, different body or method, is INVALID_ARGUMENT.
+	replayID := uuid.Must(uuid.NewV7())
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: replayID, SetupID: setupID, BaseVersion: 2, Data: map[string]any{},
+	})
+	require.NoError(t, err)
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: replayID, SetupID: setupID, BaseVersion: 2, Data: map[string]any{"diffs": map[string]any{"rear_cst": float64(300)}},
+	})
+	require.ErrorIs(t, err, domain.ErrInvalid)
+
+	setupRequestID := uuid.Must(uuid.NewV7())
+	_, err = h.svc.CreateSetup(h.ctx, uid(owner), tid(team), app.CreateSetupInput{
+		RequestID: setupRequestID, CarID: car, Name: "method",
+	})
+	require.NoError(t, err)
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: setupRequestID, SetupID: setupID, BaseVersion: 3, Data: map[string]any{},
+	})
+	require.ErrorIs(t, err, domain.ErrInvalid)
+
+	// A demoted mechanic is refused before an idempotent replay can return data.
+	demotionID := uuid.Must(uuid.NewV7())
+	in := app.CreateVersionInput{
+		RequestID: demotionID, SetupID: setupID, BaseVersion: 3,
+		Data: map[string]any{"diffs": map[string]any{"center_cst": float64(400)}},
+	}
+	_, err = h.svc.CreateVersion(h.ctx, uid(mechanic), tid(team), in)
+	require.NoError(t, err)
+	h.pg.Exec(t, fmt.Sprintf(`UPDATE identity.membership SET role = 'pilot' WHERE team_id = '%s' AND user_id = '%s'`, team, mechanic))
+	h.authz.set(mechanic.String(), team.String(), "pilot")
+	_, err = h.svc.CreateVersion(h.ctx, uid(mechanic), tid(team), in)
+	require.ErrorIs(t, err, domain.ErrForbidden)
+}
+
+func TestPaginationAuditAndExpiredLink(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	car := h.car(t, team)
+	var ids []uuid.UUID
+	for i := 0; i < 3; i++ {
+		created, err := h.svc.CreateSetup(h.ctx, uid(owner), tid(team), app.CreateSetupInput{
+			RequestID: uuid.Must(uuid.NewV7()), CarID: car, Name: fmt.Sprintf("setup %d", i),
+		})
+		require.NoError(t, err)
+		ids = append(ids, uuid.MustParse(created.ID))
+	}
+	var got []uuid.UUID
+	token := ""
+	for {
+		page, next, err := h.svc.ListSetups(h.ctx, uid(owner), tid(team), nil, 1, token)
+		require.NoError(t, err)
+		for _, s := range page {
+			got = append(got, uuid.MustParse(s.ID))
+		}
+		if next == "" {
+			break
+		}
+		token = next
+	}
+	require.Len(t, got, 3)
+	require.ElementsMatch(t, ids, got)
+
+	setup := ids[0]
+	ref, err := h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setup, BaseVersion: 1,
+		Data: map[string]any{"diffs": map[string]any{"front_cst": float64(500)}},
+	})
+	require.NoError(t, err)
+	link, tokenValue, err := h.svc.CreateShareLink(h.ctx, uid(owner), tid(team), app.CreateShareLinkInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setup, Expiry: domain.ShareExpiry24h,
+	})
+	require.NoError(t, err)
+	requestID := uuid.Must(uuid.NewV7())
+	require.NoError(t, h.svc.RevokeShareLink(h.ctx, uid(owner), tid(team), setup, uuid.MustParse(link.ID), requestID))
+	require.NoError(t, h.svc.RevokeShareLink(h.ctx, uid(owner), tid(team), setup, uuid.MustParse(link.ID), uuid.Must(uuid.NewV7())))
+
+	for _, action := range []string{"setup.create", "setup.version.create", "share_link.create", "share_link.revoke"} {
+		n := h.pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM audit.audit_log WHERE team_id = '%s' AND action = '%s'`, team, action))
+		require.NotEqual(t, "0", n, action)
+	}
+	require.Equal(t, "1", h.pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM audit.audit_log WHERE team_id = '%s' AND action = 'share_link.revoke'`, team)))
+	require.Equal(t, "0", h.pg.Exec(t, fmt.Sprintf(`SELECT count(*) FROM audit.audit_log WHERE team_id = '%s' AND (after::text LIKE '%%%s%%' OR before::text LIKE '%%%s%%')`, team, tokenValue, tokenValue)))
+	_ = ref
+
+	// Expiry is decided by the database clock, not the test's clock.
+	h.pg.Exec(t, fmt.Sprintf(`UPDATE setup.share_link SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE id = '%s'`, link.ID))
+	_, err = h.svc.OpenShareLink(h.ctx, tokenValue)
+	require.ErrorIs(t, err, domain.ErrNotFound)
+}
+
+func TestRealGarageReferences(t *testing.T) {
+	h := newHarnessWithGarage(t, garage.NewDirectory())
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	other := h.user(t, "other")
+	otherTeam := h.team(t, other, "owner")
+	car := h.car(t, team)
+	engine := h.engine(t, team)
+	tyre := h.tyreSet(t, team)
+	otherEngine := h.engine(t, otherTeam)
+
+	setup, err := h.svc.CreateSetup(h.ctx, uid(owner), tid(team), app.CreateSetupInput{
+		RequestID: uuid.Must(uuid.NewV7()), CarID: car, Name: "garage",
+	})
+	require.NoError(t, err)
+	setupID := uuid.MustParse(setup.ID)
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setupID, BaseVersion: 1,
+		Data: map[string]any{
+			"engine": map[string]any{"engine_id": engine.String()},
+			"tyres":  map[string]any{"tyre_set_id": tyre.String()},
+		},
+	})
+	require.NoError(t, err)
+
+	// A different engine from another team is NOT_FOUND.
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setupID, BaseVersion: 2,
+		Data: map[string]any{"engine": map[string]any{"engine_id": otherEngine.String()}},
+	})
+	require.ErrorIs(t, err, domain.ErrNotFound)
+
+	// A reference that did not change is history: deleting the engine does not block it.
+	h.pg.Exec(t, fmt.Sprintf(`UPDATE garage.engine SET deleted_at = now() WHERE id = '%s'`, engine))
+	_, err = h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
+		RequestID: uuid.Must(uuid.NewV7()), SetupID: setupID, BaseVersion: 2,
+		Data: map[string]any{
+			"engine": map[string]any{"engine_id": engine.String()},
+			"tyres":  map[string]any{"tyre_set_id": tyre.String()},
+		},
+	})
+	require.NoError(t, err)
 }
 
 func ptrUUID(id uuid.UUID) *uuid.UUID { return &id }

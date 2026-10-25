@@ -1,0 +1,25 @@
+[
+  {
+    "name": "equal",
+    "before": {"diffs": {"front_cst": 500}},
+    "after": {"diffs": {"front_cst": 500}},
+    "differences": []
+  },
+  {
+    "name": "changed",
+    "before": {"diffs": {"front_cst": 500}},
+    "after": {"diffs": {"front_cst": 600}},
+    "differences": [
+      {"path": "diffs.front_cst", "kind": "changed", "before": 500, "after": 600}
+    ]
+  },
+  {
+    "name": "added and removed",
+    "before": {"diffs": {"front_cst": 500}, "bars": {}},
+    "after": {"diffs": {"rear_cst": 300}},
+    "differences": [
+      {"path": "diffs.front_cst", "kind": "removed", "before": 500},
+      {"path": "diffs.rear_cst", "kind": "added", "after": 300}
+    ]
+  }
+]

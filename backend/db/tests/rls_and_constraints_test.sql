@@ -114,6 +114,18 @@ DO $$ BEGIN
 END $$;
 SET LOCAL app.team_id = '01900000-0000-7000-8000-0000000000a1';
 
+-- Setup apagado e equipa apagada também não servem links.
+UPDATE setup.setup SET deleted_at = now() WHERE id = '01900000-0000-7000-8000-0000000000d1';
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('aa', 32), 'hex'))) = 0, 'setup apagado não abre';
+END $$;
+UPDATE setup.setup SET deleted_at = NULL WHERE id = '01900000-0000-7000-8000-0000000000d1';
+UPDATE identity.team SET deleted_at = now() WHERE id = '01900000-0000-7000-8000-0000000000a1';
+DO $$ BEGIN
+  ASSERT (SELECT count(*) FROM setup.open_share_link(decode(repeat('aa', 32), 'hex'))) = 0, 'equipa apagada não abre';
+END $$;
+UPDATE identity.team SET deleted_at = NULL WHERE id = '01900000-0000-7000-8000-0000000000a1';
+
 -- Um motor não pode estar em dois sítios ao mesmo tempo
 INSERT INTO garage.car (id, team_id, make, model) VALUES ('01900000-0000-7000-8000-0000000000c2', app.current_team_id(), 'Xray', 'XB8');
 INSERT INTO garage.engine_mount (team_id, engine_id, car_id, mounted_at)

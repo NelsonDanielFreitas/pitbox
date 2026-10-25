@@ -73,9 +73,10 @@ def desired_oidc_config(public_url: str) -> dict:
     origins = [base]
     # The app dev server and the direct BFF are both used locally. Registering
     # both avoids re-provisioning when switching between `make run-api` (8081)
-    # and `make app-dev` (5173).
+    # and `make app-dev` (5173). Keep `base` first: an explicit
+    # `--public-url http://localhost:9000` must not lose its redirect URI.
     if base.startswith("http://localhost") or base.startswith("http://127.0.0.1"):
-        origins = ["http://localhost:8081", "http://localhost:5173"]
+        origins = list(dict.fromkeys([base, "http://localhost:8081", "http://localhost:5173"]))
     return {
         "redirectUris": [f"{origin}/auth/callback" for origin in origins],
         "postLogoutRedirectUris": [f"{origin}/auth/signed-out" for origin in origins],

@@ -232,6 +232,17 @@ class PureTest(unittest.TestCase):
         )
         self.assertEqual(cfg["backChannelLogoutUri"], "http://localhost:8081/auth/backchannel-logout")
 
+    def test_an_extra_local_port_is_kept_first(self):
+        cfg = prov.desired_oidc_config("http://localhost:9000")
+        self.assertEqual(
+            cfg["redirectUris"],
+            [
+                "http://localhost:9000/auth/callback",
+                "http://localhost:8081/auth/callback",
+                "http://localhost:5173/auth/callback",
+            ],
+        )
+
     def test_production_registers_only_its_origin(self):
         cfg = prov.desired_oidc_config("https://app.pitbox.pt")
         self.assertEqual(cfg["redirectUris"], ["https://app.pitbox.pt/auth/callback"])

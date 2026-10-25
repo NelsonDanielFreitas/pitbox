@@ -15,10 +15,10 @@ export function LanguageSwitcher() {
           type="button"
           aria-pressed={i18n.language === locale}
           className={cn(
-            "rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide",
+            "min-h-12 min-w-12 rounded-xl px-2 text-xs font-semibold uppercase tracking-wide transition-colors",
             i18n.language === locale
-              ? "bg-pitbox-ink text-white"
-              : "text-pitbox-muted hover:bg-slate-100",
+              ? "bg-primary text-on-primary"
+              : "text-muted hover:bg-surface-2 hover:text-fg",
           )}
           onClick={() => setLocale(locale)}
         >

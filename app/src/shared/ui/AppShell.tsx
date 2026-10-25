@@ -1,20 +1,17 @@
 import { Link, Outlet } from "@tanstack/react-router";
-import { useTranslation } from "react-i18next";
-
 import { AccountMenu } from "./AccountMenu";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { Logo } from "./Logo";
 
 export function AppShell() {
-  const { t } = useTranslation();
-
   return (
     <div className="min-h-screen">
-      <header className="border-b border-pitbox-line/70 bg-pitbox-card/95">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link to="/teams" className="text-lg font-black tracking-tight text-pitbox-ink">
-            {t("app.name")}
+      <header className="sticky top-0 z-40 h-16 border-b border-line bg-bg/90 backdrop-blur">
+        <div className="mx-auto flex h-full max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+          <Link to="/teams" activeOptions={{ exact: true }}>
+            <Logo />
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <LanguageSwitcher />
             <AccountMenu />
           </div>

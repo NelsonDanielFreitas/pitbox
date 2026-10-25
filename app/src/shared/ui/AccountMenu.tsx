@@ -15,7 +15,7 @@ export function AccountMenu() {
       <form ref={logoutForm} action="/auth/logout" method="post" className="hidden" />
       <DropdownMenu.Root modal={false}>
         <DropdownMenu.Trigger asChild>
-          <Button variant="ghost" size="compact" aria-label={t("auth.account")}>
+          <Button variant="ghost" aria-label={t("auth.account")}>
             {t("auth.account")}
             <span aria-hidden="true">▾</span>
           </Button>
@@ -24,10 +24,10 @@ export function AccountMenu() {
           <DropdownMenu.Content
             align="end"
             sideOffset={8}
-            className="z-50 min-w-48 rounded-lg border border-pitbox-line bg-white p-1 shadow-lg"
+            className="z-50 min-w-48 rounded-xl border border-line bg-surface p-1 shadow-lg"
           >
             <DropdownMenu.Item
-              className="w-full rounded-md px-3 py-2 text-left text-sm text-pitbox-ink outline-none hover:bg-slate-100 focus:bg-slate-100"
+              className="min-h-12 w-full rounded-lg px-3 text-left text-sm text-fg outline-none hover:bg-surface-2 focus:bg-surface-2"
               onSelect={() => logoutForm.current?.requestSubmit()}
             >
               {t("auth.logout")}

@@ -14,19 +14,18 @@ import (
 
 const closeMount = `-- name: CloseMount :one
 UPDATE garage.engine_mount
-SET unmounted_at = $3
+SET unmounted_at = now()
 WHERE team_id = $1 AND id = $2 AND unmounted_at IS NULL
 RETURNING id
 `
 
 type CloseMountParams struct {
-	TeamID      uuid.UUID
-	ID          uuid.UUID
-	UnmountedAt *time.Time
+	TeamID uuid.UUID
+	ID     uuid.UUID
 }
 
 func (q *Queries) CloseMount(ctx context.Context, arg CloseMountParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, closeMount, arg.TeamID, arg.ID, arg.UnmountedAt)
+	row := q.db.QueryRow(ctx, closeMount, arg.TeamID, arg.ID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -34,7 +33,7 @@ func (q *Queries) CloseMount(ctx context.Context, arg CloseMountParams) (uuid.UU
 
 const createMount = `-- name: CreateMount :one
 INSERT INTO garage.engine_mount (team_id, engine_id, car_id, mounted_at, created_by)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, now(), $4)
 RETURNING id, engine_id, car_id, mounted_at, unmounted_at
 `
 
@@ -42,7 +41,6 @@ type CreateMountParams struct {
 	TeamID    uuid.UUID
 	EngineID  uuid.UUID
 	CarID     uuid.UUID
-	MountedAt time.Time
 	CreatedBy *uuid.UUID
 }
 
@@ -54,12 +52,13 @@ type CreateMountRow struct {
 	UnmountedAt *time.Time
 }
 
+// The database clock is shared by every API instance. Using the application clock here
+// could make unmounted_at <= mounted_at after a clock skew and violate the CHECK.
 func (q *Queries) CreateMount(ctx context.Context, arg CreateMountParams) (CreateMountRow, error) {
 	row := q.db.QueryRow(ctx, createMount,
 		arg.TeamID,
 		arg.EngineID,
 		arg.CarID,
-		arg.MountedAt,
 		arg.CreatedBy,
 	)
 	var i CreateMountRow

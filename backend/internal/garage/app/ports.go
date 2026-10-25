@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 
@@ -48,6 +47,6 @@ type Store interface {
 	OpenMountForEngine(ctx context.Context, tx db.DBTX, team, engine uuid.UUID) (domain.EngineMount, bool, error)
 	OpenMountForCar(ctx context.Context, tx db.DBTX, team, car uuid.UUID) (domain.EngineMount, bool, error)
 	CreateMount(ctx context.Context, tx db.DBTX, team, user uuid.UUID, m domain.EngineMount) (domain.EngineMount, error)
-	CloseMount(ctx context.Context, tx db.DBTX, team, id uuid.UUID, at time.Time) error
+	CloseMount(ctx context.Context, tx db.DBTX, team, id uuid.UUID) error
 	ListMountsForEngine(ctx context.Context, tx db.DBTX, team, engine, after uuid.UUID, limit int32) ([]domain.EngineMount, error)
 }

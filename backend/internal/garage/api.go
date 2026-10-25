@@ -69,6 +69,8 @@ func (r *CatalogReader) Load(ctx context.Context) (Catalog, error) {
 		Powertrains: make([]Powertrain, 0, len(powertrains)),
 	}
 	h := sha256.New()
+	writeField(h, "scale")
+	writeField(h, strconv.Itoa(len(scales)))
 	for _, s := range scales {
 		c.Scales = append(c.Scales, Scale{Code: s.Code, Name: s.Name, Active: s.Active, SortOrder: s.SortOrder})
 		writeField(h, s.Code)
@@ -76,6 +78,8 @@ func (r *CatalogReader) Load(ctx context.Context) (Catalog, error) {
 		writeField(h, boolString(s.Active))
 		writeField(h, strconv.Itoa(int(s.SortOrder)))
 	}
+	writeField(h, "powertrain")
+	writeField(h, strconv.Itoa(len(powertrains)))
 	for _, p := range powertrains {
 		c.Powertrains = append(c.Powertrains, Powertrain{Code: p.Code, Name: p.Name, Family: p.Family, Active: p.Active, SortOrder: p.SortOrder})
 		writeField(h, p.Code)

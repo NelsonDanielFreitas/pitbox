@@ -140,7 +140,7 @@ Cada peça importante tem identidade própria e contador de uso, para que motore
 ### 4.4 Peças e consumíveis
 
 - Catálogo próprio da equipa: velas, sapatas, molas de embraiagem, rolamentos, bielas, filtros, óleos (com viscosidade), combustível (% nitro)
-- Stock com quantidade mínima e alerta quando abaixo
+- Stock com quantidade mínima e alerta quando abaixo; o stock pode ficar negativo, porque o modo offline regista a realidade primeiro e a UI sinaliza o valor abaixo do mínimo
 - Peça com vida útil (ex.: vela, sapatas) pode ser "montada" num carro ou motor e passa a contar uso
 - Custo opcional por peça, para ver o custo de uma época
 

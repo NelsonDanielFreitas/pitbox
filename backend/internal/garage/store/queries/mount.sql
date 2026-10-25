@@ -18,14 +18,16 @@ SELECT id, engine_id, car_id, mounted_at, unmounted_at
 FROM garage.engine_mount
 WHERE team_id = $1 AND car_id = $2 AND unmounted_at IS NULL;
 
+-- The database clock is shared by every API instance. Using the application clock here
+-- could make unmounted_at <= mounted_at after a clock skew and violate the CHECK.
 -- name: CreateMount :one
 INSERT INTO garage.engine_mount (team_id, engine_id, car_id, mounted_at, created_by)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, now(), $4)
 RETURNING id, engine_id, car_id, mounted_at, unmounted_at;
 
 -- name: CloseMount :one
 UPDATE garage.engine_mount
-SET unmounted_at = $3
+SET unmounted_at = now()
 WHERE team_id = $1 AND id = $2 AND unmounted_at IS NULL
 RETURNING id;
 

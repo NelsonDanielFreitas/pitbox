@@ -8,11 +8,13 @@ SELECT (COALESCE(sum(qty_delta), 0) * 100)::bigint
 FROM garage.stock_movement
 WHERE team_id = $1 AND part_id = $2;
 
+-- occurred_at uses the database clock so movements created by different API instances
+-- share one time source.
 -- name: CreateStockMovement :one
 INSERT INTO garage.stock_movement (
   team_id, part_id, qty_delta, reason, note, occurred_at, created_by
 )
-VALUES ($1, $2, ($3::bigint::numeric / 100), $4::garage.stock_reason, $5, $6, $7)
+VALUES ($1, $2, ($3::bigint::numeric / 100), $4::garage.stock_reason, $5, now(), $6)
 RETURNING id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
           reason::text AS reason, note, occurred_at;
 

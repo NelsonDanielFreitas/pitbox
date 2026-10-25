@@ -155,16 +155,18 @@ func ApplyCarUpdate(c Car, u CarUpdate) (Car, error) {
 		c.Status = *u.Status
 	}
 	if u.Scale != nil {
-		if _, err := requiredString(*u.Scale, 16); err != nil {
-			return Car{}, err
+		v, err := requiredString(*u.Scale, 16)
+		if err != nil || !scalePattern.MatchString(v) {
+			return Car{}, fmt.Errorf("%w: catalogue", ErrInvalid)
 		}
-		c.Scale = *u.Scale
+		c.Scale = v
 	}
 	if u.Powertrain != nil {
-		if _, err := requiredString(*u.Powertrain, 32); err != nil {
-			return Car{}, err
+		v, err := requiredString(*u.Powertrain, 32)
+		if err != nil || !powertrainPattern.MatchString(v) {
+			return Car{}, fmt.Errorf("%w: catalogue", ErrInvalid)
 		}
-		c.Powertrain = *u.Powertrain
+		c.Powertrain = v
 	}
 	return c, nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -18,7 +19,7 @@ import (
 func caller(ctx context.Context) (db.UserID, error) {
 	p, ok := auth.PrincipalFrom(ctx)
 	if !ok {
-		return db.UserID{}, fmt.Errorf("unauthenticated")
+		return db.UserID{}, connect.NewError(connect.CodeUnauthenticated, "unauthenticated")
 	}
 	return db.ParseUserID(p.UserID)
 }

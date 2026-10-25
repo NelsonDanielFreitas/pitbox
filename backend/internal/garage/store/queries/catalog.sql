@@ -11,9 +11,9 @@ WHERE code = $1;
 -- name: ListScales :many
 SELECT code, name, active, sort_order
 FROM garage.scale
-ORDER BY code;
+ORDER BY code COLLATE "C";
 
 -- name: ListPowertrains :many
 SELECT code, name, family::text AS family, active, sort_order
 FROM garage.powertrain
-ORDER BY code;
+ORDER BY code COLLATE "C";

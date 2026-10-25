@@ -206,8 +206,11 @@ func TestCarIdempotencyAndPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, page, 1)
 	require.NotEmpty(t, next)
-	_, _, err = h.svc.ListCars(h.ctx, uid(owner), tid(team), 1, next)
+	page2, next2, err := h.svc.ListCars(h.ctx, uid(owner), tid(team), 1, next)
 	require.NoError(t, err)
+	require.Len(t, page2, 1)
+	require.NotEqual(t, page[0].ID, page2[0].ID)
+	require.NotEmpty(t, next2)
 }
 
 func TestPartCostAndStockLow(t *testing.T) {
@@ -290,8 +293,6 @@ func (h *harness) count(t *testing.T, query string) int {
 	return n
 }
 
-var _ = errors.Is
-
 func TestTyreSetLifecycleAndUniqueLabel(t *testing.T) {
 	h := newHarness(t)
 	owner := h.user(t, "owner")
@@ -349,7 +350,7 @@ func TestCatalogValidationAndGarageAPI(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, catalog.Scales)
 	require.NotEmpty(t, catalog.Powertrains)
-	require.Len(t, catalog.Version, 64)
+	require.Equal(t, "92179a32cb5ae6dceb5d765f3c6ea5f793e0ccf3f99938a113efe2b59e4e5322", catalog.Version)
 	again, err := garage.NewCatalogReader(h.pool).Load(h.ctx)
 	require.NoError(t, err)
 	require.Equal(t, catalog.Version, again.Version)
@@ -443,4 +444,186 @@ func TestGarageCrossTeamGuestAndPilotWrites(t *testing.T) {
 		RequestID: uuid.Must(uuid.NewV7()), Make: "X", Model: "Y", TransponderNumber: &transponder,
 	})
 	require.NoError(t, err)
+}
+
+func TestConcurrentEngineMountHasOneWinner(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	engine, err := h.svc.CreateEngine(h.ctx, uid(owner), tid(team), app.CreateEngineInput{
+		RequestID: uuid.Must(uuid.NewV7()), Make: "REDS", Model: "R7",
+	})
+	require.NoError(t, err)
+	cars := make([]domain.Car, 4)
+	for i := range cars {
+		cars[i] = h.createCar(t, owner, team, "M", fmt.Sprintf("M-%d", i))
+	}
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	errs := make([]error, len(cars))
+	for i := range cars {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			_, errs[i] = h.svc.MountEngine(h.ctx, uid(owner), tid(team), uuid.Must(uuid.NewV7()), engine.ID, cars[i].ID)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	successes, conflicts := 0, 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, domain.ErrMountConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, len(cars)-1, conflicts)
+	require.Equal(t, 1, h.count(t, fmt.Sprintf(`SELECT count(*) FROM garage.engine_mount WHERE team_id = '%s' AND unmounted_at IS NULL`, team)))
+}
+
+func TestDemotedMechanicDoesNotReplayIdempotentResponse(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	mechanic := h.user(t, "mechanic")
+	h.member(t, team, mechanic, "mechanic")
+	car := h.createCar(t, owner, team, "M", "1")
+	requestID := uuid.Must(uuid.NewV7())
+	name := "Novo"
+	in := app.UpdateCarInput{
+		RequestID: requestID, CarID: car.ID, Version: car.Version,
+		Update: domain.CarUpdate{NicknameSet: true, Nickname: &name},
+	}
+	_, err := h.svc.UpdateCar(h.ctx, uid(mechanic), tid(team), in)
+	require.NoError(t, err)
+	h.pg.Exec(t, fmt.Sprintf(`UPDATE identity.membership SET role = 'pilot' WHERE team_id = '%s' AND user_id = '%s'`, team, mechanic))
+	h.authz.set(mechanic.String(), team.String(), "pilot")
+	_, err = h.svc.UpdateCar(h.ctx, uid(mechanic), tid(team), in)
+	require.ErrorIs(t, err, domain.ErrForbidden)
+}
+
+func TestOtherTeamWritesAreNotFound(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	other := h.user(t, "other")
+	otherTeam := h.team(t, other, "owner")
+	car := h.createCar(t, owner, team, "M", "1")
+	engine, err := h.svc.CreateEngine(h.ctx, uid(owner), tid(team), app.CreateEngineInput{
+		RequestID: uuid.Must(uuid.NewV7()), Make: "REDS", Model: "R7",
+	})
+	require.NoError(t, err)
+	part, err := h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela", Unit: "un",
+	})
+	require.NoError(t, err)
+
+	name := "X"
+	_, err = h.svc.UpdateCar(h.ctx, uid(other), tid(otherTeam), app.UpdateCarInput{
+		RequestID: uuid.Must(uuid.NewV7()), CarID: car.ID, Version: 1,
+		Update: domain.CarUpdate{NicknameSet: true, Nickname: &name},
+	})
+	require.ErrorIs(t, err, domain.ErrNotFound)
+	require.ErrorIs(t, h.svc.DeleteCar(h.ctx, uid(other), tid(otherTeam), uuid.Must(uuid.NewV7()), car.ID, 1), domain.ErrNotFound)
+	_, err = h.svc.MountEngine(h.ctx, uid(other), tid(otherTeam), uuid.Must(uuid.NewV7()), engine.ID, car.ID)
+	require.ErrorIs(t, err, domain.ErrNotFound)
+	_, _, err = h.svc.AddStockMovement(h.ctx, uid(other), tid(otherTeam), app.AddStockMovementInput{
+		RequestID: uuid.Must(uuid.NewV7()), PartID: part.ID, QtyDeltaCenti: 100, Reason: domain.StockPurchase,
+	})
+	require.ErrorIs(t, err, domain.ErrNotFound)
+}
+
+func TestDeleteMountedAssetsIsRefused(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	car := h.createCar(t, owner, team, "M", "1")
+	engine, err := h.svc.CreateEngine(h.ctx, uid(owner), tid(team), app.CreateEngineInput{
+		RequestID: uuid.Must(uuid.NewV7()), Make: "REDS", Model: "R7",
+	})
+	require.NoError(t, err)
+	_, err = h.svc.MountEngine(h.ctx, uid(owner), tid(team), uuid.Must(uuid.NewV7()), engine.ID, car.ID)
+	require.NoError(t, err)
+	require.ErrorIs(t, h.svc.DeleteCar(h.ctx, uid(owner), tid(team), uuid.Must(uuid.NewV7()), car.ID, car.Version), domain.ErrOpenMount)
+	require.ErrorIs(t, h.svc.DeleteEngine(h.ctx, uid(owner), tid(team), uuid.Must(uuid.NewV7()), engine.ID, engine.Version), domain.ErrOpenMount)
+	retired := domain.AssetRetired
+	_, err = h.svc.UpdateCar(h.ctx, uid(owner), tid(team), app.UpdateCarInput{
+		RequestID: uuid.Must(uuid.NewV7()), CarID: car.ID, Version: car.Version,
+		Update: domain.CarUpdate{Status: &retired},
+	})
+	require.ErrorIs(t, err, domain.ErrOpenMount)
+	_, err = h.svc.UpdateEngine(h.ctx, uid(owner), tid(team), app.UpdateEngineInput{
+		RequestID: uuid.Must(uuid.NewV7()), EngineID: engine.ID, Version: engine.Version,
+		Update: domain.EngineUpdate{Status: &retired},
+	})
+	require.ErrorIs(t, err, domain.ErrOpenMount)
+}
+
+func TestStockLowOnCreateAndMinimumIncrease(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+
+	_, err := h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela",
+		Unit: "un", MinStockCenti: 1000,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, h.count(t, fmt.Sprintf(`SELECT count(*) FROM platform.outbox WHERE team_id = '%s' AND event_type = 'garage.stock_low'`, team)))
+
+	part, err := h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela 2",
+		Unit: "un", MinStockCenti: 0, InitialQtyCenti: 500,
+	})
+	require.NoError(t, err)
+	updated, err := h.svc.UpdatePart(h.ctx, uid(owner), tid(team), app.UpdatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), PartID: part.ID, Version: part.Version,
+		Update: domain.PartUpdate{MinSet: true, MinStockCenti: 1000},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(500), updated.QtyCenti)
+	require.Equal(t, 2, h.count(t, fmt.Sprintf(`SELECT count(*) FROM platform.outbox WHERE team_id = '%s' AND event_type = 'garage.stock_low'`, team)))
+}
+
+func TestQuantityLimits(t *testing.T) {
+	h := newHarness(t)
+	owner := h.user(t, "owner")
+	team := h.team(t, owner, "owner")
+	_, err := h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela",
+		Unit: "un", MinStockCenti: domain.MaxStockCenti + 1,
+	})
+	require.ErrorIs(t, err, domain.ErrInvalid)
+	_, err = h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela",
+		Unit: "un", InitialQtyCenti: domain.MaxStockCenti + 1,
+	})
+	require.ErrorIs(t, err, domain.ErrInvalid)
+	part, err := h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela", Unit: "un",
+	})
+	require.NoError(t, err)
+	_, _, err = h.svc.AddStockMovement(h.ctx, uid(owner), tid(team), app.AddStockMovementInput{
+		RequestID: uuid.Must(uuid.NewV7()), PartID: part.ID,
+		QtyDeltaCenti: domain.MaxStockCenti + 1, Reason: domain.StockPurchase,
+	})
+	require.ErrorIs(t, err, domain.ErrInvalid)
+
+	short, err := h.svc.CreatePart(h.ctx, uid(owner), tid(team), app.CreatePartInput{
+		RequestID: uuid.Must(uuid.NewV7()), Kind: domain.PartGlowPlug, Description: "Vela 3", Unit: "un",
+	})
+	require.NoError(t, err)
+	short, _, err = h.svc.AddStockMovement(h.ctx, uid(owner), tid(team), app.AddStockMovementInput{
+		RequestID: uuid.Must(uuid.NewV7()), PartID: short.ID, QtyDeltaCenti: -500, Reason: domain.StockConsumed,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(-500), short.QtyCenti)
 }

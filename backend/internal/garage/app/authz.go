@@ -58,7 +58,7 @@ func (s *Service) withMemberReadTx(ctx context.Context, user db.UserID, team db.
 		return err
 	}
 	return s.db.WithTeamReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, m db.Membership) error {
-		if m.Role == string("guest") {
+		if m.Role == "guest" {
 			return fmt.Errorf("team access: %w", domain.ErrNotFound)
 		}
 		return fn(ctx, tx, m.Role)

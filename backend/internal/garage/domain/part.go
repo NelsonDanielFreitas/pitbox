@@ -33,6 +33,9 @@ const (
 	StockAdjustment = "adjustment"
 	StockLost       = "lost"
 	StockReturned   = "returned"
+
+	// MaxStockCenti is the largest value numeric(10,2) can hold, in hundredths.
+	MaxStockCenti = 9_999_999_999
 )
 
 var partKinds = map[string]struct{}{
@@ -89,7 +92,7 @@ func NewPart(kind string, brand, reference *string, description, unit string, sp
 	if err != nil {
 		return Part{}, err
 	}
-	if minStockCenti < 0 {
+	if minStockCenti < 0 || minStockCenti > MaxStockCenti {
 		return Part{}, fmt.Errorf("%w: min stock", ErrInvalid)
 	}
 	if unitCostCents != nil && *unitCostCents < 0 {
@@ -171,7 +174,7 @@ func ApplyPartUpdate(p Part, u PartUpdate) (Part, error) {
 		}
 	}
 	if u.MinSet {
-		if u.MinStockCenti < 0 {
+		if u.MinStockCenti < 0 || u.MinStockCenti > MaxStockCenti {
 			return Part{}, fmt.Errorf("%w: min stock", ErrInvalid)
 		}
 		p.MinStockCenti = u.MinStockCenti
@@ -220,7 +223,7 @@ func NewStockMovement(partID uuid.UUID, qtyDeltaCenti int64, reason string, note
 	if _, ok := stockReasons[reason]; !ok {
 		return StockMovement{}, fmt.Errorf("%w: stock reason", ErrInvalid)
 	}
-	if qtyDeltaCenti == 0 {
+	if qtyDeltaCenti == 0 || qtyDeltaCenti > MaxStockCenti || qtyDeltaCenti < -MaxStockCenti {
 		return StockMovement{}, fmt.Errorf("%w: stock quantity", ErrInvalid)
 	}
 	switch reason {

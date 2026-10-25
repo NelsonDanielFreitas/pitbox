@@ -62,7 +62,7 @@ func (s *Service) CreatePart(ctx context.Context, user db.UserID, team db.TeamID
 	if err != nil {
 		return domain.Part{}, err
 	}
-	if in.InitialQtyCenti < 0 {
+	if in.InitialQtyCenti < 0 || in.InitialQtyCenti > domain.MaxStockCenti {
 		return domain.Part{}, fmt.Errorf("%w: initial quantity", domain.ErrInvalid)
 	}
 	hash, err := hashInput(uuid.UUID(team), in)
@@ -91,18 +91,26 @@ func (s *Service) CreatePart(ctx context.Context, user db.UserID, team db.TeamID
 		if err != nil {
 			return err
 		}
+		var initialMovementID uuid.UUID
 		if in.InitialQtyCenti > 0 {
 			movement, err := domain.NewStockMovement(created.ID, in.InitialQtyCenti, domain.StockPurchase, nil, s.now())
 			if err != nil {
 				return err
 			}
-			if _, err := s.store.CreateStockMovement(ctx, tx, uuid.UUID(team), uuid.UUID(user), movement); err != nil {
+			storedMovement, err := s.store.CreateStockMovement(ctx, tx, uuid.UUID(team), uuid.UUID(user), movement)
+			if err != nil {
 				return err
 			}
+			initialMovementID = storedMovement.ID
 		}
 		created, err = s.store.GetPart(ctx, tx, uuid.UUID(team), created.ID)
 		if err != nil {
 			return err
+		}
+		if created.MinStockCenti > 0 && created.QtyCenti < created.MinStockCenti {
+			if err := recordStockLow(ctx, tx, uuid.UUID(team), created, initialMovementID); err != nil {
+				return err
+			}
 		}
 		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, created); err != nil {
 			return err
@@ -121,7 +129,7 @@ func (s *Service) GetPart(ctx context.Context, user db.UserID, team db.TeamID, i
 	err := s.withMemberReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, role string) error {
 		var err error
 		out, err = s.store.GetPart(ctx, tx, uuid.UUID(team), id)
-		if err == nil && role == "pilot" {
+		if err == nil && role != "owner" && role != "mechanic" {
 			out.UnitCostCents = nil
 		}
 		return err
@@ -139,7 +147,7 @@ func (s *Service) ListParts(ctx context.Context, user db.UserID, team db.TeamID,
 	err := s.withMemberReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, role string) error {
 		var err error
 		out, err = s.store.ListParts(ctx, tx, uuid.UUID(team), c.ID, limit+1)
-		if err == nil && role == "pilot" {
+		if err == nil && role != "owner" && role != "mechanic" {
 			for i := range out {
 				out[i].UnitCostCents = nil
 			}
@@ -199,6 +207,11 @@ func (s *Service) UpdatePart(ctx context.Context, user db.UserID, team db.TeamID
 		updated, err = s.store.GetPart(ctx, tx, uuid.UUID(team), updated.ID)
 		if err != nil {
 			return err
+		}
+		if current.QtyCenti >= current.MinStockCenti && updated.QtyCenti < updated.MinStockCenti {
+			if err := recordStockLow(ctx, tx, uuid.UUID(team), updated, uuid.Nil); err != nil {
+				return err
+			}
 		}
 		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, updated); err != nil {
 			return err
@@ -295,7 +308,7 @@ func (s *Service) AddStockMovement(ctx context.Context, user db.UserID, team db.
 			return err
 		}
 		if before >= part.MinStockCenti && part.QtyCenti < part.MinStockCenti {
-			if err := recordStockLow(ctx, tx, uuid.UUID(team), part, created); err != nil {
+			if err := recordStockLow(ctx, tx, uuid.UUID(team), part, created.ID); err != nil {
 				return err
 			}
 		}
@@ -342,7 +355,7 @@ func (s *Service) ListStockMovements(ctx context.Context, user db.UserID, team d
 	return out, next, nil
 }
 
-func recordStockLow(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain.Part, movement domain.StockMovement) error {
+func recordStockLow(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain.Part, movementID uuid.UUID) error {
 	return outbox.Record(ctx, tx, outbox.Event{
 		TeamID:      team,
 		Aggregate:   stockLowAggregate,
@@ -353,7 +366,7 @@ func recordStockLow(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain
 			QtyCenti      int64     `json:"qty_centi"`
 			MinStockCenti int64     `json:"min_stock_centi"`
 			MovementID    uuid.UUID `json:"movement_id"`
-		}{PartID: part.ID, QtyCenti: part.QtyCenti, MinStockCenti: part.MinStockCenti, MovementID: movement.ID},
+		}{PartID: part.ID, QtyCenti: part.QtyCenti, MinStockCenti: part.MinStockCenti, MovementID: movementID},
 	})
 }
 

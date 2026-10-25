@@ -105,11 +105,17 @@ message CreatePartRequest {
   }];
   string unit = 7 [(buf.validate.field).string.max_len = 16];
   google.protobuf.Struct specs = 8;
-  int64 min_stock_centi = 9 [(buf.validate.field).int64.gte = 0];
+  int64 min_stock_centi = 9 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 9999999999
+  }];
   optional int32 unit_cost_cents = 10 [(buf.validate.field).int32.gte = 0];
   string currency = 11 [(buf.validate.field).string.max_len = 3];
   bool has_service_life = 12;
-  int64 initial_qty_centi = 13 [(buf.validate.field).int64.gte = 0];
+  int64 initial_qty_centi = 13 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 9999999999
+  }];
 }
 
 message CreatePartResponse {
@@ -127,7 +133,10 @@ message UpdatePartRequest {
   string description = 8 [(buf.validate.field).string.max_len = 200];
   string unit = 9 [(buf.validate.field).string.max_len = 16];
   google.protobuf.Struct specs = 10;
-  int64 min_stock_centi = 11 [(buf.validate.field).int64.gte = 0];
+  int64 min_stock_centi = 11 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 9999999999
+  }];
   optional int32 unit_cost_cents = 12 [(buf.validate.field).int32.gte = 0];
   string currency = 13 [(buf.validate.field).string.max_len = 3];
   bool has_service_life = 14;
@@ -151,7 +160,10 @@ message AddStockMovementRequest {
   string team_id = 1 [(buf.validate.field).string.uuid = true];
   string request_id = 2 [(buf.validate.field).string.uuid = true];
   string part_id = 3 [(buf.validate.field).string.uuid = true];
-  int64 qty_delta_centi = 4;
+  int64 qty_delta_centi = 4 [(buf.validate.field).int64 = {
+    gte: -9999999999
+    lte: 9999999999
+  }];
   StockReason reason = 5 [(buf.validate.field).enum.defined_only = true];
   optional string note = 6 [(buf.validate.field).string.max_len = 500];
 }

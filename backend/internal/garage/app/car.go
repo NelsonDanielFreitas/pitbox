@@ -153,6 +153,13 @@ func (s *Service) UpdateCar(ctx context.Context, user db.UserID, team db.TeamID,
 				return err
 			}
 		}
+		if next.Status == domain.AssetRetired {
+			if _, open, err := s.store.OpenMountForCar(ctx, tx, uuid.UUID(team), next.ID); err != nil {
+				return err
+			} else if open {
+				return domain.ErrOpenMount
+			}
+		}
 		next.Version = in.Version
 		response, replayed, err = s.claimOrReplay(ctx, tx, uuid.UUID(user), in.RequestID, carUpdateMethod, hash)
 		if err != nil {

@@ -16,19 +16,18 @@ const createStockMovement = `-- name: CreateStockMovement :one
 INSERT INTO garage.stock_movement (
   team_id, part_id, qty_delta, reason, note, occurred_at, created_by
 )
-VALUES ($1, $2, ($3::bigint::numeric / 100), $4::garage.stock_reason, $5, $6, $7)
+VALUES ($1, $2, ($3::bigint::numeric / 100), $4::garage.stock_reason, $5, now(), $6)
 RETURNING id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
           reason::text AS reason, note, occurred_at
 `
 
 type CreateStockMovementParams struct {
-	TeamID     uuid.UUID
-	PartID     uuid.UUID
-	Column3    int64
-	Column4    GarageStockReason
-	Note       *string
-	OccurredAt time.Time
-	CreatedBy  *uuid.UUID
+	TeamID    uuid.UUID
+	PartID    uuid.UUID
+	Column3   int64
+	Column4   GarageStockReason
+	Note      *string
+	CreatedBy *uuid.UUID
 }
 
 type CreateStockMovementRow struct {
@@ -40,6 +39,8 @@ type CreateStockMovementRow struct {
 	OccurredAt    time.Time
 }
 
+// occurred_at uses the database clock so movements created by different API instances
+// share one time source.
 func (q *Queries) CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) (CreateStockMovementRow, error) {
 	row := q.db.QueryRow(ctx, createStockMovement,
 		arg.TeamID,
@@ -47,7 +48,6 @@ func (q *Queries) CreateStockMovement(ctx context.Context, arg CreateStockMoveme
 		arg.Column3,
 		arg.Column4,
 		arg.Note,
-		arg.OccurredAt,
 		arg.CreatedBy,
 	)
 	var i CreateStockMovementRow

@@ -1218,7 +1218,7 @@ CREATE TABLE platform.idempotency_key (
   user_id             uuid        NOT NULL REFERENCES identity.user_account (id) ON DELETE CASCADE,
   method              text        NOT NULL,                   -- "/pitbox.setup.v1.SetupService/CreateSetup"
   request_hash        bytea       NOT NULL,
-  response            bytea,                                  -- resposta serializada (Protobuf)
+  response            bytea,                                  -- envelope JSON versionado da resposta
   status_code         text,
   created_at          timestamptz NOT NULL DEFAULT now(),
   expires_at          timestamptz NOT NULL DEFAULT now() + interval '7 days',

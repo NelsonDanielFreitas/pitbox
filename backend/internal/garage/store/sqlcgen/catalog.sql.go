@@ -64,7 +64,7 @@ func (q *Queries) GetScale(ctx context.Context, code string) (GetScaleRow, error
 const listPowertrains = `-- name: ListPowertrains :many
 SELECT code, name, family::text AS family, active, sort_order
 FROM garage.powertrain
-ORDER BY code
+ORDER BY code COLLATE "C"
 `
 
 type ListPowertrainsRow struct {
@@ -104,7 +104,7 @@ func (q *Queries) ListPowertrains(ctx context.Context) ([]ListPowertrainsRow, er
 const listScales = `-- name: ListScales :many
 SELECT code, name, active, sort_order
 FROM garage.scale
-ORDER BY code
+ORDER BY code COLLATE "C"
 `
 
 type ListScalesRow struct {

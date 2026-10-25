@@ -138,6 +138,13 @@ func (s *Service) UpdateEngine(ctx context.Context, user db.UserID, team db.Team
 		if err != nil {
 			return err
 		}
+		if next.Status == domain.AssetRetired {
+			if _, open, err := s.store.OpenMountForEngine(ctx, tx, uuid.UUID(team), next.ID); err != nil {
+				return err
+			} else if open {
+				return domain.ErrOpenMount
+			}
+		}
 		next.Version = in.Version
 		response, replayed, err = s.claimOrReplay(ctx, tx, uuid.UUID(user), in.RequestID, engineUpdateMethod, hash)
 		if err != nil {
@@ -256,7 +263,7 @@ func (s *Service) MountEngine(ctx context.Context, user db.UserID, team db.TeamI
 			return err
 		}
 		created, err := s.store.CreateMount(ctx, tx, uuid.UUID(team), uuid.UUID(user), domain.EngineMount{
-			EngineID: engineID, CarID: carID, MountedAt: s.now(),
+			EngineID: engineID, CarID: carID,
 		})
 		if err != nil {
 			return err
@@ -304,7 +311,7 @@ func (s *Service) UnmountEngine(ctx context.Context, user db.UserID, team db.Tea
 		} else if replayed {
 			return nil
 		}
-		if err := s.store.CloseMount(ctx, tx, uuid.UUID(team), current.ID, s.now()); err != nil {
+		if err := s.store.CloseMount(ctx, tx, uuid.UUID(team), current.ID); err != nil {
 			return err
 		}
 		if err := s.idempotency.Save(ctx, tx, uuid.UUID(user), requestID, nil); err != nil {
@@ -361,14 +368,13 @@ func (s *Service) MoveEngine(ctx context.Context, user db.UserID, team db.TeamID
 			out, err = decodeResource[domain.EngineMount](response)
 			return err
 		}
-		at := s.now()
 		if open {
-			if err := s.store.CloseMount(ctx, tx, uuid.UUID(team), current.ID, at); err != nil {
+			if err := s.store.CloseMount(ctx, tx, uuid.UUID(team), current.ID); err != nil {
 				return err
 			}
 		}
 		created, err := s.store.CreateMount(ctx, tx, uuid.UUID(team), uuid.UUID(user), domain.EngineMount{
-			EngineID: engineID, CarID: carID, MountedAt: at,
+			EngineID: engineID, CarID: carID,
 		})
 		if err != nil {
 			return err

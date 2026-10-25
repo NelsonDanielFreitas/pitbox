@@ -370,7 +370,7 @@ func (Repo) PartStockCenti(ctx context.Context, tx db.DBTX, team, part uuid.UUID
 func (Repo) CreateStockMovement(ctx context.Context, tx db.DBTX, team, user uuid.UUID, m domain.StockMovement) (domain.StockMovement, error) {
 	row, err := sqlcgen.New(tx).CreateStockMovement(ctx, sqlcgen.CreateStockMovementParams{
 		TeamID: team, PartID: m.PartID, Column3: m.QtyDeltaCenti,
-		Column4: sqlcgen.GarageStockReason(m.Reason), Note: m.Note, OccurredAt: m.OccurredAt, CreatedBy: &user,
+		Column4: sqlcgen.GarageStockReason(m.Reason), Note: m.Note, CreatedBy: &user,
 	})
 	if err != nil {
 		return domain.StockMovement{}, mapError("create stock movement", err)
@@ -440,7 +440,7 @@ func (Repo) OpenMountForCar(ctx context.Context, tx db.DBTX, team, car uuid.UUID
 
 func (Repo) CreateMount(ctx context.Context, tx db.DBTX, team, user uuid.UUID, m domain.EngineMount) (domain.EngineMount, error) {
 	row, err := sqlcgen.New(tx).CreateMount(ctx, sqlcgen.CreateMountParams{
-		TeamID: team, EngineID: m.EngineID, CarID: m.CarID, MountedAt: m.MountedAt, CreatedBy: &user,
+		TeamID: team, EngineID: m.EngineID, CarID: m.CarID, CreatedBy: &user,
 	})
 	if err != nil {
 		return domain.EngineMount{}, mapError("create engine mount", err)
@@ -448,13 +448,13 @@ func (Repo) CreateMount(ctx context.Context, tx db.DBTX, team, user uuid.UUID, m
 	return mountFromCreate(row), nil
 }
 
-func (Repo) CloseMount(ctx context.Context, tx db.DBTX, team, id uuid.UUID, at time.Time) error {
-	_, err := sqlcgen.New(tx).CloseMount(ctx, sqlcgen.CloseMountParams{TeamID: team, ID: id, UnmountedAt: &at})
+func (Repo) CloseMount(ctx context.Context, tx db.DBTX, team, id uuid.UUID) error {
+	_, err := sqlcgen.New(tx).CloseMount(ctx, sqlcgen.CloseMountParams{TeamID: team, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ErrMountConflict
 	}
 	if err != nil {
-		return fmt.Errorf("close engine mount: %w", err)
+		return mapError("close engine mount", err)
 	}
 	return nil
 }
@@ -655,7 +655,7 @@ func mapError(op string, err error) error {
 			}
 		case "23503":
 			return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
-		case "23P01":
+		case "23P01", "23514":
 			return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
 		}
 	}

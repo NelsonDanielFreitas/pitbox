@@ -1276,7 +1276,7 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\x83\x01\n" +
 	"\x1aListStockMovementsResponse\x12=\n" +
 	"\tmovements\x18\x01 \x03(\v2\x1f.pitbox.garage.v1.StockMovementR\tmovements\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xfa\x04\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x86\x05\n" +
 	"\x11CreatePartRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -1287,19 +1287,21 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\vdescription\x18\x06 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\vdescription\x12\x1b\n" +
 	"\x04unit\x18\a \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x04unit\x12-\n" +
-	"\x05specs\x18\b \x01(\v2\x17.google.protobuf.StructR\x05specs\x12/\n" +
-	"\x0fmin_stock_centi\x18\t \x01(\x03B\a\xbaH\x04\"\x02(\x00R\rminStockCenti\x124\n" +
+	"\x05specs\x18\b \x01(\v2\x17.google.protobuf.StructR\x05specs\x125\n" +
+	"\x0fmin_stock_centi\x18\t \x01(\x03B\r\xbaH\n" +
+	"\"\b\x18\xffǯ\xa0%(\x00R\rminStockCenti\x124\n" +
 	"\x0funit_cost_cents\x18\n" +
 	" \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x02R\runitCostCents\x88\x01\x01\x12#\n" +
 	"\bcurrency\x18\v \x01(\tB\a\xbaH\x04r\x02\x18\x03R\bcurrency\x12(\n" +
-	"\x10has_service_life\x18\f \x01(\bR\x0ehasServiceLife\x123\n" +
-	"\x11initial_qty_centi\x18\r \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x0finitialQtyCentiB\b\n" +
+	"\x10has_service_life\x18\f \x01(\bR\x0ehasServiceLife\x129\n" +
+	"\x11initial_qty_centi\x18\r \x01(\x03B\r\xbaH\n" +
+	"\"\b\x18\xffǯ\xa0%(\x00R\x0finitialQtyCentiB\b\n" +
 	"\x06_brandB\f\n" +
 	"\n" +
 	"_referenceB\x12\n" +
 	"\x10_unit_cost_cents\"@\n" +
 	"\x12CreatePartResponse\x12*\n" +
-	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xce\x05\n" +
+	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xd4\x05\n" +
 	"\x11UpdatePartRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -1313,8 +1315,9 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\vdescription\x18\b \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\vdescription\x12\x1b\n" +
 	"\x04unit\x18\t \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x04unit\x12-\n" +
 	"\x05specs\x18\n" +
-	" \x01(\v2\x17.google.protobuf.StructR\x05specs\x12/\n" +
-	"\x0fmin_stock_centi\x18\v \x01(\x03B\a\xbaH\x04\"\x02(\x00R\rminStockCenti\x124\n" +
+	" \x01(\v2\x17.google.protobuf.StructR\x05specs\x125\n" +
+	"\x0fmin_stock_centi\x18\v \x01(\x03B\r\xbaH\n" +
+	"\"\b\x18\xffǯ\xa0%(\x00R\rminStockCenti\x124\n" +
 	"\x0funit_cost_cents\x18\f \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x02R\runitCostCents\x88\x01\x01\x12#\n" +
 	"\bcurrency\x18\r \x01(\tB\a\xbaH\x04r\x02\x18\x03R\bcurrency\x12(\n" +
 	"\x10has_service_life\x18\x0e \x01(\bR\x0ehasServiceLife\x12!\n" +
@@ -1331,13 +1334,13 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12!\n" +
 	"\apart_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12!\n" +
 	"\aversion\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\aversion\"\x14\n" +
-	"\x12DeletePartResponse\"\x9d\x02\n" +
+	"\x12DeletePartResponse\"\xb5\x02\n" +
 	"\x17AddStockMovementRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
 	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12!\n" +
-	"\apart_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12&\n" +
-	"\x0fqty_delta_centi\x18\x04 \x01(\x03R\rqtyDeltaCenti\x12?\n" +
+	"\apart_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12>\n" +
+	"\x0fqty_delta_centi\x18\x04 \x01(\x03B\x16\xbaH\x13\"\x11\x18\xffǯ\xa0%(\x81\xb8\xd0\xdf\xda\xff\xff\xff\xff\x01R\rqtyDeltaCenti\x12?\n" +
 	"\x06reason\x18\x05 \x01(\x0e2\x1d.pitbox.garage.v1.StockReasonB\b\xbaH\x05\x82\x01\x02\x10\x01R\x06reason\x12!\n" +
 	"\x04note\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\x04note\x88\x01\x01B\a\n" +
 	"\x05_note\"\x83\x01\n" +

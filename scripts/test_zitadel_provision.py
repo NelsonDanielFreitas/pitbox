@@ -220,6 +220,22 @@ class PureTest(unittest.TestCase):
         self.assertTrue(prov.desired_oidc_config("http://localhost:8081")["developmentMode"])
         self.assertFalse(prov.desired_oidc_config("https://api.example.com")["developmentMode"])
 
+    def test_dev_registers_both_local_origins(self):
+        cfg = prov.desired_oidc_config("http://localhost:8081")
+        self.assertEqual(
+            cfg["redirectUris"],
+            ["http://localhost:8081/auth/callback", "http://localhost:5173/auth/callback"],
+        )
+        self.assertEqual(
+            cfg["postLogoutRedirectUris"],
+            ["http://localhost:8081/auth/signed-out", "http://localhost:5173/auth/signed-out"],
+        )
+        self.assertEqual(cfg["backChannelLogoutUri"], "http://localhost:8081/auth/backchannel-logout")
+
+    def test_production_registers_only_its_origin(self):
+        cfg = prov.desired_oidc_config("https://app.pitbox.pt")
+        self.assertEqual(cfg["redirectUris"], ["https://app.pitbox.pt/auth/callback"])
+
 
 if __name__ == "__main__":
     unittest.main()

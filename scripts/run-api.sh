@@ -18,7 +18,11 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
   export PITBOX_OIDC_CLIENT_ID="$(get PITBOX_OIDC_CLIENT_ID)"
   export PITBOX_OIDC_CLIENT_SECRET="$(get PITBOX_OIDC_CLIENT_SECRET)"
   export PITBOX_AUTH_KEYS="$(get PITBOX_AUTH_KEYS)"
-  export PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"; PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
+  if [ -z "${PITBOX_PUBLIC_URL:-}" ]; then
+    PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"
+    PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
+  fi
+  export PITBOX_PUBLIC_URL
   export PITBOX_OIDC_ISSUER="http://localhost:$(get ZITADEL_PORT)"; PITBOX_OIDC_ISSUER="${PITBOX_OIDC_ISSUER%:}"
   [ "$PITBOX_OIDC_ISSUER" = "http://localhost" ] && PITBOX_OIDC_ISSUER="http://localhost:8080"
   export PITBOX_VALKEY_ADDR="127.0.0.1:$(get VALKEY_PORT)"; [ "$PITBOX_VALKEY_ADDR" = "127.0.0.1:" ] && PITBOX_VALKEY_ADDR="127.0.0.1:6379"

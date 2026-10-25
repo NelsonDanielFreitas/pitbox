@@ -1,0 +1,40 @@
+export const ptPT = {
+  app: { name: "PitBox" },
+  nav: { teams: "Equipas" },
+  auth: {
+    title: "Entrar no PitBox",
+    description: "Usa a tua conta de equipa para abrir os setups e a garagem.",
+    cta: "Entrar com Zitadel",
+    loggedOut: "Sessão terminada.",
+    logout: "Terminar sessão",
+    account: "Conta",
+  },
+  teams: {
+    title: "As minhas equipas",
+    subtitle: "Equipas a que pertences neste momento.",
+    emptyTitle: "Ainda não pertences a nenhuma equipa",
+    emptyBody: "Pede ao mecânico ou ao dono da equipa para te enviar um convite.",
+    loading: "A carregar equipas…",
+    errorTitle: "Não foi possível carregar as equipas",
+    errorBody: "Verifica a ligação e tenta outra vez.",
+    retry: "Tentar novamente",
+  },
+  roles: {
+    owner: "Dono",
+    mechanic: "Mecânico",
+    pilot: "Piloto",
+    guest: "Convidado",
+    unknown: "Papel desconhecido",
+  },
+  language: {
+    label: "Idioma",
+    "pt-PT": "Português",
+    en: "English",
+  },
+  errors: {
+    unauthenticated: "A sessão expirou. Entra outra vez.",
+    unavailable: "A autenticação está temporariamente indisponível.",
+    originMismatch: "Configuração local: a origem da app não coincide com o BFF.",
+    generic: "Ocorreu um erro inesperado.",
+  },
+} as const;

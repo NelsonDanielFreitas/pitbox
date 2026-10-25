@@ -1,0 +1,40 @@
+export const en = {
+  app: { name: "PitBox" },
+  nav: { teams: "Teams" },
+  auth: {
+    title: "Sign in to PitBox",
+    description: "Use your team account to open setups and the garage.",
+    cta: "Sign in with Zitadel",
+    loggedOut: "You have been signed out.",
+    logout: "Sign out",
+    account: "Account",
+  },
+  teams: {
+    title: "My teams",
+    subtitle: "Teams you currently belong to.",
+    emptyTitle: "You do not belong to a team yet",
+    emptyBody: "Ask the team mechanic or owner to send you an invitation.",
+    loading: "Loading teams…",
+    errorTitle: "Could not load your teams",
+    errorBody: "Check your connection and try again.",
+    retry: "Try again",
+  },
+  roles: {
+    owner: "Owner",
+    mechanic: "Mechanic",
+    pilot: "Pilot",
+    guest: "Guest",
+    unknown: "Unknown role",
+  },
+  language: {
+    label: "Language",
+    "pt-PT": "Português",
+    en: "English",
+  },
+  errors: {
+    unauthenticated: "Your session expired. Sign in again.",
+    unavailable: "Authentication is temporarily unavailable.",
+    originMismatch: "Local configuration: the app origin does not match the BFF.",
+    generic: "Something went wrong.",
+  },
+};

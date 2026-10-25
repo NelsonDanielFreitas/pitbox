@@ -199,6 +199,9 @@ type ShareReader struct{ db Querier }
 func NewShareReader(db Querier) *ShareReader { return &ShareReader{db: db} }
 
 func (r *ShareReader) Open(ctx context.Context, tokenHash []byte) (domain.SharedSetup, error) {
+	// The function is a table function with RETURNS TABLE; sqlc does not
+	// introspect its output columns. This parameterised read follows the
+	// identity.resolve_login precedent instead of hand-building SQL.
 	var data string
 	var changeSummary *string
 	var createdAt time.Time

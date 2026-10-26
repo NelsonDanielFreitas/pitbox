@@ -175,6 +175,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		// completed the login. The existing session is authoritative; do not show
 		// an error page that looks like the login failed (F1-10).
 		if h.landingIfSignedIn(w, r, "/teams") {
+			h.refuseUnauthenticated(ctx, "callback_replay_signed_in")
 			return
 		}
 		h.refuseUnauthenticated(ctx, "no_login_state")
@@ -184,6 +185,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if !st.MatchesState(q.Get("state")) {
 		if h.landingIfSignedIn(w, r, st.ReturnTo) {
+			h.refuseUnauthenticated(ctx, "callback_replay_signed_in")
 			return
 		}
 		h.refuseUnauthenticated(ctx, "state_mismatch")
@@ -192,10 +194,11 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	if q.Get("error") != "" || q.Get("code") == "" {
 		// The user denied, or the provider reported a problem. Only the fixed code is kept.
+		h.failLogin(ctx, r, "idp_error", "")
 		if h.landingIfSignedIn(w, r, st.ReturnTo) {
+			h.refuseUnauthenticated(ctx, "callback_replay_signed_in")
 			return
 		}
-		h.failLogin(ctx, r, "idp_error", "")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}
@@ -211,10 +214,11 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	tok, err := prov.oauth.Exchange(exCtx, q.Get("code"), oauth2.VerifierOption(st.Verifier))
 	if err != nil {
+		h.failLogin(ctx, r, "code_exchange", "")
 		if h.landingIfSignedIn(w, r, st.ReturnTo) {
+			h.refuseUnauthenticated(ctx, "callback_replay_signed_in")
 			return
 		}
-		h.failLogin(ctx, r, "code_exchange", "")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}

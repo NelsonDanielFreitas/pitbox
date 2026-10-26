@@ -473,6 +473,12 @@ func TestCallbackAfterACompletedLoginShowsTheAppInsteadOfAnError(t *testing.T) {
 	if missing.Code != http.StatusOK {
 		t.Fatalf("callback without login state: status %d: %s", missing.Code, missing.Body.String())
 	}
+	if got := f.refusals.get("callback_replay_signed_in"); got != 2 {
+		t.Errorf("replay refusal count = %d, want 2", got)
+	}
+	if got := f.audit.actions(); !slices.Contains(got, "auth.login_failed:code_exchange") {
+		t.Errorf("code exchange failure was not audited: %v", got)
+	}
 }
 
 func TestAnAuthorizationCodeWorksOnce(t *testing.T) {

@@ -91,6 +91,21 @@ func fail(w http.ResponseWriter, code int, msg string) {
 	http.Error(w, msg, code)
 }
 
+// landingIfSignedIn handles a callback that arrived after another tab already
+// completed the same login. It only redirects an existing valid session; it never
+// creates or changes one, and it never consumes an authorization code.
+func (h *Handler) landingIfSignedIn(w http.ResponseWriter, r *http.Request, returnTo string) bool {
+	token := SessionTokenFromHeader(r.Header)
+	if token == "" {
+		return false
+	}
+	if _, err := h.Store.Get(r.Context(), token); err != nil {
+		return false
+	}
+	h.landing(w, returnTo)
+	return true
+}
+
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	prov, err := h.Provider.get()
@@ -156,18 +171,30 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	st, err := h.LoginCookies.Read(r)
 	h.LoginCookies.Clear(w) // always: a login attempt is single-use
 	if err != nil {
+		// A browser retry/replayed callback can arrive after another tab already
+		// completed the login. The existing session is authoritative; do not show
+		// an error page that looks like the login failed (F1-10).
+		if h.landingIfSignedIn(w, r, "/teams") {
+			return
+		}
 		h.refuseUnauthenticated(ctx, "no_login_state")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}
 	q := r.URL.Query()
 	if !st.MatchesState(q.Get("state")) {
+		if h.landingIfSignedIn(w, r, st.ReturnTo) {
+			return
+		}
 		h.refuseUnauthenticated(ctx, "state_mismatch")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}
 	if q.Get("error") != "" || q.Get("code") == "" {
 		// The user denied, or the provider reported a problem. Only the fixed code is kept.
+		if h.landingIfSignedIn(w, r, st.ReturnTo) {
+			return
+		}
 		h.failLogin(ctx, r, "idp_error", "")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
@@ -184,6 +211,9 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	tok, err := prov.oauth.Exchange(exCtx, q.Get("code"), oauth2.VerifierOption(st.Verifier))
 	if err != nil {
+		if h.landingIfSignedIn(w, r, st.ReturnTo) {
+			return
+		}
 		h.failLogin(ctx, r, "code_exchange", "")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return

@@ -8,6 +8,12 @@ export const ptPT = {
     loggedOut: "Sessão terminada.",
     logout: "Terminar sessão",
     account: "Conta",
+    logoutConfirmTitle: "Terminar sessão?",
+    logoutConfirmBody:
+      "Os dados locais deste browser vão ser apagados. Até ao F1-13, alterações feitas offline ainda não são sincronizadas.",
+    logoutConfirmAction: "Apagar dados e terminar sessão",
+    logoutError: "Não foi possível apagar os dados locais. Tenta outra vez.",
+    cancel: "Cancelar",
   },
   teams: {
     title: "Escolhe a equipa",
@@ -35,6 +41,11 @@ export const ptPT = {
     label: "Idioma",
     "pt-PT": "Português",
     en: "English",
+  },
+  local: {
+    loading: "A preparar os dados locais…",
+    errorTitle: "Não foi possível abrir a base local",
+    errorBody: "Verifica o armazenamento do browser e tenta outra vez.",
   },
   errors: {
     title: "Algo correu mal",

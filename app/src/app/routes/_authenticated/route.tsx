@@ -1,6 +1,9 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { sessionQueryOptions } from "@/auth/session-query";
+import { sessionQueryOptions, useSession } from "@/auth/session-query";
+import { openDatabase } from "@/db/client";
+import { DatabaseGate } from "@/db/DatabaseGate";
+import { bootstrapTeams, hasLocalTeams } from "@/sync/teams";
 import { AppShell } from "@/shared/ui/AppShell";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -12,6 +15,23 @@ export const Route = createFileRoute("/_authenticated")({
         search: { returnTo: `${location.pathname}${location.searchStr}` },
       });
     }
+    await openDatabase(session.user_id);
+    try {
+      await bootstrapTeams();
+    } catch (error) {
+      if (!(await hasLocalTeams())) throw error;
+    }
   },
-  component: AppShell,
+  component: AuthenticatedLayout,
 });
+
+function AuthenticatedLayout() {
+  const session = useSession();
+  const userId = session.data?.authenticated ? session.data.user_id : undefined;
+  if (!userId) return null;
+  return (
+    <DatabaseGate userId={userId}>
+      <AppShell />
+    </DatabaseGate>
+  );
+}

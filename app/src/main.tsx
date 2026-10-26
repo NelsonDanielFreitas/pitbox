@@ -10,7 +10,7 @@ import "@/app/styles.css";
 
 import { installBfcacheRevalidation } from "@/app/bfcache";
 import { createAppRouter } from "@/app/router";
-import { ConnectTeamsRepository } from "@/features/teams/data/connect-teams-repository";
+import { LocalTeamsRepository } from "@/features/teams/data/local-teams-repository";
 import { isUnauthenticated } from "@/shared/api/errors";
 import { handleQueryError } from "@/shared/api/query-error";
 
@@ -34,7 +34,7 @@ const queryClient = new QueryClient({
     },
   },
 });
-const teamsRepository = new ConnectTeamsRepository();
+const teamsRepository = new LocalTeamsRepository();
 routerRef.current = createAppRouter({ queryClient, teamsRepository });
 
 installBfcacheRevalidation(queryClient);

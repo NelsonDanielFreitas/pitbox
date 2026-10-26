@@ -8,6 +8,12 @@ export const en = {
     loggedOut: "You have been signed out.",
     logout: "Sign out",
     account: "Account",
+    logoutConfirmTitle: "Sign out?",
+    logoutConfirmBody:
+      "Local data in this browser will be deleted. Until F1-13, changes made offline are not synchronised yet.",
+    logoutConfirmAction: "Delete data and sign out",
+    logoutError: "Could not delete local data. Try again.",
+    cancel: "Cancel",
   },
   teams: {
     title: "Choose your team",
@@ -35,6 +41,11 @@ export const en = {
     label: "Language",
     "pt-PT": "Português",
     en: "English",
+  },
+  local: {
+    loading: "Preparing local data…",
+    errorTitle: "Could not open the local database",
+    errorBody: "Check browser storage and try again.",
   },
   errors: {
     title: "Something went wrong",

@@ -8,6 +8,20 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
 
+vi.mock("@/db/DatabaseGate", () => ({
+  DatabaseGate: ({ children }: { children: React.ReactNode }) => children,
+}));
+vi.mock("@/db/client", () => ({
+  openDatabase: vi.fn().mockResolvedValue(undefined),
+  closeDatabase: vi.fn().mockResolvedValue(undefined),
+  query: vi.fn(),
+  transaction: vi.fn(),
+}));
+vi.mock("@/sync/teams", () => ({
+  bootstrapTeams: vi.fn().mockResolvedValue(undefined),
+  hasLocalTeams: vi.fn().mockResolvedValue(true),
+}));
+
 import { routeTree } from "@/app/routeTree.gen";
 import type { TeamsRepository } from "@/features/teams/data/teams-repository";
 import type { Team } from "@/features/teams/domain/team";

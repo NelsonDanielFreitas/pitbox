@@ -758,7 +758,7 @@
         "app"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Feito",
       "todo": "SQLite (wa-sqlite + OPFS), migrações locais, repositórios por funcionalidade",
       "done_when": [
         "Dados persistem depois de fechar e reabrir o browser"

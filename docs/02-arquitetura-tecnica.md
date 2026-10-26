@@ -86,7 +86,7 @@ A app guarda tudo localmente numa base SQLite no dispositivo e trata o servidor 
 | Linguagem | TypeScript (strict) |
 | UI | React 19 + Vite; componentes acessíveis (Radix UI) + Tailwind CSS |
 | Rotas e dados | TanStack Router + TanStack Query |
-| Base local | SQLite via wa-sqlite (OPFS) no browser; plugin SQLite nativo no Capacitor |
+| Base local | SQLite via wa-sqlite/`OPFSCoopSyncVFS` no browser; plugin SQLite nativo no Capacitor |
 | Cliente API | @connectrpc/connect-web gerado a partir dos `.proto` (Buf) |
 | Offline | Service Worker (Workbox) para os ficheiros da app; fila de escrita própria em SQLite |
 | Nativo | Capacitor: vibração, ecrã sempre ligado, notificações locais, Bluetooth LE (módulo), armazenamento seguro, biometria |
@@ -619,7 +619,7 @@ pitbox/
 | [0007](adr/0007-firmware-rust-lora.md) | Firmware em Rust com Embassy; LoRa 868 MHz para tempo real (inclui migração para ML-DSA e tempo de antena) |
 | [0008](adr/0008-cloud-run-depois-kubernetes.md) | Cloud Run na fase 1, Kubernetes na fase 2 com gatilhos definidos |
 
-Posteriores: [0009](adr/0009-seaweedfs-s3-local.md) (SeaweedFS no ambiente local), [0010](adr/0010-migracoes-atlas-community.md) (migrações com Atlas Community) e [0011](adr/0011-telemetria-sem-compressao.md) (telemetria sem compressão), [0012](adr/0012-connect-v2-antes-do-f1-02.md) (Connect v2) e [0013](adr/0013-sessoes-bff-e-tokens.md) (sessões BFF e tratamento de tokens). O threat model está em [threat-model/](threat-model/README.md).
+Posteriores: [0009](adr/0009-seaweedfs-s3-local.md) (SeaweedFS no ambiente local), [0010](adr/0010-migracoes-atlas-community.md) (migrações com Atlas Community) e [0011](adr/0011-telemetria-sem-compressao.md) (telemetria sem compressão), [0012](adr/0012-connect-v2-antes-do-f1-02.md) (Connect v2) e [0013](adr/0013-sessoes-bff-e-tokens.md) (sessões BFF e tratamento de tokens) e [0018](adr/0018-base-local-web.md) (base local web). O threat model está em [threat-model/](threat-model/README.md).
 
 Cada ADR segue o formato: contexto, decisão, alternativas, consequências. Novas decisões estruturais exigem um ADR no mesmo PR.
 

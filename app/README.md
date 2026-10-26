@@ -67,3 +67,16 @@ axe sem violações graves/críticas.
   em `pitbox/<sha256(user_id)>/db.sqlite3`. Os dados são apagados no logout. A matriz de
   browsers da especificação §14 (Chrome, Safari e Firefox) tem de ser validada; sem OPFS a
   app falha com mensagem explícita, sem fallback para memória.
+
+## Garagem (F1-11)
+
+- Os ecrãs de garagem vivem em `src/features/garage/ui` e leem/escrevem só no repositório
+  local (`data/local-garage-repository.ts`). Não fazem pedidos à API.
+- A navegação usa uma TabBar da equipa (Início/Garagem) e um `Segmented`
+  Carros/Motores/Pneus/Peças.
+- Stock em centi (`min_stock_centi`, `qty_delta_centi`), alinhado com o proto. O F1-11 só cria
+  o movimento `purchase` inicial; o resto do inventário é F1-11b.
+- `version` é a versão do servidor; `local_rev` é a concorrência entre abas.
+- Piloto lê; só Dono/Mecânico vê ações de escrita. O servidor continua a ser a barreira real.
+- Sem rede, a garagem funciona dentro de uma sessão já autenticada. Abrir a app do zero sem
+  rede continua dependente do passe offline do F1-13.

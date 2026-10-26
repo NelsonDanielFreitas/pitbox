@@ -83,7 +83,7 @@ Objetivo: o mecânico faz login, regista carros, motores e pneus, e grava setups
 | F1-08 | Setups no backend | `SetupService`: criar, nova versão, comparar duas versões, link de partilha; esquema JSON v1 dos campos 1/8 TT | Diferenças entre versões corretas; link revogado deixa de funcionar | Feito |
 | F1-09 | Esqueleto da app | Vite + React + TypeScript strict, TanStack Router e Query, Tailwind, cliente Connect gerado, login via BFF | App abre, faz login e mostra a lista de equipas | Feito |
 | F1-10 | Base local na app | SQLite (wa-sqlite + OPFS), migrações locais, repositórios por funcionalidade | Dados persistem depois de fechar e reabrir o browser | Feito |
-| F1-11 | Ecrãs de garagem | Listas e formulários de carros, motores, pneus e peças, a ler e escrever na base local | Registar um carro completo em menos de 1 min no telemóvel | Por fazer |
+| F1-11 | Ecrãs de garagem | Listas e formulários de carros, motores, pneus e peças, a ler e escrever na base local | Registar um carro completo em menos de 1 min no telemóvel | Em curso |
 | F1-12 | Ecrãs de setup | Ficha por grupos (§5.1 da especificação), copiar de outro setup, comparar lado a lado, feedback do piloto | Setup completo gravado em menos de 2 min | Por fazer |
 | F1-13 | Sincronização | `SyncService` Push/Pull, fila de operações com UUIDv7, assinatura por dispositivo, resolução de conflitos por campo (§8) | Reenviar a mesma fila não duplica nada; conflito aparece ao mecânico | Por fazer |
 | F1-14 | Teste em modo avião | Playwright: criar setup offline, voltar a ligar, verificar no servidor | Teste E2E verde no CI | Por fazer |

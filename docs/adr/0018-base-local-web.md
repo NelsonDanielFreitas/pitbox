@@ -92,6 +92,21 @@ O pacote `wa-sqlite` do npm está em 1.0.0 (jan/2024). O repositório oficial es
   `application/wasm`.
 - Dados locais apagados no logout explícito; TM-DEV-01 fica **parcial** até ao F2-06.
 
+### F1-11: schema local de garagem
+
+- O stock de peças é guardado em **centi** (`min_stock_centi`, `qty_delta_centi`), como no
+  proto e no servidor. A migração local `0004` reconstrói `part`, `stock_movement` e
+  `part_install` porque as tabelas antigas usavam `REAL` e estavam vazias; a conversão é feita
+  com `round(x * 100)` e testada com `PRAGMA foreign_key_check`.
+- `version` continua a representar a versão do servidor; a concorrência entre abas usa
+  `local_rev`, que não vai para o sync.
+- `unit_cost_cents` permanece na base local, mas o F1-11 não o lê nem mostra; a regra de
+  custos por papel entra no F1-11b/F1-13.
+- O stock inicial é um movimento `purchase` na mesma transação da peça; movimentos
+  posteriores ficam para o F1-11b.
+- A garagem lê com TanStack Query em `networkMode: "always"`; continua a ser um repositório
+  local e não faz pedidos de rede.
+
 ## Consequências
 
 - A matriz de browsers da especificação §14 (Chrome, Safari e Firefox nas duas últimas

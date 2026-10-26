@@ -23,8 +23,10 @@ vi.mock("@/sync/teams", () => ({
 }));
 
 import { routeTree } from "@/app/routeTree.gen";
+import type { GarageRepository } from "@/features/garage/data/garage-repository";
 import type { TeamsRepository } from "@/features/teams/data/teams-repository";
 import type { Team } from "@/features/teams/domain/team";
+import { emptyGarageRepository } from "./garage";
 
 export function renderWithQuery(ui: ReactElement) {
   const queryClient = new QueryClient({
@@ -37,10 +39,12 @@ export function renderApp({
   initialPath = "/teams",
   teams = [],
   repository,
+  garageRepository,
 }: {
   initialPath?: string;
   teams?: Team[];
   repository?: TeamsRepository;
+  garageRepository?: GarageRepository;
 } = {}) {
   vi.stubGlobal(
     "fetch",
@@ -68,7 +72,11 @@ export function renderApp({
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [initialPath] }),
-    context: { queryClient, teamsRepository },
+    context: {
+      queryClient,
+      teamsRepository,
+      garageRepository: garageRepository ?? emptyGarageRepository(),
+    },
   });
   const view = render(
     <QueryClientProvider client={queryClient}>

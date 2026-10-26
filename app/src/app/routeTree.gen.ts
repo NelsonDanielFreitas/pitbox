@@ -13,7 +13,26 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedTeamsRouteImport } from './routes/_authenticated/teams'
-import { Route as AuthenticatedTeamsTeamIdRouteImport } from './routes/_authenticated/teams_.$teamId'
+import { Route as AuthenticatedTeamsTeamIdRouteRouteImport } from './routes/_authenticated/teams_.$teamId/route'
+import { Route as AuthenticatedTeamsTeamIdIndexRouteImport } from './routes/_authenticated/teams_.$teamId/index'
+import { Route as AuthenticatedTeamsTeamIdGarageRouteRouteImport } from './routes/_authenticated/teams_.$teamId/garage/route'
+import { Route as AuthenticatedTeamsTeamIdGarageIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/index'
+import { Route as AuthenticatedTeamsTeamIdGarageCarsIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/cars/index'
+import { Route as AuthenticatedTeamsTeamIdGarageCarsNewRouteImport } from './routes/_authenticated/teams_.$teamId/garage/cars/new'
+import { Route as AuthenticatedTeamsTeamIdGarageEnginesIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/engines/index'
+import { Route as AuthenticatedTeamsTeamIdGarageEnginesNewRouteImport } from './routes/_authenticated/teams_.$teamId/garage/engines/new'
+import { Route as AuthenticatedTeamsTeamIdGaragePartsIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/parts/index'
+import { Route as AuthenticatedTeamsTeamIdGaragePartsNewRouteImport } from './routes/_authenticated/teams_.$teamId/garage/parts/new'
+import { Route as AuthenticatedTeamsTeamIdGarageTyresIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/tyres/index'
+import { Route as AuthenticatedTeamsTeamIdGarageTyresNewRouteImport } from './routes/_authenticated/teams_.$teamId/garage/tyres/new'
+import { Route as AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/cars/$carId/index'
+import { Route as AuthenticatedTeamsTeamIdGarageCarsCarIdEditRouteImport } from './routes/_authenticated/teams_.$teamId/garage/cars/$carId/edit'
+import { Route as AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/engines/$engineId/index'
+import { Route as AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRouteImport } from './routes/_authenticated/teams_.$teamId/garage/engines/$engineId/edit'
+import { Route as AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/parts/$partId/index'
+import { Route as AuthenticatedTeamsTeamIdGaragePartsPartIdEditRouteImport } from './routes/_authenticated/teams_.$teamId/garage/parts/$partId/edit'
+import { Route as AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/tyres/$tyreSetId/index'
+import { Route as AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRouteImport } from './routes/_authenticated/teams_.$teamId/garage/tyres/$tyreSetId/edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,24 +53,174 @@ const AuthenticatedTeamsRoute = AuthenticatedTeamsRouteImport.update({
   path: '/teams',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedTeamsTeamIdRoute =
-  AuthenticatedTeamsTeamIdRouteImport.update({
+const AuthenticatedTeamsTeamIdRouteRoute =
+  AuthenticatedTeamsTeamIdRouteRouteImport.update({
     id: '/teams_/$teamId',
     path: '/teams/$teamId',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdIndexRoute =
+  AuthenticatedTeamsTeamIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageRouteRoute =
+  AuthenticatedTeamsTeamIdGarageRouteRouteImport.update({
+    id: '/garage',
+    path: '/garage',
+    getParentRoute: () => AuthenticatedTeamsTeamIdRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageIndexRoute =
+  AuthenticatedTeamsTeamIdGarageIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageCarsIndexRoute =
+  AuthenticatedTeamsTeamIdGarageCarsIndexRouteImport.update({
+    id: '/cars/',
+    path: '/cars/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageCarsNewRoute =
+  AuthenticatedTeamsTeamIdGarageCarsNewRouteImport.update({
+    id: '/cars/new',
+    path: '/cars/new',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageEnginesIndexRoute =
+  AuthenticatedTeamsTeamIdGarageEnginesIndexRouteImport.update({
+    id: '/engines/',
+    path: '/engines/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageEnginesNewRoute =
+  AuthenticatedTeamsTeamIdGarageEnginesNewRouteImport.update({
+    id: '/engines/new',
+    path: '/engines/new',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGaragePartsIndexRoute =
+  AuthenticatedTeamsTeamIdGaragePartsIndexRouteImport.update({
+    id: '/parts/',
+    path: '/parts/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGaragePartsNewRoute =
+  AuthenticatedTeamsTeamIdGaragePartsNewRouteImport.update({
+    id: '/parts/new',
+    path: '/parts/new',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageTyresIndexRoute =
+  AuthenticatedTeamsTeamIdGarageTyresIndexRouteImport.update({
+    id: '/tyres/',
+    path: '/tyres/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageTyresNewRoute =
+  AuthenticatedTeamsTeamIdGarageTyresNewRouteImport.update({
+    id: '/tyres/new',
+    path: '/tyres/new',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute =
+  AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRouteImport.update({
+    id: '/cars/$carId/',
+    path: '/cars/$carId/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute =
+  AuthenticatedTeamsTeamIdGarageCarsCarIdEditRouteImport.update({
+    id: '/cars/$carId/edit',
+    path: '/cars/$carId/edit',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute =
+  AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRouteImport.update({
+    id: '/engines/$engineId/',
+    path: '/engines/$engineId/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute =
+  AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRouteImport.update({
+    id: '/engines/$engineId/edit',
+    path: '/engines/$engineId/edit',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute =
+  AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRouteImport.update({
+    id: '/parts/$partId/',
+    path: '/parts/$partId/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute =
+  AuthenticatedTeamsTeamIdGaragePartsPartIdEditRouteImport.update({
+    id: '/parts/$partId/edit',
+    path: '/parts/$partId/edit',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute =
+  AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRouteImport.update({
+    id: '/tyres/$tyreSetId/',
+    path: '/tyres/$tyreSetId/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute =
+  AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRouteImport.update({
+    id: '/tyres/$tyreSetId/edit',
+    path: '/tyres/$tyreSetId/edit',
+    getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/teams': typeof AuthenticatedTeamsRoute
-  '/teams/$teamId': typeof AuthenticatedTeamsTeamIdRoute
+  '/teams/$teamId': typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
+  '/teams/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
+  '/teams/$teamId/': typeof AuthenticatedTeamsTeamIdIndexRoute
+  '/teams/$teamId/garage/': typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  '/teams/$teamId/garage/cars/new': typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
+  '/teams/$teamId/garage/engines/new': typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
+  '/teams/$teamId/garage/parts/new': typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
+  '/teams/$teamId/garage/tyres/new': typeof AuthenticatedTeamsTeamIdGarageTyresNewRoute
+  '/teams/$teamId/garage/cars/': typeof AuthenticatedTeamsTeamIdGarageCarsIndexRoute
+  '/teams/$teamId/garage/engines/': typeof AuthenticatedTeamsTeamIdGarageEnginesIndexRoute
+  '/teams/$teamId/garage/parts/': typeof AuthenticatedTeamsTeamIdGaragePartsIndexRoute
+  '/teams/$teamId/garage/tyres/': typeof AuthenticatedTeamsTeamIdGarageTyresIndexRoute
+  '/teams/$teamId/garage/cars/$carId/edit': typeof AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute
+  '/teams/$teamId/garage/engines/$engineId/edit': typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute
+  '/teams/$teamId/garage/parts/$partId/edit': typeof AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute
+  '/teams/$teamId/garage/tyres/$tyreSetId/edit': typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute
+  '/teams/$teamId/garage/cars/$carId/': typeof AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute
+  '/teams/$teamId/garage/engines/$engineId/': typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute
+  '/teams/$teamId/garage/parts/$partId/': typeof AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute
+  '/teams/$teamId/garage/tyres/$tyreSetId/': typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/teams': typeof AuthenticatedTeamsRoute
-  '/teams/$teamId': typeof AuthenticatedTeamsTeamIdRoute
+  '/teams/$teamId': typeof AuthenticatedTeamsTeamIdIndexRoute
+  '/teams/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  '/teams/$teamId/garage/cars/new': typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
+  '/teams/$teamId/garage/engines/new': typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
+  '/teams/$teamId/garage/parts/new': typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
+  '/teams/$teamId/garage/tyres/new': typeof AuthenticatedTeamsTeamIdGarageTyresNewRoute
+  '/teams/$teamId/garage/cars': typeof AuthenticatedTeamsTeamIdGarageCarsIndexRoute
+  '/teams/$teamId/garage/engines': typeof AuthenticatedTeamsTeamIdGarageEnginesIndexRoute
+  '/teams/$teamId/garage/parts': typeof AuthenticatedTeamsTeamIdGaragePartsIndexRoute
+  '/teams/$teamId/garage/tyres': typeof AuthenticatedTeamsTeamIdGarageTyresIndexRoute
+  '/teams/$teamId/garage/cars/$carId/edit': typeof AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute
+  '/teams/$teamId/garage/engines/$engineId/edit': typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute
+  '/teams/$teamId/garage/parts/$partId/edit': typeof AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute
+  '/teams/$teamId/garage/tyres/$tyreSetId/edit': typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute
+  '/teams/$teamId/garage/cars/$carId': typeof AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute
+  '/teams/$teamId/garage/engines/$engineId': typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute
+  '/teams/$teamId/garage/parts/$partId': typeof AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute
+  '/teams/$teamId/garage/tyres/$tyreSetId': typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,13 +228,76 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/teams': typeof AuthenticatedTeamsRoute
-  '/_authenticated/teams_/$teamId': typeof AuthenticatedTeamsTeamIdRoute
+  '/_authenticated/teams_/$teamId': typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
+  '/_authenticated/teams_/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
+  '/_authenticated/teams_/$teamId/': typeof AuthenticatedTeamsTeamIdIndexRoute
+  '/_authenticated/teams_/$teamId/garage/': typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  '/_authenticated/teams_/$teamId/garage/cars/new': typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
+  '/_authenticated/teams_/$teamId/garage/engines/new': typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
+  '/_authenticated/teams_/$teamId/garage/parts/new': typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
+  '/_authenticated/teams_/$teamId/garage/tyres/new': typeof AuthenticatedTeamsTeamIdGarageTyresNewRoute
+  '/_authenticated/teams_/$teamId/garage/cars/': typeof AuthenticatedTeamsTeamIdGarageCarsIndexRoute
+  '/_authenticated/teams_/$teamId/garage/engines/': typeof AuthenticatedTeamsTeamIdGarageEnginesIndexRoute
+  '/_authenticated/teams_/$teamId/garage/parts/': typeof AuthenticatedTeamsTeamIdGaragePartsIndexRoute
+  '/_authenticated/teams_/$teamId/garage/tyres/': typeof AuthenticatedTeamsTeamIdGarageTyresIndexRoute
+  '/_authenticated/teams_/$teamId/garage/cars/$carId/edit': typeof AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute
+  '/_authenticated/teams_/$teamId/garage/engines/$engineId/edit': typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute
+  '/_authenticated/teams_/$teamId/garage/parts/$partId/edit': typeof AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute
+  '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/edit': typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute
+  '/_authenticated/teams_/$teamId/garage/cars/$carId/': typeof AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute
+  '/_authenticated/teams_/$teamId/garage/engines/$engineId/': typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute
+  '/_authenticated/teams_/$teamId/garage/parts/$partId/': typeof AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute
+  '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/': typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/teams' | '/teams/$teamId'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/teams'
+    | '/teams/$teamId'
+    | '/teams/$teamId/garage'
+    | '/teams/$teamId/'
+    | '/teams/$teamId/garage/'
+    | '/teams/$teamId/garage/cars/new'
+    | '/teams/$teamId/garage/engines/new'
+    | '/teams/$teamId/garage/parts/new'
+    | '/teams/$teamId/garage/tyres/new'
+    | '/teams/$teamId/garage/cars/'
+    | '/teams/$teamId/garage/engines/'
+    | '/teams/$teamId/garage/parts/'
+    | '/teams/$teamId/garage/tyres/'
+    | '/teams/$teamId/garage/cars/$carId/edit'
+    | '/teams/$teamId/garage/engines/$engineId/edit'
+    | '/teams/$teamId/garage/parts/$partId/edit'
+    | '/teams/$teamId/garage/tyres/$tyreSetId/edit'
+    | '/teams/$teamId/garage/cars/$carId/'
+    | '/teams/$teamId/garage/engines/$engineId/'
+    | '/teams/$teamId/garage/parts/$partId/'
+    | '/teams/$teamId/garage/tyres/$tyreSetId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/teams' | '/teams/$teamId'
+  to:
+    | '/'
+    | '/login'
+    | '/teams'
+    | '/teams/$teamId'
+    | '/teams/$teamId/garage'
+    | '/teams/$teamId/garage/cars/new'
+    | '/teams/$teamId/garage/engines/new'
+    | '/teams/$teamId/garage/parts/new'
+    | '/teams/$teamId/garage/tyres/new'
+    | '/teams/$teamId/garage/cars'
+    | '/teams/$teamId/garage/engines'
+    | '/teams/$teamId/garage/parts'
+    | '/teams/$teamId/garage/tyres'
+    | '/teams/$teamId/garage/cars/$carId/edit'
+    | '/teams/$teamId/garage/engines/$engineId/edit'
+    | '/teams/$teamId/garage/parts/$partId/edit'
+    | '/teams/$teamId/garage/tyres/$tyreSetId/edit'
+    | '/teams/$teamId/garage/cars/$carId'
+    | '/teams/$teamId/garage/engines/$engineId'
+    | '/teams/$teamId/garage/parts/$partId'
+    | '/teams/$teamId/garage/tyres/$tyreSetId'
   id:
     | '__root__'
     | '/'
@@ -73,6 +305,25 @@ export interface FileRouteTypes {
     | '/login'
     | '/_authenticated/teams'
     | '/_authenticated/teams_/$teamId'
+    | '/_authenticated/teams_/$teamId/garage'
+    | '/_authenticated/teams_/$teamId/'
+    | '/_authenticated/teams_/$teamId/garage/'
+    | '/_authenticated/teams_/$teamId/garage/cars/new'
+    | '/_authenticated/teams_/$teamId/garage/engines/new'
+    | '/_authenticated/teams_/$teamId/garage/parts/new'
+    | '/_authenticated/teams_/$teamId/garage/tyres/new'
+    | '/_authenticated/teams_/$teamId/garage/cars/'
+    | '/_authenticated/teams_/$teamId/garage/engines/'
+    | '/_authenticated/teams_/$teamId/garage/parts/'
+    | '/_authenticated/teams_/$teamId/garage/tyres/'
+    | '/_authenticated/teams_/$teamId/garage/cars/$carId/edit'
+    | '/_authenticated/teams_/$teamId/garage/engines/$engineId/edit'
+    | '/_authenticated/teams_/$teamId/garage/parts/$partId/edit'
+    | '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/edit'
+    | '/_authenticated/teams_/$teamId/garage/cars/$carId/'
+    | '/_authenticated/teams_/$teamId/garage/engines/$engineId/'
+    | '/_authenticated/teams_/$teamId/garage/parts/$partId/'
+    | '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -115,20 +366,234 @@ declare module '@tanstack/react-router' {
       id: '/_authenticated/teams_/$teamId'
       path: '/teams/$teamId'
       fullPath: '/teams/$teamId'
-      preLoaderRoute: typeof AuthenticatedTeamsTeamIdRouteImport
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/': {
+      id: '/_authenticated/teams_/$teamId/'
+      path: '/'
+      fullPath: '/teams/$teamId/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage': {
+      id: '/_authenticated/teams_/$teamId/garage'
+      path: '/garage'
+      fullPath: '/teams/$teamId/garage'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/': {
+      id: '/_authenticated/teams_/$teamId/garage/'
+      path: '/'
+      fullPath: '/teams/$teamId/garage/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/cars/': {
+      id: '/_authenticated/teams_/$teamId/garage/cars/'
+      path: '/cars'
+      fullPath: '/teams/$teamId/garage/cars/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageCarsIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/cars/new': {
+      id: '/_authenticated/teams_/$teamId/garage/cars/new'
+      path: '/cars/new'
+      fullPath: '/teams/$teamId/garage/cars/new'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageCarsNewRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/engines/': {
+      id: '/_authenticated/teams_/$teamId/garage/engines/'
+      path: '/engines'
+      fullPath: '/teams/$teamId/garage/engines/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/engines/new': {
+      id: '/_authenticated/teams_/$teamId/garage/engines/new'
+      path: '/engines/new'
+      fullPath: '/teams/$teamId/garage/engines/new'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesNewRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/parts/': {
+      id: '/_authenticated/teams_/$teamId/garage/parts/'
+      path: '/parts'
+      fullPath: '/teams/$teamId/garage/parts/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGaragePartsIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/parts/new': {
+      id: '/_authenticated/teams_/$teamId/garage/parts/new'
+      path: '/parts/new'
+      fullPath: '/teams/$teamId/garage/parts/new'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGaragePartsNewRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/tyres/': {
+      id: '/_authenticated/teams_/$teamId/garage/tyres/'
+      path: '/tyres'
+      fullPath: '/teams/$teamId/garage/tyres/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageTyresIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/tyres/new': {
+      id: '/_authenticated/teams_/$teamId/garage/tyres/new'
+      path: '/tyres/new'
+      fullPath: '/teams/$teamId/garage/tyres/new'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageTyresNewRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/cars/$carId/': {
+      id: '/_authenticated/teams_/$teamId/garage/cars/$carId/'
+      path: '/cars/$carId'
+      fullPath: '/teams/$teamId/garage/cars/$carId/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/cars/$carId/edit': {
+      id: '/_authenticated/teams_/$teamId/garage/cars/$carId/edit'
+      path: '/cars/$carId/edit'
+      fullPath: '/teams/$teamId/garage/cars/$carId/edit'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageCarsCarIdEditRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/engines/$engineId/': {
+      id: '/_authenticated/teams_/$teamId/garage/engines/$engineId/'
+      path: '/engines/$engineId'
+      fullPath: '/teams/$teamId/garage/engines/$engineId/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/engines/$engineId/edit': {
+      id: '/_authenticated/teams_/$teamId/garage/engines/$engineId/edit'
+      path: '/engines/$engineId/edit'
+      fullPath: '/teams/$teamId/garage/engines/$engineId/edit'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/parts/$partId/': {
+      id: '/_authenticated/teams_/$teamId/garage/parts/$partId/'
+      path: '/parts/$partId'
+      fullPath: '/teams/$teamId/garage/parts/$partId/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/parts/$partId/edit': {
+      id: '/_authenticated/teams_/$teamId/garage/parts/$partId/edit'
+      path: '/parts/$partId/edit'
+      fullPath: '/teams/$teamId/garage/parts/$partId/edit'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGaragePartsPartIdEditRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/': {
+      id: '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/'
+      path: '/tyres/$tyreSetId'
+      fullPath: '/teams/$teamId/garage/tyres/$tyreSetId/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/edit': {
+      id: '/_authenticated/teams_/$teamId/garage/tyres/$tyreSetId/edit'
+      path: '/tyres/$tyreSetId/edit'
+      fullPath: '/teams/$teamId/garage/tyres/$tyreSetId/edit'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
     }
   }
 }
 
+interface AuthenticatedTeamsTeamIdGarageRouteRouteChildren {
+  AuthenticatedTeamsTeamIdGarageIndexRoute: typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  AuthenticatedTeamsTeamIdGarageCarsNewRoute: typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
+  AuthenticatedTeamsTeamIdGarageEnginesNewRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
+  AuthenticatedTeamsTeamIdGaragePartsNewRoute: typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
+  AuthenticatedTeamsTeamIdGarageTyresNewRoute: typeof AuthenticatedTeamsTeamIdGarageTyresNewRoute
+  AuthenticatedTeamsTeamIdGarageCarsIndexRoute: typeof AuthenticatedTeamsTeamIdGarageCarsIndexRoute
+  AuthenticatedTeamsTeamIdGarageEnginesIndexRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesIndexRoute
+  AuthenticatedTeamsTeamIdGaragePartsIndexRoute: typeof AuthenticatedTeamsTeamIdGaragePartsIndexRoute
+  AuthenticatedTeamsTeamIdGarageTyresIndexRoute: typeof AuthenticatedTeamsTeamIdGarageTyresIndexRoute
+  AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute: typeof AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute
+  AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute
+  AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute: typeof AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute
+  AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute: typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute
+  AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute: typeof AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute
+  AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute: typeof AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute
+  AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute: typeof AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute
+  AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute: typeof AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute
+}
+
+const AuthenticatedTeamsTeamIdGarageRouteRouteChildren: AuthenticatedTeamsTeamIdGarageRouteRouteChildren =
+  {
+    AuthenticatedTeamsTeamIdGarageIndexRoute:
+      AuthenticatedTeamsTeamIdGarageIndexRoute,
+    AuthenticatedTeamsTeamIdGarageCarsNewRoute:
+      AuthenticatedTeamsTeamIdGarageCarsNewRoute,
+    AuthenticatedTeamsTeamIdGarageEnginesNewRoute:
+      AuthenticatedTeamsTeamIdGarageEnginesNewRoute,
+    AuthenticatedTeamsTeamIdGaragePartsNewRoute:
+      AuthenticatedTeamsTeamIdGaragePartsNewRoute,
+    AuthenticatedTeamsTeamIdGarageTyresNewRoute:
+      AuthenticatedTeamsTeamIdGarageTyresNewRoute,
+    AuthenticatedTeamsTeamIdGarageCarsIndexRoute:
+      AuthenticatedTeamsTeamIdGarageCarsIndexRoute,
+    AuthenticatedTeamsTeamIdGarageEnginesIndexRoute:
+      AuthenticatedTeamsTeamIdGarageEnginesIndexRoute,
+    AuthenticatedTeamsTeamIdGaragePartsIndexRoute:
+      AuthenticatedTeamsTeamIdGaragePartsIndexRoute,
+    AuthenticatedTeamsTeamIdGarageTyresIndexRoute:
+      AuthenticatedTeamsTeamIdGarageTyresIndexRoute,
+    AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute:
+      AuthenticatedTeamsTeamIdGarageCarsCarIdEditRoute,
+    AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute:
+      AuthenticatedTeamsTeamIdGarageEnginesEngineIdEditRoute,
+    AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute:
+      AuthenticatedTeamsTeamIdGaragePartsPartIdEditRoute,
+    AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute:
+      AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute,
+    AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute:
+      AuthenticatedTeamsTeamIdGarageCarsCarIdIndexRoute,
+    AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute:
+      AuthenticatedTeamsTeamIdGarageEnginesEngineIdIndexRoute,
+    AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute:
+      AuthenticatedTeamsTeamIdGaragePartsPartIdIndexRoute,
+    AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute:
+      AuthenticatedTeamsTeamIdGarageTyresTyreSetIdIndexRoute,
+  }
+
+const AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren =
+  AuthenticatedTeamsTeamIdGarageRouteRoute._addFileChildren(
+    AuthenticatedTeamsTeamIdGarageRouteRouteChildren,
+  )
+
+interface AuthenticatedTeamsTeamIdRouteRouteChildren {
+  AuthenticatedTeamsTeamIdGarageRouteRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
+  AuthenticatedTeamsTeamIdIndexRoute: typeof AuthenticatedTeamsTeamIdIndexRoute
+}
+
+const AuthenticatedTeamsTeamIdRouteRouteChildren: AuthenticatedTeamsTeamIdRouteRouteChildren =
+  {
+    AuthenticatedTeamsTeamIdGarageRouteRoute:
+      AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren,
+    AuthenticatedTeamsTeamIdIndexRoute: AuthenticatedTeamsTeamIdIndexRoute,
+  }
+
+const AuthenticatedTeamsTeamIdRouteRouteWithChildren =
+  AuthenticatedTeamsTeamIdRouteRoute._addFileChildren(
+    AuthenticatedTeamsTeamIdRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedTeamsRoute: typeof AuthenticatedTeamsRoute
-  AuthenticatedTeamsTeamIdRoute: typeof AuthenticatedTeamsTeamIdRoute
+  AuthenticatedTeamsTeamIdRouteRoute: typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTeamsRoute: AuthenticatedTeamsRoute,
-  AuthenticatedTeamsTeamIdRoute: AuthenticatedTeamsTeamIdRoute,
+  AuthenticatedTeamsTeamIdRouteRoute:
+    AuthenticatedTeamsTeamIdRouteRouteWithChildren,
 }
 
 const AuthenticatedRouteRouteWithChildren =

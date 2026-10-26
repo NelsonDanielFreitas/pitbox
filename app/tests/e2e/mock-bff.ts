@@ -17,6 +17,7 @@ const cookieName = "__Host-pitbox_session";
 const cookieValue = "mock-session";
 const userId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60";
 let expireRpc = false;
+let offlineRpc = false;
 
 function teams() {
   return [
@@ -120,6 +121,9 @@ const rpcHandler = connectNodeAdapter({
         if (expireRpc) {
           throw new ConnectError("session revoked", Code.Unauthenticated);
         }
+        if (offlineRpc) {
+          throw new ConnectError("temporarily unavailable", Code.Unavailable);
+        }
         return create(ListMyTeamsResponseSchema, { teams: teams() });
       },
     });
@@ -142,8 +146,16 @@ const server = createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/__test/offline-rpc" && req.method === "POST") {
+    offlineRpc = true;
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
   if (url.pathname === "/auth/login") {
     expireRpc = false;
+    offlineRpc = false;
     const returnTo = safeReturnTo(url.searchParams.get("return_to"));
     res.writeHead(302, {
       Location: `/auth/callback?return_to=${encodeURIComponent(returnTo)}`,

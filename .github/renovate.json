@@ -21,6 +21,11 @@
       "internalChecksFilter": "strict"
     },
     {
+      "description": "wa-sqlite vem do repositório Git oficial, pinado por SHA; atualizações são revistas manualmente (ADR 0018)",
+      "matchPackageNames": ["wa-sqlite"],
+      "enabled": false
+    },
+    {
       "description": "Valkey fica no 8.0 (a versão que o Memorystore suporta; 8.1 não existe lá): só patches e digests",
       "matchPackageNames": [
         "valkey/valkey"

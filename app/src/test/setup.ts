@@ -4,7 +4,9 @@ import "@/i18n";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
-Object.defineProperty(window, "scrollTo", { configurable: true, value: vi.fn() });
+if (typeof window !== "undefined") {
+  Object.defineProperty(window, "scrollTo", { configurable: true, value: vi.fn() });
+}
 
 afterEach(() => {
   cleanup();

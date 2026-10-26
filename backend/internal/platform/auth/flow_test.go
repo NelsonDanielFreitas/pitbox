@@ -449,6 +449,38 @@ func TestCallbackWithoutAValidLoginStateNeverCallsTheProvider(t *testing.T) {
 	}
 }
 
+func TestCallbackAfterACompletedLoginShowsTheAppInsteadOfAnError(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	sc := f.signIn("ana")
+	a := f.startLogin("/teams")
+
+	// The browser retries a callback after the session cookie was already set.
+	// The code is no longer usable, but the existing valid session must win.
+	replayed := f.doCallback(a, a.state, "already-used", sc)
+	if replayed.Code != http.StatusOK {
+		t.Fatalf("replayed callback: status %d: %s", replayed.Code, replayed.Body.String())
+	}
+	if !strings.Contains(replayed.Body.String(), "http-equiv=\"refresh\"") {
+		t.Errorf("replayed callback did not land in the app: %s", replayed.Body.String())
+	}
+	if f.sessions() != 1 {
+		t.Errorf("sessions = %d, want the existing one", f.sessions())
+	}
+
+	// A callback with no pre-login cookie also lands if the session is valid.
+	missing := f.do(http.MethodGet, CallbackPath+"?state=x&code=y", []*http.Cookie{sc}, nil)
+	if missing.Code != http.StatusOK {
+		t.Fatalf("callback without login state: status %d: %s", missing.Code, missing.Body.String())
+	}
+	if got := f.refusals.get("callback_replay_signed_in"); got != 2 {
+		t.Errorf("replay refusal count = %d, want 2", got)
+	}
+	if got := f.audit.actions(); !slices.Contains(got, "auth.login_failed:code_exchange") {
+		t.Errorf("code exchange failure was not audited: %v", got)
+	}
+}
+
 func TestAnAuthorizationCodeWorksOnce(t *testing.T) {
 	t.Parallel()
 	f := newFlowHarness(t)

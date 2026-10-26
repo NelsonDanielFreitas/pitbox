@@ -12,7 +12,7 @@ const buttonVariants = cva(
         primary: "bg-primary text-on-primary hover:bg-primary-strong",
         secondary: "border border-line bg-surface-2 text-fg hover:border-muted",
         ghost: "text-fg hover:bg-surface-2",
-        danger: "bg-crit text-white",
+        danger: "bg-crit text-on-primary",
       },
       size: {
         md: "h-12 rounded-xl px-4 text-[15px]",

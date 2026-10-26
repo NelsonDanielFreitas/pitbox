@@ -8,7 +8,7 @@ F1-09; as pastas `android/` e `ios/` são geradas pelo Capacitor (F2-06).
 | `src/app/` | Arranque, rotas (TanStack Router), providers e layout |
 | `src/features/<f>/` | Uma pasta por funcionalidade: `domain/` (regras puras), `data/` (repositórios), `ui/` (ecrãs e componentes) |
 | `src/shared/` | Componentes de UI, hooks e utilitários comuns |
-| `src/db/` | SQLite local: ligação, migrações locais (F1-10) |
+| `src/db/` | SQLite local em Worker (`OPFSCoopSyncVFS`), migrações, cliente tipado e ciclo de vida por utilizador |
 | `src/sync/` | Fila de operações, assinatura por dispositivo, Push/Pull (F1-13) |
 | `src/auth/` | Sessão BFF na web, AppAuth no nativo |
 | `src/i18n/` | Textos pt-PT e en |
@@ -58,9 +58,12 @@ axe sem violações graves/críticas.
 - Nenhum token no JavaScript: a sessão é um cookie `HttpOnly` gerido pelo BFF.
 - Os ecrãs nunca importam `@connectrpc/*` nem `src/gen/**/*_service_pb`; só `data/` fala com a
   API. O ESLint verifica esta fronteira.
-- `localStorage`/`sessionStorage` só são permitidos em `src/i18n/` (preferência de idioma).
+- `localStorage`/`sessionStorage` só são permitidos em `src/i18n/` (preferência de idioma);
+  `navigator.storage` só em `src/db/`.
 - `dangerouslySetInnerHTML`, `eval` e `new Function` estão proibidos.
-- CSP de produção: `script-src 'self'`, sem inline scripts nem eval. Em dev, o Vite usa um
-  nonce fixo para o React Refresh; nunca há `unsafe-eval`.
-- O wa-sqlite (F1-10) vai precisar de `script-src 'wasm-unsafe-eval'` e `worker-src 'self'`;
-  ainda não estão no CSP.
+- CSP de produção: `script-src 'self' 'wasm-unsafe-eval'`, `worker-src 'self'`, sem inline
+  scripts nem `unsafe-eval`. Em dev, o Vite usa um nonce fixo para o React Refresh.
+- A base local usa `wa-sqlite` num Worker, com `OPFSCoopSyncVFS`; é uma base por utilizador
+  em `pitbox/<sha256(user_id)>/db.sqlite3`. Os dados são apagados no logout. A matriz de
+  browsers da especificação §14 (Chrome, Safari e Firefox) tem de ser validada; sem OPFS a
+  app falha com mensagem explícita, sem fallback para memória.

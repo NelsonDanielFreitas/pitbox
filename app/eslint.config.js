@@ -54,15 +54,19 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/features/*/ui/**/*.{ts,tsx}", "src/app/routes/**/*.{ts,tsx}"],
+    files: [
+      "src/features/*/ui/**/*.{ts,tsx}",
+      "src/shared/ui/**/*.{ts,tsx}",
+      "src/app/routes/**/*.{ts,tsx}",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["@connectrpc/*", "@/gen/**"],
-              message: "Only the feature data layer may talk to the API.",
+              group: ["@connectrpc/*", "@/gen/**", "@/db/*", "@/db", "@/sync/*", "@/sync"],
+              message: "Only the data layer may talk to the API or the local database.",
             },
           ],
         },
@@ -105,6 +109,20 @@ export default tseslint.config(
         {
           selector: "NewExpression[callee.name='Function']",
           message: "new Function is forbidden.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/db/**", "src/i18n/**"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "navigator",
+          property: "storage",
+          message: "Storage access belongs in src/db.",
         },
       ],
     },

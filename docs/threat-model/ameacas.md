@@ -111,7 +111,7 @@ Elementos: app, SQLite local, chave do dispositivo.
 
 | ID | STRIDE | Ameaça | Mitigação | Estado | Prova ou cartão | Prio |
 | --- | --- | --- | --- | --- | --- | --- |
-| TM-DEV-01 | I | Ler a base local de um telemóvel ou browser roubado | SQLCipher no telemóvel, chave no armazenamento seguro; bloqueio da app; no browser, dados mínimos | planeado | F1-10, F2-06 | A |
+| TM-DEV-01 | I | Ler a base local de um telemóvel ou browser roubado | SQLCipher no telemóvel, chave no armazenamento seguro; bloqueio da app; no browser, dados mínimos, sem segredos e apagados no logout explícito | parcial (web mínima; cifra nativa no F2-06) | `app/src/db`, E2E de persistência/logout; F1-10, F2-06 | A |
 | TM-DEV-02 | E | Usar o passe offline de 72 h de um dispositivo roubado | Revogação do dispositivo, validade de 72 h, assinaturas rejeitadas após revogação | planeado | F1-13 | A |
 | TM-DEV-03 | I | Armazenamento de tokens no dispositivo | Keychain/Keystore (AppAuth); nenhum token em localStorage | planeado | F2-06 | M |
 

@@ -28,7 +28,7 @@ test("login, teams, team home, no tokens, logout", async ({ page }) => {
 
   const csp = (await page.request.get("/")).headers()["content-security-policy"];
   expect(csp).toContain("script-src 'self'");
-  expect(csp).not.toContain("unsafe-eval");
+  expect(csp).not.toContain("'unsafe-eval'");
   expect(csp).not.toContain("unsafe-inline");
 
   expect(await page.evaluate(() => document.cookie)).not.toContain("__Host-pitbox_session");
@@ -54,9 +54,17 @@ test("login, teams, team home, no tokens, logout", async ({ page }) => {
   await page.getByRole("button", { name: "Conta" }).click();
   await expect(page.getByRole("menuitem", { name: "Terminar sessão" })).toBeVisible();
   await page.getByRole("menuitem", { name: "Terminar sessão" }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await page.getByRole("button", { name: "Apagar dados e terminar sessão" }).click();
   await expect(page).toHaveURL(/\/login\?logged_out=1$/);
   await expect(page.getByRole("status")).toContainText("Sessão terminada.");
   expect(await page.evaluate(() => document.cookie)).not.toContain("__Host-pitbox_session");
+
+  // Logging in again immediately must reopen the local database without a transient
+  // VFS lock error left by the logout tab.
+  await page.getByRole("link", { name: "Entrar" }).click();
+  await expect(page).toHaveURL(/\/teams$/);
+  await expect(page.getByRole("link", { name: /Equipa Alpha/ })).toBeVisible();
 
   expect(consoleErrors).toEqual([]);
 });

@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { sessionQueryOptions } from "@/auth/session-query";
+import { sessionQueryOptions, useSession } from "@/auth/session-query";
+import { DatabaseGate } from "@/app/DatabaseGate";
 import { AppShell } from "@/shared/ui/AppShell";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -13,5 +14,16 @@ export const Route = createFileRoute("/_authenticated")({
       });
     }
   },
-  component: AppShell,
+  component: AuthenticatedLayout,
 });
+
+function AuthenticatedLayout() {
+  const session = useSession();
+  const userId = session.data?.authenticated ? session.data.user_id : undefined;
+  if (!userId) return null;
+  return (
+    <DatabaseGate userId={userId}>
+      <AppShell />
+    </DatabaseGate>
+  );
+}

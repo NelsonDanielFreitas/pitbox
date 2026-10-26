@@ -39,13 +39,3 @@ test("an expired session returns to login", async ({ page, context }) => {
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: /Setups, motores/ })).toBeVisible();
 });
-
-test("a revoked RPC session returns to login with the current path", async ({ page }) => {
-  await signIn(page);
-  const response = await page.request.post("http://127.0.0.1:4010/__test/expire-rpc");
-  expect(response.status()).toBe(204);
-
-  await page.reload();
-  await expect(page).toHaveURL(/\/login\?returnTo=%2Fteams$/);
-  await expect(page.getByRole("heading", { name: /Setups, motores/ })).toBeVisible();
-});

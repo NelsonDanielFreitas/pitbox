@@ -1,6 +1,7 @@
 import type { DbRequest, DbResponse, SqlParams, SqlStatement } from "./protocol";
 import {
   CorruptLocalDataError,
+  LocalConstraintError,
   LocalDatabaseBusyError,
   LocalDatabaseUnavailableError,
 } from "./errors";
@@ -59,6 +60,8 @@ function throwResponse(response: DbResponse): asserts response is Extract<DbResp
       throw new LocalDatabaseBusyError(response.error.message);
     case "corrupt":
       throw new CorruptLocalDataError(response.error.message);
+    case "constraint":
+      throw new LocalConstraintError(response.error.message);
     case "unavailable":
       throw new LocalDatabaseUnavailableError(response.error.message);
     default:
@@ -129,7 +132,15 @@ export async function query<T = Record<string, unknown>>(
   return (response.rows ?? []) as T[];
 }
 
-export async function transaction(statements: SqlStatement[]): Promise<void> {
-  const response = await send({ type: "transaction", statements });
+export async function transaction<T = Record<string, unknown>>(
+  statements: SqlStatement[],
+  options?: { requireRows?: boolean },
+): Promise<T[]> {
+  const response = await send({
+    type: "transaction",
+    statements,
+    requireRows: options?.requireRows,
+  });
   throwResponse(response);
+  return (response.rows ?? []) as T[];
 }

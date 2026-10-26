@@ -6,7 +6,7 @@ import { migrations } from "./index";
 export interface SqlExecutor {
   exec(sql: string, params?: SqlParams): Promise<void>;
   query<T = Record<string, unknown>>(sql: string, params?: SqlParams): Promise<T[]>;
-  transaction(statements: SqlStatement[]): Promise<void>;
+  transaction(statements: SqlStatement[]): Promise<unknown>;
 }
 
 interface AppliedMigration {

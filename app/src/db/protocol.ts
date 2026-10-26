@@ -5,7 +5,7 @@ export interface SqlStatement {
   params?: SqlParams;
 }
 
-export type DbErrorCode = "unavailable" | "busy" | "corrupt" | "internal";
+export type DbErrorCode = "unavailable" | "busy" | "corrupt" | "constraint" | "internal";
 
 export type DbRequest =
   | { id: number; type: "open"; userHash: string }
@@ -14,7 +14,12 @@ export type DbRequest =
   | { id: number; type: "delete"; userHash: string }
   | { id: number; type: "exec"; sql: string; params?: SqlParams }
   | { id: number; type: "query"; sql: string; params?: SqlParams }
-  | { id: number; type: "transaction"; statements: SqlStatement[] };
+  | {
+      id: number;
+      type: "transaction";
+      statements: SqlStatement[];
+      requireRows?: boolean;
+    };
 
 export type DbResponse =
   | { id: number; ok: true; rows?: Record<string, unknown>[] }

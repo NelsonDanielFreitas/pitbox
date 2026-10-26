@@ -60,5 +60,11 @@ test("login, teams, team home, no tokens, logout", async ({ page }) => {
   await expect(page.getByRole("status")).toContainText("Sessão terminada.");
   expect(await page.evaluate(() => document.cookie)).not.toContain("__Host-pitbox_session");
 
+  // Logging in again immediately must reopen the local database without a transient
+  // VFS lock error left by the logout tab.
+  await page.getByRole("link", { name: "Entrar" }).click();
+  await expect(page).toHaveURL(/\/teams$/);
+  await expect(page.getByRole("link", { name: /Equipa Alpha/ })).toBeVisible();
+
   expect(consoleErrors).toEqual([]);
 });

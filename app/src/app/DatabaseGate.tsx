@@ -11,10 +11,30 @@ import { ErrorState } from "@/shared/ui/ErrorState";
 import { isUnauthenticated } from "@/shared/api/errors";
 
 import { closeDatabase, deleteUserDatabase, openDatabase } from "@/db/client";
+import { CorruptLocalDataError } from "@/db/errors";
 import { subscribeToLogout } from "@/db/session-channel";
 import { bootstrapTeams, hasLocalTeams } from "@/sync/teams";
 
 type GateState = { status: "loading" } | { status: "ready" } | { status: "error" };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function openWithRetry(userId: string): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await openDatabase(userId);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof CorruptLocalDataError) throw error;
+      await sleep(Math.min(100 * 2 ** attempt, 1_000));
+    }
+  }
+  throw lastError;
+}
 
 export function DatabaseGate({ userId, children }: { userId: string; children: ReactNode }) {
   const { t } = useTranslation();
@@ -33,7 +53,7 @@ export function DatabaseGate({ userId, children }: { userId: string; children: R
 
     void (async () => {
       try {
-        await openDatabase(userId);
+        await openWithRetry(userId);
         try {
           const forceRefresh = new URLSearchParams(window.location.search).get("refresh") === "teams";
           await bootstrapTeams(forceRefresh);

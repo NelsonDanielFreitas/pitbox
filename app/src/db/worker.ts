@@ -22,7 +22,12 @@ let currentHash: string | undefined;
 function fail(code: DbErrorCode, error: unknown): never {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
-  const mapped: DbErrorCode = lower.includes("busy") || lower.includes("locked") ? "busy" : code;
+  const mapped: DbErrorCode =
+    lower.includes("busy") || lower.includes("locked")
+      ? "busy"
+      : (error as { code?: number } | null)?.code === SQLite.SQLITE_CONSTRAINT
+        ? "constraint"
+        : code;
   const wrapped = new Error(`${mapped}:${message}`) as Error & { code?: number };
   if (typeof (error as { code?: number } | null)?.code === "number") {
     wrapped.code = (error as { code: number }).code;
@@ -35,9 +40,15 @@ function responseError(error: unknown): { code: DbErrorCode; message: string } {
   const codeValue = (error as { code?: number } | null)?.code;
   const [candidate, ...rest] = message.split(":");
   const code: DbErrorCode =
-    candidate === "busy" || candidate === "corrupt" || candidate === "unavailable" || candidate === "internal"
-      ? candidate
-      : "internal";
+    codeValue === SQLite.SQLITE_CONSTRAINT
+      ? "constraint"
+      : candidate === "busy" ||
+          candidate === "corrupt" ||
+          candidate === "unavailable" ||
+          candidate === "constraint" ||
+          candidate === "internal"
+        ? candidate
+        : "internal";
   return {
     code,
     message: `${codeValue === undefined ? "" : `code ${codeValue}: `}${rest.length > 0 ? rest.join(":") : message}`,
@@ -226,11 +237,21 @@ function isBusy(error: unknown): boolean {
   );
 }
 
+function isClassified(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /^(busy|corrupt|unavailable|constraint|internal):/.test(error.message)
+  );
+}
+
 // OPFSCoopSyncVFS returns SQLITE_BUSY while it waits for an asynchronous Web Lock.
 // A transaction is retried whole (with rollback/backoff) instead of leaving the
 // caller with a half-applied write. There is deliberately no busy_timeout: its
 // synchronous wait blocks the async lock progress.
-async function withTransaction(statements: SqlStatement[]): Promise<void> {
+async function withTransaction(
+  statements: SqlStatement[],
+  requireRows = false,
+): Promise<Record<string, unknown>[]> {
   const deadline = Date.now() + 2_000;
   let lastError: unknown;
   for (let attempt = 0; attempt < 10 && Date.now() < deadline; attempt += 1) {
@@ -238,11 +259,15 @@ async function withTransaction(statements: SqlStatement[]): Promise<void> {
     try {
       await execRaw("BEGIN IMMEDIATE");
       began = true;
+      let rows: Record<string, unknown>[] = [];
       for (const statement of statements) {
-        await execRaw(statement.sql, statement.params);
+        rows = await queryRaw(statement.sql, statement.params);
+      }
+      if (requireRows && rows.length === 0) {
+        fail("constraint", new Error("transaction required at least one row"));
       }
       await execRaw("COMMIT");
-      return;
+      return rows;
     } catch (error) {
       lastError = error;
       if (began) {
@@ -252,7 +277,10 @@ async function withTransaction(statements: SqlStatement[]): Promise<void> {
           // The transaction may already have been rolled back by SQLite.
         }
       }
-      if (!isBusy(error)) fail("internal", error);
+      if (!isBusy(error)) {
+        if (isClassified(error)) throw error;
+        fail("internal", error);
+      }
       await new Promise((resolve) => setTimeout(resolve, Math.min(25 * 2 ** attempt, 250)));
     }
   }
@@ -280,8 +308,11 @@ async function handle(request: DbRequest): Promise<DbResponse> {
       case "query":
         return { id: request.id, ok: true, rows: await queryRaw(request.sql, request.params) };
       case "transaction":
-        await withTransaction(request.statements);
-        return { id: request.id, ok: true };
+        return {
+          id: request.id,
+          ok: true,
+          rows: await withTransaction(request.statements, request.requireRows),
+        };
     }
   } catch (error) {
     return { id: request.id, ok: false, error: responseError(error) };

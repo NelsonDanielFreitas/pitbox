@@ -19,7 +19,8 @@ describe("team home route", () => {
     expect(
       await screen.findByRole("link", { name: /tocar para mudar/ }),
     ).toBeVisible();
-    expect(screen.getByText("Início em preparação")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Garagem" })).toBeVisible();
+    expect(screen.getByText("Ainda não há material registado.")).toBeVisible();
   });
 
   it("returns not found for a team outside the user's list", async () => {

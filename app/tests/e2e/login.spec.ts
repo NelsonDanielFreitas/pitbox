@@ -22,7 +22,8 @@ test("login, teams, team home, no tokens, logout", async ({ page }) => {
   await page.getByRole("link", { name: /Equipa Alpha/ }).click();
   await expect(page).toHaveURL(/\/teams\/0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61$/);
   await expect(page.getByRole("link", { name: /tocar para mudar/ })).toBeVisible();
-  await expect(page.getByText("Início em preparação")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Garagem" })).toBeVisible();
+  await expect(page.getByText("Ainda não há material registado.")).toBeVisible();
   await page.getByRole("link", { name: /tocar para mudar/ }).click();
   await expect(page).toHaveURL(/\/teams$/);
 

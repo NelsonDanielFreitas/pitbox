@@ -12,6 +12,13 @@ export class LocalDatabaseBusyError extends Error {
   }
 }
 
+export class LocalConstraintError extends Error {
+  constructor(message = "local data constraint failed", options?: ErrorOptions) {
+    super(message, options);
+    this.name = "LocalConstraintError";
+  }
+}
+
 export class CorruptLocalDataError extends Error {
   constructor(message = "local data is corrupt", options?: ErrorOptions) {
     super(message, options);

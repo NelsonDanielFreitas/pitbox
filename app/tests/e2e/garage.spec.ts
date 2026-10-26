@@ -121,3 +121,30 @@ test("pilot reads the garage but cannot write", async ({ page }) => {
   await page.goto("/teams/0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d62/garage/cars/new");
   await expect(page.getByText("Não tens permissão para alterar a garagem.")).toBeVisible();
 });
+
+test("an edit from another tab shows the stale conflict", async ({ page, context }) => {
+  await signIn(page);
+  await openGarage(page);
+  await page.getByRole("link", { name: "Novo carro" }).first().click();
+  await page.getByLabel("Marca", { exact: true }).fill("Mugen");
+  await page.getByLabel("Modelo", { exact: true }).fill("MBX8");
+  await page.getByLabel("Alcunha").fill("Concorrência");
+  await page.getByRole("button", { name: "Guardar" }).click();
+  await expect(page).toHaveURL(new RegExp(`${teamUrl}/garage/cars/[0-9a-f-]+$`));
+  await page.getByRole("link", { name: "Editar" }).click();
+  const editUrl = page.url();
+
+  const second = await context.newPage();
+  await second.goto(editUrl);
+  await expect(second.getByRole("heading", { name: "Editar carro" })).toBeVisible();
+
+  await page.getByLabel("Alcunha").fill("A");
+  await page.getByRole("button", { name: "Guardar" }).click();
+  await expect(page).toHaveURL(new RegExp(`${teamUrl}/garage/cars/[0-9a-f-]+$`));
+
+  await second.getByLabel("Alcunha").fill("B");
+  await second.getByRole("button", { name: "Guardar" }).click();
+  await expect(
+    second.getByText("Este registo foi alterado noutra aba. Recarrega e tenta outra vez."),
+  ).toBeVisible();
+});

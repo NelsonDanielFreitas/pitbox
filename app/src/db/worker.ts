@@ -237,6 +237,13 @@ function isBusy(error: unknown): boolean {
   );
 }
 
+function isClassified(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /^(busy|corrupt|unavailable|constraint|internal):/.test(error.message)
+  );
+}
+
 // OPFSCoopSyncVFS returns SQLITE_BUSY while it waits for an asynchronous Web Lock.
 // A transaction is retried whole (with rollback/backoff) instead of leaving the
 // caller with a half-applied write. There is deliberately no busy_timeout: its
@@ -270,7 +277,10 @@ async function withTransaction(
           // The transaction may already have been rolled back by SQLite.
         }
       }
-      if (!isBusy(error)) fail("internal", error);
+      if (!isBusy(error)) {
+        if (isClassified(error)) throw error;
+        fail("internal", error);
+      }
       await new Promise((resolve) => setTimeout(resolve, Math.min(25 * 2 ** attempt, 250)));
     }
   }

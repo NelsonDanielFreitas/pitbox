@@ -1,9 +1,5 @@
 import { newId } from "@/shared/lib/id";
-import {
-  LocalConstraintError,
-  LocalDatabaseUnavailableError,
-  CorruptLocalDataError,
-} from "@/db/errors";
+import { LocalConstraintError, CorruptLocalDataError } from "@/db/errors";
 
 import type {
   Car,
@@ -766,11 +762,7 @@ export class LocalGarageRepository implements GarageRepository {
       await this.writeTx(statements, true);
     } catch (error) {
       if (error instanceof GarageConflictError) throw error;
-      if (
-        error instanceof LocalConstraintError ||
-        (error instanceof LocalDatabaseUnavailableError &&
-          /required at least one row/i.test(error.message))
-      ) {
+      if (error instanceof LocalConstraintError) {
         throw new GarageConflictError("mount", "engine or car already mounted", {
           cause: error,
         });

@@ -97,7 +97,8 @@ O pacote `wa-sqlite` do npm está em 1.0.0 (jan/2024). O repositório oficial es
 - O stock de peças é guardado em **centi** (`min_stock_centi`, `qty_delta_centi`), como no
   proto e no servidor. A migração local `0004` reconstrói `part`, `stock_movement` e
   `part_install` porque as tabelas antigas usavam `REAL` e estavam vazias; a conversão é feita
-  com `round(x * 100)` e testada com `PRAGMA foreign_key_check`.
+  com `round(x * 100)` e testada com `PRAGMA foreign_key_check`. A migração `0005`
+  acrescenta o índice `stock_movement (team_id, part_id)` usado pela agregação de stock.
 - `version` continua a representar a versão do servidor; a concorrência entre abas usa
   `local_rev`, que não vai para o sync.
 - `unit_cost_cents` permanece na base local, mas o F1-11 não o lê nem mostra; a regra de

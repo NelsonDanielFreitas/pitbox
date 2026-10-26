@@ -9,13 +9,16 @@ function baseCSP(): string {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
+    "worker-src 'self'",
     "frame-ancestors 'none'",
   ].join("; ");
 }
 
 export function securityHeaders(mode: "development" | "production"): Record<string, string> {
   const script =
-    mode === "development" ? `script-src 'self' 'nonce-${DEV_NONCE}'` : "script-src 'self'";
+    mode === "development"
+      ? `script-src 'self' 'nonce-${DEV_NONCE}' 'wasm-unsafe-eval'`
+      : "script-src 'self' 'wasm-unsafe-eval'";
   const style =
     mode === "development" ? `style-src 'self' 'nonce-${DEV_NONCE}'` : "style-src 'self'";
   const connect =

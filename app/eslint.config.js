@@ -71,8 +71,16 @@ export default tseslint.config(
   },
   {
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/i18n/**"],
+    ignores: ["src/db/**", "src/i18n/**"],
     rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "navigator",
+          property: "storage",
+          message: "Storage access belongs in src/db.",
+        },
+      ],
       "no-restricted-globals": [
         "error",
         {

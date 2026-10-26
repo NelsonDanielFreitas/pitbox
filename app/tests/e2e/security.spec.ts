@@ -25,7 +25,10 @@ test("login, teams and team home have no serious accessibility violations", asyn
   await signIn(page);
   await page.getByRole("button", { name: "Conta" }).click();
   await expectNoSeriousViolations(page);
-  await page.keyboard.press("Escape");
+  await page.getByRole("menuitem", { name: "Terminar sessão" }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await expectNoSeriousViolations(page);
+  await page.getByRole("button", { name: "Cancelar" }).click();
 
   await page.getByRole("link", { name: /Equipa Alpha/ }).click();
   await expect(page.getByRole("link", { name: /tocar para mudar/ })).toBeVisible();
@@ -38,4 +41,22 @@ test("an expired session returns to login", async ({ page, context }) => {
   await page.reload();
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: /Setups, motores/ })).toBeVisible();
+});
+
+test("a revoked RPC session returns to login when the cache is refreshed", async ({ page }) => {
+  await signIn(page);
+  const response = await page.request.post("http://127.0.0.1:4010/__test/expire-rpc");
+  expect(response.status()).toBe(204);
+
+  await page.goto("/teams?refresh=teams");
+  await expect(page).toHaveURL(/\/login\?returnTo=%2Fteams%3Frefresh%3Dteams$/);
+});
+
+test("a 503 keeps the cached teams instead of signing out", async ({ page }) => {
+  await signIn(page);
+  const response = await page.request.post("http://127.0.0.1:4010/__test/offline-rpc");
+  expect(response.status()).toBe(204);
+
+  await page.goto("/teams?refresh=teams");
+  await expect(page.getByRole("link", { name: /Equipa Alpha/ })).toBeVisible();
 });

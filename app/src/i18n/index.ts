@@ -43,12 +43,16 @@ void i18n.use(initReactI18next).init({
   initAsync: false,
 });
 
-document.documentElement.lang = i18n.language;
+if (typeof document !== "undefined") {
+  document.documentElement.lang = i18n.language;
+}
 
 export function setLocale(locale: Locale): void {
   void i18n.changeLanguage(locale);
   storeLocale(locale);
-  document.documentElement.lang = locale;
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale;
+  }
 }
 
 export { i18n };

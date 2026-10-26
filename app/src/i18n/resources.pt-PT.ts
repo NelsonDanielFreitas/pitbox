@@ -46,6 +46,7 @@ export const ptPT = {
     loading: "A preparar os dados locais…",
     errorTitle: "Não foi possível abrir a base local",
     errorBody: "Verifica o armazenamento do browser e tenta outra vez.",
+    clear: "Limpar dados locais",
   },
   errors: {
     title: "Algo correu mal",

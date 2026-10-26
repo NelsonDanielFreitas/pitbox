@@ -1,8 +1,13 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
+import { NotFound } from "@/app/routes/__root";
 import { teamsQueryOptions } from "@/features/teams/data/teams-query";
 import { TeamHomePage } from "@/features/teams/ui/TeamHomePage";
+import { ErrorState } from "@/shared/ui/ErrorState";
+import { Spinner } from "@/shared/ui/Spinner";
 
 const teamIdSchema = z.uuid();
 
@@ -13,20 +18,35 @@ export const Route = createFileRoute("/_authenticated/teams_/$teamId")({
       return parsed.success ? { teamId: parsed.data } : false;
     },
   },
-  loader: async ({ context, params }) => {
-    const teams = await context.queryClient.ensureQueryData(
-      teamsQueryOptions(context.teamsRepository),
-    );
-    const team = teams.find((candidate) => candidate.id === params.teamId);
-    if (!team) {
-      throw notFound();
-    }
-    return { team };
-  },
   component: TeamRoute,
 });
 
 function TeamRoute() {
-  const { team } = Route.useLoaderData();
+  const { teamId } = Route.useParams();
+  const { teamsRepository } = Route.useRouteContext();
+  const { t } = useTranslation();
+  const teams = useQuery(teamsQueryOptions(teamsRepository));
+
+  if (teams.isPending) {
+    return (
+      <div aria-busy="true" role="status" className="flex items-center gap-3 text-muted">
+        <Spinner />
+        <span>{t("teams.loading")}</span>
+      </div>
+    );
+  }
+
+  if (teams.isError) {
+    return (
+      <ErrorState
+        title={t("teams.errorTitle")}
+        body={t("teams.errorBody")}
+        onRetry={() => void teams.refetch()}
+      />
+    );
+  }
+
+  const team = teams.data.find((candidate) => candidate.id === teamId);
+  if (!team) return <NotFound />;
   return <TeamHomePage team={team} />;
 }

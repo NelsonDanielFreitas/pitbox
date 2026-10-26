@@ -8,7 +8,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
 
-vi.mock("@/db/DatabaseGate", () => ({
+vi.mock("@/app/DatabaseGate", () => ({
   DatabaseGate: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock("@/db/client", () => ({

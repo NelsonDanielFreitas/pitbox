@@ -46,6 +46,7 @@ export const en = {
     loading: "Preparing local data…",
     errorTitle: "Could not open the local database",
     errorBody: "Check browser storage and try again.",
+    clear: "Clear local data",
   },
   errors: {
     title: "Something went wrong",

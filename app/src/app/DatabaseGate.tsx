@@ -1,14 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { rememberUserId } from "@/auth/local-data";
 import { sessionQueryKey } from "@/auth/session-query";
 import { Spinner } from "@/shared/ui/Spinner";
 import { ErrorState } from "@/shared/ui/ErrorState";
 
-import { closeDatabase, openDatabase } from "./client";
-import { subscribeToLogout } from "./session-channel";
+import { isUnauthenticated } from "@/shared/api/errors";
+
+import { closeDatabase, deleteUserDatabase, openDatabase } from "@/db/client";
+import { subscribeToLogout } from "@/db/session-channel";
 import { bootstrapTeams, hasLocalTeams } from "@/sync/teams";
 
 type GateState = { status: "loading" } | { status: "ready" } | { status: "error" };
@@ -18,27 +21,49 @@ export function DatabaseGate({ userId, children }: { userId: string; children: R
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [state, setState] = useState<GateState>({ status: "loading" });
+  const previousUserId = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
+    rememberUserId(userId);
+    if (previousUserId.current !== undefined && previousUserId.current !== userId) {
+      queryClient.clear();
+    }
+    previousUserId.current = userId;
+
     void (async () => {
       try {
         await openDatabase(userId);
         try {
-          await bootstrapTeams();
+          const forceRefresh = new URLSearchParams(window.location.search).get("refresh") === "teams";
+          await bootstrapTeams(forceRefresh);
         } catch (error) {
+          if (isUnauthenticated(error)) {
+            queryClient.removeQueries({ queryKey: sessionQueryKey });
+            queryClient.setQueryData(sessionQueryKey, { authenticated: false });
+            const returnTo = `${window.location.pathname}${window.location.search}`;
+            void navigate({ to: "/login", search: { returnTo } });
+            return;
+          }
           if (!(await hasLocalTeams())) throw error;
         }
         await queryClient.invalidateQueries({ queryKey: ["teams", "mine"] });
         if (active) setState({ status: "ready" });
-      } catch {
+      } catch (error) {
+        if (isUnauthenticated(error)) {
+          queryClient.removeQueries({ queryKey: sessionQueryKey });
+          queryClient.setQueryData(sessionQueryKey, { authenticated: false });
+          const returnTo = `${window.location.pathname}${window.location.search}`;
+          void navigate({ to: "/login", search: { returnTo } });
+          return;
+        }
         if (active) setState({ status: "error" });
       }
     })();
     return () => {
       active = false;
     };
-  }, [queryClient, userId]);
+  }, [navigate, queryClient, userId]);
 
   useEffect(
     () =>
@@ -67,6 +92,11 @@ export function DatabaseGate({ userId, children }: { userId: string; children: R
           title={t("local.errorTitle")}
           body={t("local.errorBody")}
           onRetry={() => window.location.reload()}
+          onClear={() =>
+            void deleteUserDatabase(userId)
+              .then(() => window.location.reload())
+              .catch(() => undefined)
+          }
         />
       </main>
     );

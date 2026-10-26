@@ -2,8 +2,8 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { clearLocalData, lastKnownUserId } from "@/auth/local-data";
 import { useSession } from "@/auth/session-query";
-import { clearLocalUserData } from "@/db/lifecycle";
 
 import { Alert } from "./Alert";
 import { Button } from "./Button";
@@ -28,8 +28,9 @@ export function AccountMenu() {
     setPending(true);
     setError(false);
     try {
-      if (session.data?.authenticated) {
-        await clearLocalUserData(session.data.user_id);
+      const userId = session.data?.authenticated ? session.data.user_id : lastKnownUserId();
+      if (userId) {
+        await clearLocalData(userId);
       }
       setConfirming(false);
       logoutForm.current?.requestSubmit();

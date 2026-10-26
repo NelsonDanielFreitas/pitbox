@@ -8,6 +8,7 @@ import {
 let worker: Worker | undefined;
 let nextId = 1;
 let openedHash: string | undefined;
+let opening: Promise<void> | undefined;
 const pending = new Map<
   number,
   { resolve: (response: DbResponse) => void; reject: (error: Error) => void }
@@ -74,12 +75,25 @@ export async function hashUserId(userId: string): Promise<string> {
 export async function openDatabase(userId: string): Promise<void> {
   const userHash = await hashUserId(userId);
   if (openedHash === userHash) return;
-  const response = await send({ type: "open", userHash });
-  throwResponse(response);
-  openedHash = userHash;
+  if (opening) {
+    await opening;
+    if (openedHash === userHash) return;
+  }
+  const operation = (async () => {
+    const response = await send({ type: "open", userHash });
+    throwResponse(response);
+    openedHash = userHash;
+  })();
+  opening = operation;
+  try {
+    await operation;
+  } finally {
+    if (opening === operation) opening = undefined;
+  }
 }
 
 export async function closeDatabase(): Promise<void> {
+  if (opening) await opening.catch(() => undefined);
   if (!worker) {
     openedHash = undefined;
     return;

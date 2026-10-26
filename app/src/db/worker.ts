@@ -153,16 +153,21 @@ async function openDatabase(hash: string): Promise<void> {
     if (integrity[0]?.quick_check !== "ok") {
       fail("corrupt", new Error("quick_check failed"));
     }
-    await runMigrations({
-      exec: execRaw,
-      query: <T = Record<string, unknown>>(sql: string, params?: SqlParams) =>
-        queryRaw(sql, params) as Promise<T[]>,
-      transaction: withTransaction,
+    await navigator.locks.request(`pitbox-migrate-${hash}`, { mode: "exclusive" }, async () => {
+      await runMigrations({
+        exec: execRaw,
+        query: <T = Record<string, unknown>>(sql: string, params?: SqlParams) =>
+          queryRaw(sql, params) as Promise<T[]>,
+        transaction: withTransaction,
+      });
     });
   } catch (error) {
     const detail = vfs?.lastError;
     const suffix = detail instanceof Error ? ` (${detail.name}: ${detail.message})` : "";
     await closeDatabase();
+    if (error instanceof Error && error.message.startsWith("corrupt:")) {
+      throw error;
+    }
     fail("unavailable", new Error(`${error instanceof Error ? error.message : String(error)}${suffix}`));
   }
 }
@@ -179,15 +184,36 @@ async function deleteUserDatabase(hash: string): Promise<void> {
   await closeDatabase();
   const root = await rootDirectory();
   const pitbox = await root.getDirectoryHandle(ROOT, { create: true });
+  const lockName = `ahp:/${ROOT}/${hash}/${DB_FILE}`;
   try {
     await navigator.locks.request(
-      `pitbox-db-${hash}`,
+      lockName,
       { mode: "exclusive", signal: AbortSignal.timeout(5000) },
       async () => {
-        await pitbox.removeEntry(hash, { recursive: true });
+        const deadline = Date.now() + 3_000;
+        let delay = 25;
+        for (;;) {
+          try {
+            await pitbox.removeEntry(hash, { recursive: true });
+            return;
+          } catch (error) {
+            const name = error instanceof DOMException ? error.name : "";
+            if (
+              Date.now() >= deadline ||
+              (name !== "NoModificationAllowedError" &&
+                name !== "InvalidModificationError" &&
+                name !== "NotFoundError")
+            ) {
+              throw error;
+            }
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            delay = Math.min(delay * 2, 250);
+          }
+        }
       },
     );
   } catch (error) {
+    if (error instanceof DOMException && error.name === "NotFoundError") return;
     fail("busy", error);
   }
 }
@@ -262,6 +288,19 @@ async function handle(request: DbRequest): Promise<DbResponse> {
   }
 }
 
+let tail: Promise<void> = Promise.resolve();
+
+// JavaScript async functions are not a mutex: every await yields. The worker has one
+// SQLite connection, so all messages must run one at a time. A promise chain is the
+// mutex; otherwise a query can run inside another request's transaction.
 self.onmessage = (event: MessageEvent<DbRequest>) => {
-  void handle(event.data).then((response) => self.postMessage(response));
+  const request = event.data;
+  tail = tail
+    .then(() => handle(request))
+    .then((response) => {
+      self.postMessage(response);
+    })
+    .catch((error: unknown) => {
+      self.postMessage({ id: request.id, ok: false, error: responseError(error) });
+    });
 };

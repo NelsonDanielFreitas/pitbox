@@ -126,6 +126,38 @@ services:
       timeout: 5s
       retries: 10
 
+  # ----------------------------------------------------------------- Mailpit
+  # Email transacional local (F1-03e). Só o UI/API é publicado; o SMTP fica na rede
+  # interna. As credenciais SMTP e UI são separadas e vêm do .env.
+  mailpit:
+    <<: *hardening
+    image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    environment:
+      MP_DATABASE: /tmp/mailpit.db
+      MP_SMTP_AUTH: "${MAILPIT_SMTP_USERNAME:?corre 'make init'}:${MAILPIT_SMTP_PASSWORD:?corre 'make init'}"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_UI_AUTH: "${MAILPIT_UI_USERNAME:?corre 'make init'}:${MAILPIT_UI_PASSWORD:?corre 'make init'}"
+      MP_MAX_MESSAGES: "200"
+      MP_MAX_AGE: "24h"
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    expose:
+      - "1025"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 15s
+      start_period: 10s
+      start_interval: 1s
+      timeout: 5s
+      retries: 6
+
   # ----------------------------------------------------------------- Zitadel
   # Login v2 é obrigatório nesta versão: contentor próprio (zitadel-login) e um
   # proxy que reparte por caminho na mesma porta (8080 no anfitrião).
@@ -205,6 +237,11 @@ services:
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
       ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
       ZITADEL_SESSION_COOKIE_SECRET: ${ZITADEL_LOGIN_COOKIE_SECRET:?}
+      # Sem isto, o registo do login v2 cria a conta sem enviar nem exigir o código de
+      # verificação. O BFF recusa o login (email_verified=false), mas não há email para
+      # abrir. O login v2 passa a enviar o código e a exigir a verificação antes de
+      # concluir o pedido de autorização.
+      EMAIL_VERIFICATION: "true"
       CUSTOM_REQUEST_HEADERS: Host:localhost:${ZITADEL_PORT:-8080},X-Forwarded-Proto:http
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:ro

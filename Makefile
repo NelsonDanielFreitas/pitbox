@@ -46,11 +46,18 @@ init: ## Cria deploy/compose/.env com segredos aleatórios; acrescenta as chaves
 	add S3_ACCESS_KEY "$$(openssl rand -hex 10)"; \
 	add S3_SECRET_KEY "$$(openssl rand -hex 24)"; \
 	add PITBOX_AUTH_KEYS "k1:$$(openssl rand -base64 32)"; \
+	add MAILPIT_SMTP_USERNAME "pitbox-smtp"; \
+	add MAILPIT_SMTP_PASSWORD "$$(openssl rand -hex 24)"; \
+	add MAILPIT_UI_USERNAME "pitbox-ui"; \
+	add MAILPIT_UI_PASSWORD "$$(openssl rand -hex 24)"; \
 	echo "$(ENV_FILE): permissões 600, fora do Git."
 
 up: ## Levanta todo o ambiente local e espera pelos health checks
 	@test -f $(ENV_FILE) || { echo "Falta $(ENV_FILE): corre 'make init'."; exit 1; }
 	$(COMPOSE) up -d --wait
+	# traefik.yml é estático e bind-mounted; um up normal não o recarrega. Recria só o
+	# proxy para aplicar access logs/definições estáticas, sem tocar nos dados.
+	$(COMPOSE) up -d --wait --force-recreate zitadel-proxy
 
 down: ## Para os contentores (mantém os volumes)
 	$(COMPOSE) down
@@ -124,7 +131,7 @@ test-scripts: ## Testes dos scripts Python (Zitadel falso, sem Docker)
 app-install: ## Instala as dependências da app
 	cd app && pnpm install --frozen-lockfile
 
-app-dev: ## Corre o Vite em 127.0.0.1:5173 (proxy para a API)
+app-dev: ## Corre o Vite em localhost:5173 (proxy para a API; não uses 127.0.0.1)
 	cd app && pnpm dev
 
 app-lint: ## ESLint da app
@@ -165,7 +172,7 @@ zitadel-provision: ## Projeto, app OIDC, tempos dos tokens e política de login 
 openfga-provision: ## Cria a store e o modelo OpenFGA local e guarda os ids no .env (idempotente; precisa de make up)
 	python3 -I scripts/openfga-provision.py
 
-smoke-auth: ## Prova o login ponta a ponta contra o Zitadel local, sem browser (precisa de make up e make zitadel-provision)
+smoke-auth: ## Prova o login, registo e verificação contra o Zitadel/Mailpit locais (precisa de make up e make zitadel-provision)
 	python3 -I scripts/auth-smoke.py
 
 smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)

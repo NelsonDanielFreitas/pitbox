@@ -17,4 +17,13 @@ api:
 log:
   level: INFO
 
-accessLog: {}
+# O login v2 envia códigos de uso único em query strings. O formato JSON + drop de
+# RequestPath/RequestLine/queryParameters impede que fiquem em `docker compose logs`.
+accessLog:
+  format: json
+  fields:
+    names:
+      RequestPath: drop
+      RequestLine: drop
+    queryParameters:
+      defaultMode: drop

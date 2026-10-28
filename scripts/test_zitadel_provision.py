@@ -30,6 +30,44 @@ class FakeState:
         self.oidc = {"accessTokenLifetime": "43200s", "idTokenLifetime": "43200s",
                      "refreshTokenIdleExpiration": "2592000s", "refreshTokenExpiration": "7776000s"}
         self.factors = ["SECOND_FACTOR_TYPE_OTP", "SECOND_FACTOR_TYPE_OTP_SMS", "SECOND_FACTOR_TYPE_OTP_EMAIL"]
+        self.login_policy = {
+            "allowUsernamePassword": True,
+            "allowRegister": False,
+            "allowExternalIdp": True,
+            "forceMfa": False,
+            "passwordlessType": "PASSWORDLESS_TYPE_NOT_ALLOWED",
+            "hidePasswordReset": False,
+            "ignoreUnknownUsernames": False,
+            "defaultRedirectUri": "",
+            "passwordCheckLifetime": "86400s",
+            "externalLoginCheckLifetime": "86400s",
+            "mfaInitSkipLifetime": "2592000s",
+            "secondFactorCheckLifetime": "64800s",
+            "multiFactorCheckLifetime": "43200s",
+            "allowDomainDiscovery": True,
+            "disableLoginWithEmail": False,
+            "disableLoginWithPhone": False,
+            "forceMfaLocalOnly": False,
+        }
+        self.complexity = {"minLength": 8, "hasUppercase": True, "hasLowercase": True,
+                           "hasNumber": True, "hasSymbol": True}
+        self.lockout = {"maxPasswordAttempts": 10, "maxOtpAttempts": 10}
+        self.generators = {
+            "SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE": {
+                "generatorType": "SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE", "length": 6,
+                "expiry": "3600s", "includeLowerLetters": False, "includeUpperLetters": True,
+                "includeDigits": True, "includeSymbols": False,
+            },
+            "SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE": {
+                "generatorType": "SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE", "length": 6,
+                "expiry": "3600s", "includeLowerLetters": False, "includeUpperLetters": True,
+                "includeDigits": True, "includeSymbols": False,
+            },
+        }
+        self.language = "en"
+        self.texts = {}
+        self.smtp = []
+        self.smtp_password = None
         self.projects = []
         self.apps = []
 
@@ -80,6 +118,77 @@ def make_handler(st: FakeState):
             if path.startswith("/admin/v1/policies/login/second_factors/") and method == "DELETE":
                 st.calls.append((method, path))
                 st.factors.remove(path.rsplit("/", 1)[1])
+                return self._send({})
+            if path == "/admin/v1/policies/login":
+                if method == "GET":
+                    return self._send({"policy": st.login_policy})
+                st.calls.append((method, path))
+                st.login_policy = body
+                return self._send({})
+            if path == "/admin/v1/policies/password/complexity":
+                if method == "GET":
+                    return self._send({"policy": st.complexity})
+                st.calls.append((method, path))
+                st.complexity = body
+                return self._send({})
+            if path in ("/admin/v1/policies/lockout", "/admin/v1/policies/password/lockout"):
+                if method == "GET":
+                    return self._send({"policy": st.lockout})
+                st.calls.append((method, path))
+                st.lockout = body
+                return self._send({})
+            if path.startswith("/admin/v1/secretgenerators/"):
+                kind = path.rsplit("/", 1)[1]
+                if method == "GET":
+                    return self._send({"secretGenerator": st.generators[kind]})
+                st.calls.append((method, path))
+                st.generators[kind] = body
+                return self._send({})
+            if path == "/admin/v1/languages/default":
+                return self._send({"language": st.language})
+            if path == "/admin/v1/languages/default/pt" and method == "PUT":
+                st.calls.append((method, path))
+                st.language = "pt"
+                return self._send({})
+            if path.startswith("/admin/v1/text/message/"):
+                parts = path.split("/")
+                kind, language = parts[-2], parts[-1]
+                key = f"{kind}:{language}"
+                if method == "GET":
+                    if key not in st.texts:
+                        return self._send({"code": 5}, 404)
+                    return self._send({"customText": st.texts[key]})
+                st.calls.append((method, path))
+                st.texts[key] = body
+                return self._send({})
+            if path == "/admin/v1/email/_search":
+                return self._send({"result": st.smtp})
+            if path == "/admin/v1/email/smtp" and method == "POST":
+                st.calls.append((method, path))
+                password = body.get("plain", {}).get("password")
+                st.smtp_password = password
+                provider = {
+                    "id": "smtp1", "state": "EMAIL_PROVIDER_STATE_INACTIVE",
+                    "description": body.get("description", ""),
+                    "smtp": {k: body[k] for k in
+                             ("senderAddress", "senderName", "tls", "host", "user", "replyToAddress")},
+                }
+                st.smtp = [provider]
+                return self._send({"details": {}, "id": "smtp1"})
+            if path.startswith("/admin/v1/email/") and path.endswith("/_activate"):
+                st.calls.append((method, path))
+                st.smtp[0]["state"] = "EMAIL_PROVIDER_ACTIVE"
+                return self._send({})
+            if path.startswith("/admin/v1/email/smtp/") and path.endswith("/password"):
+                st.calls.append((method, path))
+                st.smtp_password = body.get("password")
+                return self._send({})
+            if path.startswith("/admin/v1/email/smtp/") and method == "PUT":
+                st.calls.append((method, path))
+                provider = st.smtp[0]
+                provider["smtp"] = {k: body[k] for k in
+                                    ("senderAddress", "senderName", "tls", "host", "user", "replyToAddress")}
+                st.smtp_password = body.get("plain", {}).get("password", st.smtp_password)
                 return self._send({})
             if path == "/management/v1/orgs/me":
                 return self._send({"org": {"id": "org1"}})
@@ -132,24 +241,45 @@ class ProvisionTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.env = Path(self.tmp.name) / ".env"
-        self.env.write_text("# nota\nVALKEY_PASSWORD=abc\nOUTRA=1\n")
+        self.env.write_text("# nota\nVALKEY_PASSWORD=abc\nOUTRA=1\nMAILPIT_SMTP_USERNAME=pitbox-smtp\nMAILPIT_SMTP_PASSWORD=segredo-smtp\n")
 
     def run_once(self, **kw):
         out = io.StringIO()
         with redirect_stdout(out):
-            prov.run(self.base, "http://localhost:8081", PAT, self.env, kw.get("rotate", False), log=print)
+            prov.run(self.base, "http://localhost:8081", PAT, self.env, kw.get("rotate", False),
+                     log=print, rotate_smtp_password=kw.get("smtp_rotate", False))
         return out.getvalue()
 
     def test_first_run_reaches_the_desired_state(self):
         out = self.run_once()
         self.assertEqual(self.state.oidc, {k: f"{v}s" for k, v in prov.OIDC_SETTINGS.items()})
         self.assertEqual(self.state.factors, ["SECOND_FACTOR_TYPE_OTP"])
+        self.assertEqual(self.state.login_policy["passwordCheckLifetime"], "86400s")
+        for key in prov.LOGIN_POLICY_DURATIONS:
+            self.assertTrue(self.state.login_policy[key].endswith("s"))
+            self.assertNotEqual(self.state.login_policy[key], "0s")
         self.assertEqual(len(self.state.projects), 1)
         cfg = self.state.apps[0]["oidcConfiguration"]
         self.assertEqual(prov.config_drift(cfg, prov.desired_oidc_config("http://localhost:8081")), [])
         self.assertEqual(cfg["accessTokenType"], "OIDC_TOKEN_TYPE_BEARER")  # opaco
         self.assertEqual(self.state.webkeys[-1]["state"], "STATE_ACTIVE")
         self.assertIn("ecdsa", self.state.webkeys[-1])
+        self.assertTrue(self.state.login_policy["allowRegister"])
+        self.assertTrue(self.state.login_policy["ignoreUnknownUsernames"])
+        self.assertFalse(self.state.login_policy["allowExternalIdp"])
+        self.assertTrue(self.state.login_policy["disableLoginWithPhone"])
+        self.assertEqual(self.state.login_policy["passwordlessType"], "PASSWORDLESS_TYPE_ALLOWED")
+        self.assertEqual(self.state.complexity["minLength"], 12)
+        self.assertFalse(any(self.state.complexity[k] for k in ("hasUppercase", "hasLowercase", "hasNumber", "hasSymbol")))
+        self.assertEqual(self.state.lockout["maxPasswordAttempts"], 0)
+        self.assertEqual(self.state.lockout["maxOtpAttempts"], 10)
+        self.assertEqual(self.state.language, "pt")
+        self.assertEqual(self.state.generators["SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE"]["expiry"], "1800s")
+        self.assertEqual(self.state.generators["SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE"]["expiry"], "900s")
+        self.assertEqual(self.state.smtp[0]["state"], "EMAIL_PROVIDER_ACTIVE")
+        self.assertEqual(self.state.smtp_password, "segredo-smtp")
+        self.assertIn("verifyemail:pt", self.state.texts)
+        self.assertIsNotNone(self.state.texts["verifyemail:pt"].get("text"))
         env = prov.parse_env(self.env.read_text())
         self.assertEqual(env["PITBOX_OIDC_CLIENT_ID"], "cid")
         self.assertEqual(env["PITBOX_OIDC_CLIENT_SECRET"], SECRET)
@@ -179,9 +309,21 @@ class ProvisionTest(unittest.TestCase):
 
     def test_missing_secret_is_regenerated_and_rotation_is_explicit(self):
         self.run_once()
-        self.env.write_text("OUTRA=1\n")
+        self.env.write_text("OUTRA=1\nMAILPIT_SMTP_USERNAME=pitbox-smtp\nMAILPIT_SMTP_PASSWORD=segredo-smtp\n")
         self.run_once()
         self.assertEqual(prov.parse_env(self.env.read_text())["PITBOX_OIDC_CLIENT_SECRET"], SECRET + "-novo")
+
+    def test_smtp_password_rotation_is_explicit(self):
+        self.run_once()
+        old = prov.parse_env(self.env.read_text())["MAILPIT_SMTP_PASSWORD"]
+        self.state.calls.clear()
+        out = self.run_once(smtp_rotate=True)
+        new = prov.parse_env(self.env.read_text())["MAILPIT_SMTP_PASSWORD"]
+        self.assertNotEqual(new, old)
+        self.assertEqual(self.state.smtp_password, new)
+        self.assertTrue(any(c[1].endswith("/password") for c in self.state.calls))
+        self.assertNotIn(old, out)
+        self.assertNotIn(new, out)
 
     def test_a_remote_host_is_refused(self):
         with self.assertRaises(prov.ProvisionError):

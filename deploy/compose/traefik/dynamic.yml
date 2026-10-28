@@ -15,6 +15,16 @@ http:
       service: zitadel-login
       priority: 250
 
+    # Só as submissões de login (server actions do Next.js) são limitadas. GET,
+    # RSC e /_next/ não gastam quota. `/api` não é usado pelo login v2 para
+    # password; o contentor fala com o Zitadel directamente.
+    zitadel-login-post:
+      rule: PathPrefix(`/ui/v2/login`) && Method(`POST`)
+      entryPoints: [web]
+      middlewares: [zitadel-login-rate]
+      service: zitadel-login
+      priority: 300
+
     zitadel-api-alias:
       rule: PathPrefix(`/api`)
       entryPoints: [web]
@@ -29,6 +39,12 @@ http:
       priority: 100
 
   middlewares:
+    zitadel-login-rate:
+      rateLimit:
+        average: 10
+        burst: 10
+        period: 1m
+
     zitadel-root-rewrite:
       replacePath:
         path: /ui/v2/login/

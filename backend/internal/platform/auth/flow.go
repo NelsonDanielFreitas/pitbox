@@ -26,6 +26,7 @@ const (
 	CallbackPath            = "/auth/callback"
 	LogoutPath              = "/auth/logout"
 	SignedOutPath           = "/auth/signed-out"
+	ConfirmEmailPath        = "/confirm-email"
 	SessionPath             = "/auth/session"
 	SessionsPath            = "/auth/sessions"
 	SessionRefPath          = "/auth/sessions/{ref}"
@@ -178,6 +179,13 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 			h.refuseUnauthenticated(ctx, "callback_replay_signed_in")
 			return
 		}
+		_, cookieErr := r.Cookie(LoginCookieName)
+		h.Log.WarnContext(ctx, "login callback refused",
+			slog.String("reason", "no_login_state"),
+			slog.Bool("cookie_present", cookieErr == nil),
+			slog.String("host", r.Host),
+			slog.String("sec_fetch_site", r.Header.Get("Sec-Fetch-Site")),
+		)
 		h.refuseUnauthenticated(ctx, "no_login_state")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
@@ -188,6 +196,12 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 			h.refuseUnauthenticated(ctx, "callback_replay_signed_in")
 			return
 		}
+		h.Log.WarnContext(ctx, "login callback refused",
+			slog.String("reason", "state_mismatch"),
+			slog.Bool("cookie_present", true),
+			slog.String("host", r.Host),
+			slog.String("sec_fetch_site", r.Header.Get("Sec-Fetch-Site")),
+		)
 		h.refuseUnauthenticated(ctx, "state_mismatch")
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
@@ -224,6 +238,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	claims, err := h.verifyIDToken(exCtx, prov, tok, st.Nonce)
 	if err != nil {
+		h.discardTokens(ctx, tok)
 		h.failLogin(ctx, r, err.Error(), "")
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
@@ -232,6 +247,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	// Step-up: reauthenticate an existing session. No userinfo, no new session, no login audit.
 	if st.StepUp {
 		if err := h.stepUp(ctx, w, r, st, claims, tok); err != nil {
+			h.discardTokens(ctx, tok)
 			switch {
 			case errors.Is(err, ErrUnauthenticated):
 				fail(w, http.StatusUnauthorized, msgUnauthenticated)
@@ -252,7 +268,12 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.userInfo(exCtx, prov, tok, claims.Subject)
 	if err != nil {
 		reason := err.Error()
+		h.discardTokens(ctx, tok)
 		h.failLogin(ctx, r, reason, claims.Subject)
+		if reason == "email_not_verified" {
+			h.redirectConfirmEmail(w, r, st.ReturnTo)
+			return
+		}
 		if reason == "userinfo_failed" {
 			fail(w, http.StatusServiceUnavailable, msgUnavailable)
 			return
@@ -271,14 +292,17 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	userID, err := h.Users.ResolveLogin(ctx, claims.Subject, claims.Email, claims.Name)
 	switch {
 	case errors.Is(err, ErrEmailInUse):
+		h.discardTokens(ctx, tok)
 		h.failLogin(ctx, r, "email_in_use", claims.Subject)
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
 	case errors.Is(err, ErrAccountDeleted):
+		h.discardTokens(ctx, tok)
 		h.failLogin(ctx, r, "account_deleted", claims.Subject)
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
 	case err != nil:
+		h.discardTokens(ctx, tok)
 		h.Log.ErrorContext(ctx, "resolve login", slog.String("reason", "directory"))
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
 		return
@@ -289,11 +313,13 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	// session so a password-only login is never accepted for an owner.
 	isOwner, err := h.Users.IsOwner(ctx, userID)
 	if err != nil {
+		h.discardTokens(ctx, tok)
 		h.Log.ErrorContext(ctx, "check owner", slog.String("reason", "directory"))
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
 		return
 	}
 	if isOwner && !principal.IsStrongFactor(claims.AMR) {
+		h.discardTokens(ctx, tok)
 		h.failLogin(ctx, r, "owner_requires_mfa", claims.Subject)
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
@@ -318,6 +344,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		UserAgent: meta.UserAgent, IP: sessIP,
 	})
 	if err != nil {
+		h.discardTokens(ctx, tok)
 		h.Log.ErrorContext(ctx, "create session", slog.String("reason", "store"))
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
 		return
@@ -332,6 +359,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		if gerr == nil {
 			_ = h.Store.Delete(ctx, s)
 		}
+		h.discardTokens(ctx, tok)
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
 		return
 	}
@@ -562,6 +590,30 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	// would clear the BFF cookie but stay on /teams without ending the Zitadel SSO
 	// session. A 200 page with a meta refresh is a new navigation and is allowed.
 	refreshPage(w, redirect)
+}
+
+// discardTokens revokes a refresh token that will not be stored in a session. It is
+// best effort: a failure is logged without the token and never changes the login outcome.
+func (h *Handler) discardTokens(ctx context.Context, tok *oauth2.Token) {
+	if tok == nil || tok.RefreshToken == "" {
+		return
+	}
+	if err := h.revoke(ctx, tok.RefreshToken); err != nil {
+		h.Log.WarnContext(ctx, "discard refresh token", slog.String("reason", "revoke"))
+	}
+}
+
+// redirectConfirmEmail sends the browser to an app page that explains how to verify the
+// email. The callback already proved possession of the IdP session; no personal data is
+// included and no BFF session is created.
+func (h *Handler) redirectConfirmEmail(w http.ResponseWriter, r *http.Request, returnTo string) {
+	target := h.PublicURL + ConfirmEmailPath
+	if safe, ok := SafeReturnTo(returnTo); ok {
+		target += "?return_to=" + url.QueryEscape(safe)
+	}
+	noStore(w)
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }
 
 // endSessionURL is where the identity provider ends its own session. id_token_hint is

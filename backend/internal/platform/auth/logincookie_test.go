@@ -54,7 +54,7 @@ func TestNewLoginStateIsRandom(t *testing.T) {
 	if len(a.Verifier) < 43 || len(a.Verifier) > 128 { // RFC 7636 §4.1
 		t.Errorf("verifier length %d outside 43..128", len(a.Verifier))
 	}
-	if !a.Expires.Equal(t0.Add(10 * time.Minute)) {
+	if !a.Expires.Equal(t0.Add(30 * time.Minute)) {
 		t.Errorf("expires = %s", a.Expires)
 	}
 }
@@ -75,7 +75,7 @@ func TestLoginCookieAttributes(t *testing.T) {
 	}
 	ck := cookies[0]
 	if ck.Name != "__Host-pitbox_login" || !ck.Secure || !ck.HttpOnly || ck.SameSite != http.SameSiteLaxMode ||
-		ck.Path != "/" || ck.Domain != "" || ck.MaxAge != 600 {
+		ck.Path != "/" || ck.Domain != "" || ck.MaxAge != 1800 {
 		t.Errorf("unexpected cookie attributes: %+v", ck)
 	}
 	for _, secret := range []string{st.State, st.Nonce, st.Verifier, "equipas"} {

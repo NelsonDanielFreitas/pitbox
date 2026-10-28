@@ -14,7 +14,10 @@ Faz o que o browser faria, passo a passo, e confirma cada passo:
      a API renova (a geração da sessão no Valkey sobe) sem pedir novo login; depois desativa o
      utilizador e confirma que o refresh seguinte falha e a sessão acaba (UNAUTHENTICATED);
  10. auditoria na base (login, logout, falhas, sessão revogada), nada de segredos nos logs, nada
-     do valor do cookie no Valkey; repõe os tempos dos tokens e apaga o utilizador de teste.
+     do valor do cookie no Valkey; repõe os tempos dos tokens e apaga os utilizadores de teste;
+ 11. registo sem email verificado, leitura do link no Mailpit, página `/confirm-email`, verificação
+     do email e login; recuperação de palavra-passe; 10 falhas sem lockout; 11 POST ao login v2
+     do mesmo IP -> 429; códigos fora dos access logs.
 
 Usa o PAT do login-client (só sessões) para o login e o do provisionamento só para criar e apagar
 o utilizador de teste. Nenhum PAT nem palavra-passe é impresso. Só biblioteca padrão.
@@ -22,6 +25,8 @@ o utilizador de teste. Nenhum PAT nem palavra-passe é impresso. Só biblioteca 
 import base64
 import html
 import http.client
+from email import policy
+from email.parser import BytesParser
 import importlib.util
 import json
 import os
@@ -96,6 +101,64 @@ def cookies_of(headers) -> dict:
 
 def cookie_header(**kw) -> str:
     return "; ".join(f"{k}={v}" for k, v in kw.items())
+def mailpit_headers(env: dict) -> dict:
+    user = env.get("MAILPIT_UI_USERNAME", "")
+    password = env.get("MAILPIT_UI_PASSWORD", "")
+    if not user:
+        return {}
+    token = base64.b64encode(f"{user}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
+
+
+def mailpit_call(env: dict, method: str, path: str):
+    port = env.get("MAILPIT_UI_PORT", "8025")
+    return http_call(method, f"http://127.0.0.1:{port}{path}", mailpit_headers(env))
+
+
+def clear_mailpit(env: dict) -> None:
+    status, _, _ = mailpit_call(env, "DELETE", "/api/v1/messages")
+    check(status in (200, 204), "Mailpit limpo")
+
+
+def latest_mailpit_raw(env: dict) -> bytes:
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        status, _, body = mailpit_call(env, "GET", "/api/v1/messages?limit=50")
+        if status == 200:
+            data = json.loads(body)
+            messages = data.get("messages", [])
+            if messages:
+                message_id = messages[0].get("ID") or messages[0].get("id")
+                if message_id:
+                    st, _, raw = mailpit_call(env, "GET", f"/api/v1/message/{message_id}/raw")
+                    check(st == 200, "email lido do Mailpit")
+                    return raw
+        time.sleep(0.5)
+    fail("o email não chegou ao Mailpit em 20 s")
+
+
+def email_link(raw: bytes, suffix: str) -> str:
+    msg = BytesParser(policy=policy.default).parsebytes(raw)
+    pattern = re.compile(
+        rf'https?://[^"\s<>]+/ui/v2/login/{suffix}\?[^"\s<>]+',
+    )
+    for part in msg.walk():
+        if part.get_content_type() not in ("text/plain", "text/html"):
+            continue
+        try:
+            text = part.get_content()
+        except (LookupError, UnicodeDecodeError):
+            continue
+        match = pattern.search(html.unescape(text))
+        if match:
+            return match.group(0).rstrip(").,;")
+    fail(f"email sem link {suffix}")
+
+
+def verification_link(raw: bytes) -> str:
+    return email_link(raw, "(?:mail/verification|verify)")
+
+
 
 
 def main() -> int:
@@ -107,6 +170,8 @@ def main() -> int:
         "VALKEY_API_PASSWORD", "PITBOX_API_PASSWORD",
         "PITBOX_OPENFGA_ADDR", "PITBOX_OPENFGA_PRESHARED_KEY",
         "PITBOX_OPENFGA_STORE_ID", "PITBOX_OPENFGA_MODEL_ID",
+        "MAILPIT_SMTP_USERNAME", "MAILPIT_SMTP_PASSWORD",
+        "MAILPIT_UI_USERNAME", "MAILPIT_UI_PASSWORD",
     ):
         if not env.get(k):
             fail(f"falta {k} no .env (make init; make zitadel-provision; make openfga-provision)")
@@ -166,11 +231,14 @@ def main() -> int:
             "email": {"email": email, "isVerified": True}, "password": {"password": password, "changeRequired": False},
         })
         zitadel_user = created["userId"]
+        test_users = [zitadel_user]
         login_name = admin.call(f"/v2/users/{zitadel_user}", method="GET")["user"]["preferredLoginName"]
         secrets_seen += [email]
         check(True, "utilizador criado (email verificado)")
 
-        def sign_in():
+        def sign_in(as_login_name=None, as_password=None):
+            current_login = as_login_name or login_name
+            current_password = as_password or password
             r = http_call("GET", API + "/auth/login?return_to=/equipas")
             check(r[0] == 302, "GET /auth/login -> 302 para o Zitadel")
             loc = r[1]["Location"]
@@ -184,7 +252,7 @@ def main() -> int:
             qa = urllib.parse.parse_qs(urllib.parse.urlparse(a[1]["Location"]).query)
             auth_request = (qa.get("authRequest") or qa.get("authRequestID") or [""])[0]
             check(auth_request != "", "auth request criado")
-            sess = login.call("/v2/sessions", {"checks": {"user": {"loginName": login_name}, "password": {"password": password}}})
+            sess = login.call("/v2/sessions", {"checks": {"user": {"loginName": current_login}, "password": {"password": current_password}}})
             cb = login.call(f"/v2/oidc/auth_requests/{auth_request}", {"session": {"sessionId": sess["sessionId"], "sessionToken": sess["sessionToken"]}})
             callback = cb["callbackUrl"]
             check(callback.startswith(API + "/auth/callback?"), "o Zitadel devolve o callback da API")
@@ -310,6 +378,131 @@ def main() -> int:
         check(session_cookie not in vkeys and sc2 not in vkeys, "o valor do cookie não está em nenhuma chave do Valkey (só o hash)")
         jwks = json.loads(http_call("GET", zitadel + "/oauth/v2/keys")[2])
         check(any(k.get("alg") == "ES256" for k in jwks["keys"]), "o Zitadel assina com ES256 (o login só aceita ES256)")
+        print("== 8. Registo, verificação de email e página de confirmação")
+        check(bool(env.get("MAILPIT_UI_USERNAME") and env.get("MAILPIT_UI_PASSWORD")),
+              "Mailpit UI/API autenticado")
+        clear_mailpit(env)
+        new_tag = secrets.token_hex(4)
+        new_username = f"pitbox-verify-{new_tag}"
+        new_email = f"verify-{new_tag}@example.eu"
+        new_password = "Aa1!" + secrets.token_urlsafe(18)
+        secrets_seen += [new_password, new_email]
+        created_new = admin.call("/v2/users/human", {
+            "username": new_username,
+            "profile": {"givenName": "Verify", "familyName": "Test", "preferredLanguage": "pt"},
+            "email": {"email": new_email, "sendCode": {}},
+            "password": {"password": new_password, "changeRequired": False},
+        })
+        new_user = created_new["userId"]
+        test_users.append(new_user)
+        new_login_name = admin.call(f"/v2/users/{new_user}", method="GET")["user"]["preferredLoginName"]
+        check(True, "utilizador novo criado sem email verificado")
+
+        callback_nv, cookie_nv, _ = sign_in(new_login_name, new_password)
+        r_nv = http_call("GET", callback_nv, {"Cookie": cookie_header(**{"__Host-pitbox_login": cookie_nv})})
+        check(r_nv[0] == 303 and "__Host-pitbox_session" not in cookies_of(r_nv[1]),
+              "email por verificar -> 303 para /confirm-email, sem sessão")
+        check("/confirm-email?return_to=%2Fequipas" in r_nv[1].get("Location", ""),
+              "email por verificar -> /confirm-email com return_to seguro")
+
+        raw_email = latest_mailpit_raw(env)
+        link = verification_link(raw_email)
+        secrets_seen.append(link)
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(link).query)
+        code = query.get("code", [""])[0]
+        link_user = (query.get("userId") or query.get("userID") or [""])[0]
+        check(bool(code) and link_user == new_user, "link de verificação com código e utilizador")
+        secrets_seen.append(code)
+        page = http_call("GET", link)
+        check(page[0] in (200, 302, 303), "página de verificação do Zitadel responde")
+        admin.call(f"/v2/users/{new_user}/email/verify", {"userId": new_user, "verificationCode": code})
+        check(True, "email verificado pelo código do Mailpit")
+
+        callback_ok, cookie_ok, _ = sign_in(new_login_name, new_password)
+        r_ok = http_call("GET", callback_ok, {"Cookie": cookie_header(**{"__Host-pitbox_login": cookie_ok})})
+        check(r_ok[0] == 200 and "__Host-pitbox_session" in cookies_of(r_ok[1]),
+              "depois de verificar, login cria sessão")
+        session_ok = cookies_of(r_ok[1])["__Host-pitbox_session"][0]
+        secrets_seen.append(session_ok)
+        info_ok = json.loads(http_call("GET", API + "/auth/session", {
+            "Cookie": cookie_header(**{"__Host-pitbox_session": session_ok}),
+            "Sec-Fetch-Site": "same-origin",
+        })[2])
+        check(info_ok.get("authenticated") is True, "sessão da conta verificada válida")
+
+        print("== 9. Recuperação de palavra-passe")
+        clear_mailpit(env)
+        admin.call(f"/v2/users/{new_user}/password_reset", {
+            "sendLink": {"notificationType": "NOTIFICATION_TYPE_Email"},
+        })
+        reset_raw = latest_mailpit_raw(env)
+        reset_link = email_link(reset_raw, "password/set")
+        reset_query = urllib.parse.parse_qs(urllib.parse.urlparse(reset_link).query)
+        reset_code = reset_query.get("code", [""])[0]
+        reset_user = (reset_query.get("userId") or reset_query.get("userID") or [""])[0]
+        secrets_seen += [reset_link, reset_code]
+        check(bool(reset_code) and reset_user == new_user, "email de recuperação com código e utilizador")
+        reset_password = "Aa1!" + secrets.token_urlsafe(18)
+        secrets_seen.append(reset_password)
+        admin.call(f"/v2/users/{new_user}/password", {
+            "userId": new_user,
+            "newPassword": {"password": reset_password},
+            "verificationCode": reset_code,
+        })
+        callback_reset, cookie_reset, _ = sign_in(new_login_name, reset_password)
+        reset_response = http_call("GET", callback_reset, {
+            "Cookie": cookie_header(**{"__Host-pitbox_login": cookie_reset}),
+        })
+        check(reset_response[0] == 200 and "__Host-pitbox_session" in cookies_of(reset_response[1]),
+              "palavra-passe recuperada e login com a nova")
+
+        print("== 10. Lockout, política de password e rate limit")
+        wrong = "wrong-" + secrets.token_urlsafe(12)
+        for _ in range(10):
+            try:
+                login.call("/v2/sessions", {"checks": {"user": {"loginName": new_login_name}, "password": {"password": wrong}}})
+                fail("password errada aceite")
+            except provision.ProvisionError:
+                pass
+        login.call("/v2/sessions", {"checks": {"user": {"loginName": new_login_name}, "password": {"password": reset_password}}})
+        check(True, "10 falhas não bloqueiam a conta")
+
+        for candidate, should_pass in (("x" * 11, False), ("abcdefghijkl", True)):
+            tag2 = secrets.token_hex(3)
+            try:
+                made = admin.call("/v2/users/human", {
+                    "username": f"pitbox-pw-{tag2}",
+                    "profile": {"givenName": "Pw", "familyName": "Test"},
+                    "email": {"email": f"pw-{tag2}@example.eu", "isVerified": True},
+                    "password": {"password": candidate, "changeRequired": False},
+                })
+                test_users.append(made["userId"])
+                passed = True
+            except provision.ProvisionError:
+                passed = False
+            check(passed is should_pass, f"password de {len(candidate)} caracteres {'aceite' if should_pass else 'recusada'}")
+
+        codes = []
+        for _ in range(11):
+            status, _, _ = http_call(
+                "POST", zitadel + "/ui/v2/login",
+                {"Content-Type": "application/x-www-form-urlencoded"}, b"",
+            )
+            codes.append(status)
+        check(codes[-1] == 429 and any(code < 400 for code in codes[:-1]),
+              "11 POST ao login v2 do mesmo IP -> 429")
+
+        log_text = Path(logpath).read_text()
+        check(not any(secret and secret in log_text for secret in secrets_seen),
+              "nenhum segredo novo (password, email, código, link, cookie) nos logs da API")
+        access_logs = subprocess.run(
+            ["docker", "logs", "pitbox-zitadel-proxy-1", "pitbox-zitadel-login-1"],
+            capture_output=True, text=True, check=False,
+        )
+        access_text = access_logs.stdout + access_logs.stderr
+        check(code not in access_text and link not in access_text,
+              "código/link de verificação não está nos logs do Traefik/Zitadel Login")
+
         print("auth-smoke: OK")
         return 0
     finally:
@@ -324,11 +517,13 @@ def main() -> int:
                 provision.Zitadel(zitadel, admin_pat).call("/admin/v1/settings/oidc", {k: f"{v}s" for k, v in provision.OIDC_SETTINGS.items()}, method="PUT")
             except Exception:  # noqa: BLE001
                 print("auth-smoke: AVISO: repõe os tempos dos tokens com `make zitadel-provision`", file=sys.stderr)
-        if admin_pat and 'zitadel_user' in locals():
-            try:
-                provision.Zitadel(zitadel, admin_pat).call(f"/v2/users/{zitadel_user}", method="DELETE")
-            except Exception:  # noqa: BLE001 — limpeza; não esconde o resultado do teste
-                print("auth-smoke: aviso: não consegui apagar o utilizador de teste", file=sys.stderr)
+        if admin_pat and 'test_users' in locals():
+            admin = provision.Zitadel(zitadel, admin_pat)
+            for uid in test_users:
+                try:
+                    admin.call(f"/v2/users/{uid}", method="DELETE")
+                except Exception:  # noqa: BLE001 — limpeza; não esconde o resultado do teste
+                    print("auth-smoke: aviso: não consegui apagar um utilizador de teste", file=sys.stderr)
 
 
 if __name__ == "__main__":

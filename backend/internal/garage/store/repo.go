@@ -489,6 +489,62 @@ func (Repo) ListMountsForEngine(ctx context.Context, tx db.DBTX, team, engine, a
 	return out, nil
 }
 
+// --- part installs -----------------------------------------------------------
+
+func (Repo) CreatePartInstall(ctx context.Context, tx db.DBTX, team, user uuid.UUID, in domain.NewInstall) (domain.PartInstall, error) {
+	row, err := sqlcgen.New(tx).CreatePartInstall(ctx, sqlcgen.CreatePartInstallParams{
+		TeamID: team, PartID: in.PartID, CarID: in.CarID, EngineID: in.EngineID,
+		InstalledAt: in.InstalledAt, CreatedBy: &user,
+	})
+	if err != nil {
+		return domain.PartInstall{}, mapError("create part install", err)
+	}
+	return installFromRow(row), nil
+}
+
+func (Repo) GetPartInstallForUpdate(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.PartInstall, error) {
+	row, err := sqlcgen.New(tx).GetPartInstallForUpdate(ctx, sqlcgen.GetPartInstallForUpdateParams{TeamID: team, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.PartInstall{}, fmt.Errorf("get part install: %w", domain.ErrNotFound)
+	}
+	if err != nil {
+		return domain.PartInstall{}, fmt.Errorf("get part install: %w", err)
+	}
+	return installFromRow(sqlcgen.CreatePartInstallRow(row)), nil
+}
+
+func (Repo) ClosePartInstall(ctx context.Context, tx db.DBTX, team, id uuid.UUID, removal domain.Removal) (domain.PartInstall, error) {
+	var reason *string
+	if removal.Reason != "" {
+		reason = &removal.Reason
+	}
+	row, err := sqlcgen.New(tx).ClosePartInstall(ctx, sqlcgen.ClosePartInstallParams{
+		TeamID: team, ID: id, RemovalDestination: &removal.Destination, RemovalReason: reason,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.PartInstall{}, domain.ErrInstallConflict
+	}
+	if err != nil {
+		return domain.PartInstall{}, mapError("close part install", err)
+	}
+	return installFromRow(sqlcgen.CreatePartInstallRow(row)), nil
+}
+
+func (Repo) ListPartInstalls(ctx context.Context, tx db.DBTX, team uuid.UUID, filter domain.InstallFilter, history bool, after uuid.UUID, limit int32) ([]domain.PartInstall, error) {
+	rows, err := sqlcgen.New(tx).ListPartInstalls(ctx, sqlcgen.ListPartInstallsParams{
+		TeamID: team, PartID: filter.PartID, CarID: filter.CarID, EngineID: filter.EngineID,
+		IncludeHistory: history, After: after, RowLimit: limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list part installs: %w", err)
+	}
+	out := make([]domain.PartInstall, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, installFromRow(sqlcgen.CreatePartInstallRow(row)))
+	}
+	return out, nil
+}
+
 // --- mapping -----------------------------------------------------------------
 
 func int2(v *int32) pgtype.Int2 {
@@ -660,6 +716,20 @@ func mountFromList(r sqlcgen.ListMountsForEngineRow) domain.EngineMount {
 	return domain.EngineMount{ID: r.ID, EngineID: r.EngineID, CarID: r.CarID, MountedAt: r.MountedAt, UnmountedAt: r.UnmountedAt}
 }
 
+func installFromRow(r sqlcgen.CreatePartInstallRow) domain.PartInstall {
+	out := domain.PartInstall{
+		ID: r.ID, PartID: r.PartID, CarID: r.CarID, EngineID: r.EngineID, InstalledAt: r.InstalledAt,
+		RemovedAt: r.RemovedAt, RunSeconds: r.RunSeconds, Sessions: r.Sessions, Version: r.Version,
+	}
+	if r.RemovalDestination != nil {
+		out.RemovalDestination = *r.RemovalDestination
+	}
+	if r.RemovalReason != nil {
+		out.RemovalReason = *r.RemovalReason
+	}
+	return out
+}
+
 func mapError(op string, err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -674,6 +744,9 @@ func mapError(op string, err error) error {
 		case "23P01":
 			return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
 		case "23514":
+			if pgErr.ConstraintName == "part_install_removal_ck" {
+				return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
+			}
 			if pgErr.ConstraintName == "engine_mount_check" {
 				return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
 			}

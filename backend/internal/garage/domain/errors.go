@@ -14,6 +14,7 @@ var (
 	ErrInvalid         = fmt.Errorf("garage: invalid value: %w", apperr.ErrInvalidArgument)
 	ErrAlreadyExists   = fmt.Errorf("garage: already exists: %w", apperr.ErrAlreadyExists)
 	ErrMountConflict   = fmt.Errorf("garage: engine or car already mounted: %w", apperr.ErrFailedPrecondition)
+	ErrInstallConflict = fmt.Errorf("garage: part cannot be installed or removed: %w", apperr.ErrFailedPrecondition)
 	ErrCatalogInactive = fmt.Errorf("garage: catalogue entry is inactive: %w", apperr.ErrFailedPrecondition)
 	ErrOpenMount       = fmt.Errorf("garage: resource has an open engine mount: %w", apperr.ErrFailedPrecondition)
 )

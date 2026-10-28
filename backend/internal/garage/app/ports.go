@@ -48,5 +48,9 @@ type Store interface {
 	OpenMountForCar(ctx context.Context, tx db.DBTX, team, car uuid.UUID) (domain.EngineMount, bool, error)
 	CreateMount(ctx context.Context, tx db.DBTX, team, user uuid.UUID, m domain.EngineMount) (domain.EngineMount, error)
 	CloseMount(ctx context.Context, tx db.DBTX, team, id uuid.UUID) error
+	CreatePartInstall(ctx context.Context, tx db.DBTX, team, user uuid.UUID, in domain.NewInstall) (domain.PartInstall, error)
+	GetPartInstallForUpdate(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.PartInstall, error)
+	ClosePartInstall(ctx context.Context, tx db.DBTX, team, id uuid.UUID, removal domain.Removal) (domain.PartInstall, error)
+	ListPartInstalls(ctx context.Context, tx db.DBTX, team uuid.UUID, filter domain.InstallFilter, history bool, after uuid.UUID, limit int32) ([]domain.PartInstall, error)
 	ListMountsForEngine(ctx context.Context, tx db.DBTX, team, engine, after uuid.UUID, limit int32) ([]domain.EngineMount, error)
 }

@@ -611,8 +611,6 @@ func TestUserInfoValidation(t *testing.T) {
 		status int
 		reason string
 	}{
-		{"email not verified", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { c["email_verified"] = false } }, 403, "email_not_verified"},
-		{"email_verified missing", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { delete(c, "email_verified") } }, 403, "email_not_verified"},
 		{"no email", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { delete(c, "email") } }, 403, "no_email"},
 		{"a different subject (OIDC Core 5.3.2)", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { c["sub"] = "someone-else" } }, 403, "userinfo_sub_mismatch"},
 		{"no subject", func(f *flowHarness) { f.idp.mutateUserinfo = func(c map[string]any) { delete(c, "sub") } }, 403, "userinfo_sub_mismatch"},
@@ -642,6 +640,88 @@ func TestUserInfoValidation(t *testing.T) {
 			}
 			if strings.Contains(f.logs.String(), "internal detail") {
 				t.Error("the userinfo response body reached the log")
+			}
+		})
+	}
+}
+
+func TestUnverifiedEmailRedirectsToTheAppAndRevokesTheToken(t *testing.T) {
+	t.Parallel()
+	for _, mutate := range []func(map[string]any){
+		func(c map[string]any) { c["email_verified"] = false },
+		func(c map[string]any) { delete(c, "email_verified") },
+	} {
+		mutate := mutate
+		t.Run("unverified", func(t *testing.T) {
+			t.Parallel()
+			f := newFlowHarness(t)
+			a := f.startLogin("/teams")
+			f.idp.mutateUserinfo = mutate
+			w := f.callback(a, f.idp.issueCode("ana", a.nonce, a.challenge))
+
+			if w.Code != http.StatusSeeOther {
+				t.Fatalf("status %d body %q, want 303", w.Code, w.Body.String())
+			}
+			loc := w.Header().Get("Location")
+			if loc != publicURL+"/confirm-email?return_to=%2Fteams" {
+				t.Errorf("Location = %q", loc)
+			}
+			if cookieNamed(w, SessionCookieName) != nil || f.sessions() != 0 || f.dir.calls != 0 {
+				t.Error("an unverified email must not create a session")
+			}
+			if got := f.audit.actions(); len(got) != 1 || got[0] != "auth.login_failed:email_not_verified" {
+				t.Errorf("audit = %v", got)
+			}
+			if got := f.idp.revokedTokens(); len(got) != 1 || got[0] == "" {
+				t.Errorf("revoked tokens = %v, want the discarded refresh token", got)
+			}
+			if strings.Contains(f.logs.String(), "code-") || strings.Contains(f.logs.String(), "email@example.eu") {
+				t.Error("the log contains a code or email")
+			}
+		})
+	}
+}
+
+func TestUnverifiedEmailDoesNotFollowAnExternalReturnTo(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	a := f.startLogin("//evil.example")
+	f.idp.mutateUserinfo = func(c map[string]any) { c["email_verified"] = false }
+	w := f.callback(a, f.idp.issueCode("ana", a.nonce, a.challenge))
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d", w.Code)
+	}
+	loc := w.Header().Get("Location")
+	if loc != publicURL+"/confirm-email?return_to=%2F" {
+		t.Errorf("Location = %q", loc)
+	}
+}
+
+func TestRefusalsAfterExchangeRevokeTheRefreshToken(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		setup func(*flowHarness)
+	}{
+		{"email in use", func(f *flowHarness) { f.dir.err = ErrEmailInUse }},
+		{"account deleted", func(f *flowHarness) { f.dir.err = ErrAccountDeleted }},
+		{"owner without a strong factor", func(f *flowHarness) {
+			f.dir.owners = map[string]bool{"user-ana": true}
+		}},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newFlowHarness(t)
+			a := f.startLogin("/teams")
+			tc.setup(f)
+			w := f.callback(a, f.idp.issueCode("ana", a.nonce, a.challenge))
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("status %d", w.Code)
+			}
+			if got := f.idp.revokedTokens(); len(got) != 1 || got[0] == "" {
+				t.Errorf("revoked tokens = %v, want the discarded refresh token", got)
 			}
 		})
 	}

@@ -29,7 +29,22 @@ make app-dev                    # http://localhost:5173
 
 O browser tem de usar **`localhost`**, não `127.0.0.1`, para o `Origin` coincidir com
 `PITBOX_PUBLIC_URL`. O Vite escuta em `127.0.0.1` e encaminha `/auth` e `/pitbox.` para a API
-local. Em produção, a app e o BFF partilham a mesma origem (ADR 0017).
+local; em desenvolvimento, se abrires `127.0.0.1:5173`, a app redirecciona para
+`localhost:5173` (o cookie `__Host-pitbox_login` é por host e o callback do Zitadel usa
+`localhost`). Em produção, a app e o BFF partilham a mesma origem (ADR 0017).
+
+Um login tem de ser concluído em **30 minutos** (`LoginCookieMaxAge`), o mesmo prazo do
+código do email. Mesmo assim, não reutilizes separadores antigos: o pedido de autorização do
+Zitadel e o state do BFF têm de ser os do mesmo fluxo.
+
+A recuperação de palavra-passe termina com uma password nova; se o regresso ao callback do
+BFF não tiver o state do login (por exemplo, link aberto noutro browser ou pedido expirado),
+isso não desfaz a alteração. Volta a `http://localhost:5173/login` e entra com a password nova.
+
+O registo é feito no login do Zitadel. Os emails locais de verificação e recuperação ficam no
+Mailpit (`http://127.0.0.1:8025`, credenciais `MAILPIT_UI_*` no `.env`). Se o email ainda não
+estiver verificado, o BFF envia para `/confirm-email`; a página não tem sessão nem dados
+pessoais e permite voltar ao login.
 
 O cookie `__Host-pitbox_session` é `Secure`; Chrome, Edge e Firefox aceitam-no em
 `http://localhost`. O Safari não é suportado em HTTP local; o Capacitor usa `https://localhost`

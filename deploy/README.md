@@ -26,10 +26,11 @@ make reset     # APAGA os volumes e recria (pede confirmação)
 | Valkey 8.0 | `6379` (com palavra-passe) |
 | Zitadel | `http://localhost:8080` (usar `localhost`, **não** `127.0.0.1`: a instância só responde ao seu domínio) |
 | OpenFGA | HTTP `8090`, gRPC `8091` (chave pré-partilhada; sem playground) |
+| Mailpit (F1-03e) | UI/API `http://127.0.0.1:8025`, SMTP interno `mailpit:1025` (auth separada para SMTP e UI) |
 | Jaeger | UI `16686`, OTLP gRPC `4317`, OTLP HTTP `4318`, health `13133/status` |
 | SeaweedFS (S3) | `8333` (ver [ADR 0009](../docs/adr/0009-seaweedfs-s3-local.md)) |
 
-As credenciais estão no `.env` (`ZITADEL_ADMIN_USERNAME` / `ZITADEL_ADMIN_PASSWORD`, `S3_ACCESS_KEY` / `S3_SECRET_KEY`, …).
+As credenciais estão no `.env` (`ZITADEL_ADMIN_USERNAME` / `ZITADEL_ADMIN_PASSWORD`, `S3_ACCESS_KEY` / `S3_SECRET_KEY`, …). O Mailpit tem credenciais separadas para SMTP (`MAILPIT_SMTP_*`, usadas pelo Zitadel) e para a UI/API (`MAILPIT_UI_*`); a UI está autenticada e só escuta em `127.0.0.1`.
 
 **Login no Zitadel:** em `http://localhost:8080` o campo de utilizador pede o *login name* completo, `<ZITADEL_ADMIN_USERNAME>@zitadel.localhost` (por omissão `zitadel-admin@zitadel.localhost`), e depois a opção **palavra-passe** com `ZITADEL_ADMIN_PASSWORD`. O utilizador já existe: não é preciso criar conta nem registar passkey. Só o nome sem `@zitadel.localhost` dá "utilizador não existe".
 
@@ -40,10 +41,10 @@ make up                  # a 1.ª vez com volumes novos (make reset): o Zitadel 
 make db-migrate          # esquema da aplicação
 make zitadel-provision   # projeto e app OIDC, chave ES256, tempos dos tokens; escreve PITBOX_OIDC_* no .env
 make run-api             # pitbox-api em http://localhost:8081 com o login ligado
-make smoke-auth          # prova o login ponta a ponta sem browser (cria e apaga um utilizador de teste)
+make smoke-auth          # prova login, registo/verificação e recuperação no Mailpit (cria e apaga utilizadores de teste)
 ```
 
-No browser: `http://localhost:8081/auth/login` (Chrome ou Firefox: o cookie `__Host-` exige `Secure`, que o Safari não aceita em `http://localhost`; o HTTPS local fica para o F1-09). O utilizador cria-se no Zitadel (`http://localhost:8080`); o `/auth/session` mostra quem és.
+No browser: `http://localhost:8081/auth/login` (Chrome ou Firefox: o cookie `__Host-` exige `Secure`, que o Safari não aceita em `http://localhost`; o HTTPS local fica para o F1-09). Usa sempre `localhost`, não `127.0.0.1`: o cookie de pré-login é por host e o callback do Zitadel aponta para `localhost`; a app de desenvolvimento redirecciona `127.0.0.1:5173` para `localhost:5173`. O utilizador cria-se no Zitadel (`http://localhost:8080`); o `/auth/session` mostra quem és. O Mailpit (F1-03e) captura os emails de verificação e recuperação; abre `http://127.0.0.1:8025` com as credenciais `MAILPIT_UI_*` do `.env`. O login v2 corre com `EMAIL_VERIFICATION=true`: o registo pede o código enviado pelo Zitadel antes de concluir o login. A página `/confirm-email` da app fica como defesa em profundidade para um login que chegue ao BFF ainda por verificar.
 
 Sem `make zitadel-provision`, o `run-api` arranca sem autenticação: recusa todos os RPC e `/auth/*` responde 503. O PAT do utilizador de provisionamento (IAM_OWNER, 30 dias) vive no volume `zitadel-provisioner`, que só o `zitadel-api` monta; os scripts leem-no do contentor para memória e nunca o imprimem.
 

@@ -35,7 +35,7 @@ O `pitbox-api` é um cliente OIDC confidencial (Authorization Code + PKCE S256, 
 
 | Cookie | Atributos | Conteúdo |
 | --- | --- | --- |
-| `__Host-pitbox_login` | Secure, HttpOnly, **SameSite=Lax**, Path=/, Max-Age=600 | `{state, nonce, code_verifier, return_to, exp}` cifrado com AES-256-GCM (sem Valkey no pré-login) |
+| `__Host-pitbox_login` | Secure, HttpOnly, **SameSite=Lax**, Path=/, Max-Age=1800 | `{state, nonce, code_verifier, return_to, exp}` cifrado com AES-256-GCM (sem Valkey no pré-login) |
 | `__Host-pitbox_session` | Secure, HttpOnly, **SameSite=Strict**, Path=/ | 32 bytes aleatórios; no Valkey só o SHA-256 |
 
 O cookie de pré-login é Lax porque o regresso do Zitadel é uma navegação entre sites (em desenvolvimento `localhost:8080` e `localhost:8081` são o mesmo *site*, por isso o erro só se veria em produção). **Não existe nenhum modo de desenvolvimento sem `Secure` nem `__Host-`**: o Safari não aceita cookies `Secure` em `http://localhost` (WebKit 232088, aberto); HTTPS local (mkcert + Traefik) fica como subtarefa do F1-09.

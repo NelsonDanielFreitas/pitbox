@@ -4,10 +4,11 @@
 Leva a instância ao estado desejado, sempre pela mesma ordem:
   1. chave de assinatura ativa ECDSA P-256 (ES256); só cria e ativa uma se a ativa não for;
   2. tempos de vida dos tokens da instância (access 10 min, ID token 5 min, refresh 168 h/720 h);
-  3. política de login sem segundo fator por SMS nem por email (ambos dão amr "mfa" e
-     estragariam o step-up do F1-03c);
-  4. projeto "pitbox";
-  5. aplicação OIDC web "pitbox-api" (cliente confidencial, code + PKCE, access token opaco).
+  3. política de login: registo, anti-enumeração, passkeys e sem OTP por SMS/email;
+  4. complexidade de palavra-passe, lockout sem bloqueio permanente e validade dos códigos;
+  5. provider SMTP do Mailpit local, idioma pt e textos de verificação/recuperação;
+  6. projeto "pitbox";
+  7. aplicação OIDC web "pitbox-api" (cliente confidencial, code + PKCE, access token opaco).
 Escreve PITBOX_OIDC_CLIENT_ID e PITBOX_OIDC_CLIENT_SECRET em deploy/compose/.env (0600).
 O que escreve ali nunca vai para o stdout, e o PAT nunca é impresso nem escrito em disco.
 
@@ -15,7 +16,7 @@ O PAT do utilizador "provisioner" (IAM_OWNER, 30 dias) vive num volume que só o
 zitadel-api monta; o script lê-o diretamente de lá (docker cp) para memória. Só local:
 recusa falar com um endereço que não seja loopback.
 
-Uso: python3 -I scripts/zitadel-provision.py [--rotate-secret] [--pat-file F] [--base-url U]
+Uso: python3 -I scripts/zitadel-provision.py [--rotate-secret] [--rotate-smtp-password] [--pat-file F] [--base-url U]
      python3 -I scripts/zitadel-provision.py --help
 Só usa a biblioteca padrão.
 """
@@ -24,6 +25,7 @@ import io
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tarfile
@@ -49,6 +51,26 @@ OIDC_SETTINGS = {
     "refreshTokenExpiration": 720 * 3600,
 }
 FORBIDDEN_SECOND_FACTORS = ("SECOND_FACTOR_TYPE_OTP_SMS", "SECOND_FACTOR_TYPE_OTP_EMAIL")
+
+# Políticas de registo e login do F1-03e. O PUT do Zitadel substitui a política
+# inteira; todos os campos mutáveis (incluindo os tempos de vida) seguem no pedido.
+LOGIN_POLICY_DURATIONS = (
+    "passwordCheckLifetime",
+    "externalLoginCheckLifetime",
+    "mfaInitSkipLifetime",
+    "secondFactorCheckLifetime",
+    "multiFactorCheckLifetime",
+)
+PASSWORD_MIN_LENGTH = 12
+SECRET_GENERATOR_EXPIRY = {
+    "SECRET_GENERATOR_TYPE_VERIFY_EMAIL_CODE": 30 * 60,
+    "SECRET_GENERATOR_TYPE_PASSWORD_RESET_CODE": 15 * 60,
+}
+DEFAULT_LANGUAGE = "pt"
+SMTP_HOST = "mailpit:1025"
+SMTP_SENDER_ADDRESS = "noreply@pitbox.local"
+SMTP_SENDER_NAME = "PitBox"
+SMTP_DESCRIPTION = "Mailpit local (F1-03e)"
 
 # O JSON do Connect/gRPC-gateway omite o valor zero de cada enum: lê-se a ausência assim.
 ENUM_ZERO = {
@@ -190,6 +212,7 @@ class Zitadel:
                 raw = resp.read()
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:300]
+            e.close()
             raise ProvisionError(f"{method} {path}: HTTP {e.code} {detail}") from None
         except urllib.error.URLError as e:
             raise ProvisionError(f"{method} {path}: {e.reason}") from None
@@ -266,12 +289,249 @@ def ensure_oidc_settings(z: Zitadel, log) -> None:
     log("tempos dos tokens: atualizados")
 
 
+def _require_duration(policy: dict, key: str) -> str:
+    value = policy.get(key)
+    if not value:
+        raise ProvisionError(f"a política de login não devolveu {key}; não vou repor a zero")
+    if parse_duration(value) == 0:
+        raise ProvisionError(f"a política de login tem {key}=0; não vou aplicar uma política inválida")
+    return value
+
+
+def _as_int(value, default: int = 0) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ProvisionError(f"valor inteiro inesperado no Zitadel: {value!r}") from None
+
+
+def _policy_value(policy: dict, key: str, desired):
+    """Compara booleanos omitidos/enums zero e durações sem confundir tipos."""
+    if key in LOGIN_POLICY_DURATIONS:
+        return policy.get(key)
+    if isinstance(desired, bool):
+        return bool(policy.get(key, False))
+    return policy.get(key, "")
+
+
 def ensure_login_policy(z: Zitadel, log) -> None:
+    current = z.call("/admin/v1/policies/login", method="GET").get("policy", {})
+    desired = {
+        "allowUsernamePassword": True,
+        "allowRegister": True,
+        "allowExternalIdp": False,
+        "forceMfa": current.get("forceMfa", False),
+        "passwordlessType": "PASSWORDLESS_TYPE_ALLOWED",
+        "hidePasswordReset": False,
+        "ignoreUnknownUsernames": True,
+        "defaultRedirectUri": current.get("defaultRedirectUri", ""),
+        "allowDomainDiscovery": False,
+        "disableLoginWithEmail": current.get("disableLoginWithEmail", False),
+        "disableLoginWithPhone": True,
+        "forceMfaLocalOnly": current.get("forceMfaLocalOnly", False),
+    }
+    for key in LOGIN_POLICY_DURATIONS:
+        desired[key] = _require_duration(current, key)
+
+    drift = [key for key, value in desired.items() if _policy_value(current, key, value) != value]
+    if drift:
+        z.call("/admin/v1/policies/login", desired, method="PUT")
+        log(f"política de login: atualizada ({', '.join(drift)})")
+    else:
+        log("política de login: já correta")
+
     present = z.call("/admin/v1/policies/login/second_factors/_search", {}).get("result", [])
     removed = [t for t in FORBIDDEN_SECOND_FACTORS if t in present]
     for t in removed:
         z.call(f"/admin/v1/policies/login/second_factors/{t}", method="DELETE")
     log(f"política de login: removidos {', '.join(removed)}" if removed else "política de login: sem OTP por SMS nem email")
+
+
+def ensure_password_complexity(z: Zitadel, log) -> None:
+    current = z.call("/admin/v1/policies/password/complexity", method="GET").get("policy", {})
+    desired = {
+        "minLength": PASSWORD_MIN_LENGTH,
+        "hasUppercase": False,
+        "hasLowercase": False,
+        "hasNumber": False,
+        "hasSymbol": False,
+    }
+    drift = [
+        key for key, value in desired.items()
+        if (_as_int(current.get(key)) if key == "minLength" else bool(current.get(key, False))) != value
+    ]
+    if drift:
+        z.call("/admin/v1/policies/password/complexity", desired, method="PUT")
+        log(f"complexidade da palavra-passe: atualizada ({', '.join(drift)})")
+    else:
+        log("complexidade da palavra-passe: já correta")
+
+
+def ensure_lockout(z: Zitadel, log) -> None:
+    current = z.call("/admin/v1/policies/lockout", method="GET").get("policy", {})
+    desired = {
+        "maxPasswordAttempts": 0,
+        "maxOtpAttempts": _as_int(current.get("maxOtpAttempts"), 0),
+    }
+    if _as_int(current.get("maxPasswordAttempts")) != 0 or _as_int(current.get("maxOtpAttempts"), 0) != desired["maxOtpAttempts"]:
+        z.call("/admin/v1/policies/password/lockout", desired, method="PUT")
+        log("bloqueio: password sem lockout; OTP preservado")
+    else:
+        log("bloqueio: já configurado")
+
+
+def ensure_secret_generators(z: Zitadel, log) -> None:
+    for generator_type, expiry in SECRET_GENERATOR_EXPIRY.items():
+        current = z.call(f"/admin/v1/secretgenerators/{generator_type}", method="GET").get("secretGenerator", {})
+        length = current.get("length")
+        if not length:
+            raise ProvisionError(f"o secret generator {generator_type} não devolveu length")
+        desired = {
+            "generatorType": generator_type,
+            "length": length,
+            "expiry": f"{expiry}s",
+            "includeLowerLetters": current.get("includeLowerLetters", False),
+            "includeUpperLetters": current.get("includeUpperLetters", False),
+            "includeDigits": current.get("includeDigits", False),
+            "includeSymbols": current.get("includeSymbols", False),
+        }
+        current_normalised = {
+            "generatorType": current.get("generatorType", generator_type),
+            "length": _as_int(current.get("length")),
+            "expiry": current.get("expiry", ""),
+            "includeLowerLetters": bool(current.get("includeLowerLetters", False)),
+            "includeUpperLetters": bool(current.get("includeUpperLetters", False)),
+            "includeDigits": bool(current.get("includeDigits", False)),
+            "includeSymbols": bool(current.get("includeSymbols", False)),
+        }
+        if desired != current_normalised:
+            z.call(f"/admin/v1/secretgenerators/{generator_type}", desired, method="PUT")
+            log(f"secret generator {generator_type}: expiração/atributos atualizados")
+        else:
+            log(f"secret generator {generator_type}: já correto")
+
+
+def ensure_default_language(z: Zitadel, log) -> None:
+    current = z.call("/admin/v1/languages/default", method="GET").get("language", "")
+    if current == DEFAULT_LANGUAGE:
+        log("idioma por omissão: pt")
+        return
+    z.call(f"/admin/v1/languages/default/{DEFAULT_LANGUAGE}", {}, method="PUT")
+    log(f"idioma por omissão: {current or 'desconhecido'} -> {DEFAULT_LANGUAGE}")
+
+
+VERIFY_EMAIL_TEXT = {
+    "title": "Confirma o teu email no PitBox",
+    "preHeader": "Confirma o teu email",
+    "subject": "Confirma o teu email — PitBox",
+    "greeting": "Olá {{.DisplayName}},",
+    "text": "Falta só confirmar o teu email. Usa o botão abaixo. O link é válido durante 30 minutos. (Código {{.Code}}) Se não criaste esta conta, ignora este email.",
+    "buttonText": "Confirmar email",
+    "footerText": "PitBox",
+}
+PASSWORD_RESET_TEXT = {
+    "title": "Recupera a tua palavra-passe no PitBox",
+    "preHeader": "Recupera a tua palavra-passe",
+    "subject": "Recupera a tua palavra-passe — PitBox",
+    "greeting": "Olá {{.DisplayName}},",
+    "text": "Recebemos um pedido para redefinir a palavra-passe. Usa o botão abaixo. O link é válido durante 15 minutos. (Código {{.Code}}) Se não pediste isto, ignora este email.",
+    "buttonText": "Redefinir palavra-passe",
+    "footerText": "PitBox",
+}
+
+
+def ensure_message_text(z: Zitadel, kind: str, desired: dict, log) -> None:
+    path = f"/admin/v1/text/message/{kind}/{DEFAULT_LANGUAGE}"
+    try:
+        current = z.call(path, method="GET").get("customText", {})
+    except ProvisionError as e:
+        if "HTTP 404" not in str(e):
+            raise
+        current = {}
+    if all(current.get(key) == value for key, value in desired.items()):
+        log(f"texto {kind}: já correto")
+        return
+    body = dict(desired)
+    body["language"] = DEFAULT_LANGUAGE
+    z.call(path, body, method="PUT")
+    log(f"texto {kind}: atualizado em pt-PT")
+
+
+def _smtp_config(z: Zitadel) -> dict:
+    providers = z.call("/admin/v1/email/_search", {}).get("result", [])
+    smtp = next((p for p in providers if isinstance(p.get("smtp"), dict)), None)
+    if smtp is None and providers:
+        raise ProvisionError("há um provider de email não-SMTP; não vou adicionar outro silenciosamente")
+    return smtp or {}
+
+
+def ensure_smtp(z: Zitadel, env: dict, rotate: bool, log) -> dict:
+    username = env.get("MAILPIT_SMTP_USERNAME")
+    password = env.get("MAILPIT_SMTP_PASSWORD")
+    if not username or not password:
+        raise ProvisionError("falta MAILPIT_SMTP_USERNAME/MAILPIT_SMTP_PASSWORD no .env (corre 'make init')")
+    changes = {}
+    if rotate:
+        password = secrets.token_hex(24)
+        changes["MAILPIT_SMTP_PASSWORD"] = password
+        log("SMTP: password de Mailpit gerada de novo (reinicia o Mailpit para a aplicar)")
+
+    desired = {
+        "senderAddress": SMTP_SENDER_ADDRESS,
+        "senderName": SMTP_SENDER_NAME,
+        "tls": False,
+        "host": SMTP_HOST,
+        "user": username,
+        "replyToAddress": "",
+    }
+    current = _smtp_config(z)
+    if not current:
+        created = z.call(
+            "/admin/v1/email/smtp",
+            {**desired, "description": SMTP_DESCRIPTION, "plain": {"password": password}},
+        )
+        provider_id = created.get("id")
+        if not provider_id:
+            raise ProvisionError("o Zitadel criou o provider SMTP sem id")
+        z.call(f"/admin/v1/email/{provider_id}/_activate", {})
+        log("SMTP: provider Mailpit criado e ativado")
+        return changes
+
+    provider_id = current.get("id", "")
+    smtp = current.get("smtp", {})
+    def smtp_value(key: str):
+        if key == "tls":
+            return bool(smtp.get(key, False))
+        return smtp.get(key, "")
+
+    secret_changed = bool(changes)
+    non_secret_drift = (
+        any(smtp_value(key) != value for key, value in desired.items())
+        or current.get("description", "") != SMTP_DESCRIPTION
+    )
+    if non_secret_drift:
+        z.call(
+            f"/admin/v1/email/smtp/{provider_id}",
+            {**desired, "description": SMTP_DESCRIPTION, "id": provider_id, "plain": {"password": password}},
+            method="PUT",
+        )
+        log("SMTP: campos atualizados")
+    elif secret_changed:
+        z.call(
+            f"/admin/v1/email/smtp/{provider_id}/password",
+            {"id": provider_id, "password": password},
+            method="PUT",
+        )
+        log("SMTP: password atualizada")
+    else:
+        log("SMTP: já correto")
+    if current.get("state") != "EMAIL_PROVIDER_ACTIVE":
+        z.call(f"/admin/v1/email/{provider_id}/_activate", {})
+        log("SMTP: provider ativado")
+    return changes
+
 
 
 def ensure_project(z: Zitadel, log) -> str:
@@ -343,7 +603,15 @@ def wait_ready(z: Zitadel) -> None:
     raise ProvisionError(f"o Zitadel não responde em {z.base} (corre 'make up')")
 
 
-def run(base_url: str, public_url: str, pat: str, env_file: Path, rotate: bool, log=print) -> None:
+def run(
+    base_url: str,
+    public_url: str,
+    pat: str,
+    env_file: Path,
+    rotate: bool,
+    log=print,
+    rotate_smtp_password: bool = False,
+) -> None:
     z = Zitadel(base_url, pat)
     wait_ready(z)
     env_text = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
@@ -351,8 +619,15 @@ def run(base_url: str, public_url: str, pat: str, env_file: Path, rotate: bool, 
     ensure_signing_key(z, log)
     ensure_oidc_settings(z, log)
     ensure_login_policy(z, log)
+    ensure_password_complexity(z, log)
+    ensure_lockout(z, log)
+    ensure_secret_generators(z, log)
+    ensure_default_language(z, log)
+    ensure_message_text(z, "verifyemail", VERIFY_EMAIL_TEXT, log)
+    ensure_message_text(z, "passwordreset", PASSWORD_RESET_TEXT, log)
+    changes = ensure_smtp(z, env, rotate_smtp_password, log)
     project_id = ensure_project(z, log)
-    changes = ensure_app(z, project_id, public_url, env, rotate, log)
+    changes.update(ensure_app(z, project_id, public_url, env, rotate, log))
     if changes:
         write_private(env_file, update_env(env_text, changes))
         log(f"escrito em {env_file.name}: {', '.join(sorted(changes))}")
@@ -364,13 +639,14 @@ def main(argv=None) -> int:
     ap.add_argument("--public-url", default=None, help="URL público do pitbox-api (por omissão http://localhost:8081)")
     ap.add_argument("--pat-file", default=None, help="ficheiro 0600 com o PAT (por omissão lê-o do contentor)")
     ap.add_argument("--rotate-secret", action="store_true", help="gera um segredo de cliente novo")
+    ap.add_argument("--rotate-smtp-password", action="store_true", help="gera uma password SMTP local nova")
     args = ap.parse_args(argv)
     env = parse_env(ENV_FILE.read_text(encoding="utf-8")) if ENV_FILE.exists() else {}
     base = args.base_url or f"http://localhost:{env.get('ZITADEL_PORT', '8080')}"
     public = args.public_url or env.get("PITBOX_PUBLIC_URL", "http://localhost:8081")
     try:
         pat = read_pat_file(args.pat_file) if args.pat_file else read_pat_from_container()
-        run(base, public, pat, ENV_FILE, args.rotate_secret)
+        run(base, public, pat, ENV_FILE, args.rotate_secret, rotate_smtp_password=args.rotate_smtp_password)
     except ProvisionError as e:
         print(f"zitadel-provision: {e}", file=sys.stderr)
         return 1

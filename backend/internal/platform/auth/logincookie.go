@@ -17,8 +17,10 @@ const (
 	// LoginCookieName uses the __Host- prefix: the browser only accepts it if it is Secure,
 	// has Path=/ and no Domain, so a sibling subdomain cannot set or overwrite it.
 	LoginCookieName = "__Host-pitbox_login"
-	// LoginCookieMaxAge bounds how long a login attempt may take.
-	LoginCookieMaxAge = 10 * time.Minute
+	// LoginCookieMaxAge bounds how long a login attempt may take. Aligned with the
+	// 30-minute email verification code: the user may need to open Mailpit and type
+	// the code after registering.
+	LoginCookieMaxAge = 30 * time.Minute
 )
 
 // ErrNoLoginState means the callback came without a valid pre-login cookie: it was never

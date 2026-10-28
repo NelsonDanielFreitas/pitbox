@@ -35,6 +35,15 @@ test("login, teams and team home have no serious accessibility violations", asyn
   await expectNoSeriousViolations(page);
 });
 
+test("confirm email page is public and ignores an external return_to", async ({ page }) => {
+  await page.goto("/confirm-email?return_to=//evil.example");
+  await expect(page.getByRole("heading", { name: "Confirma o teu email" })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Já confirmei, entrar outra vez" }),
+  ).toHaveAttribute("href", "/auth/login?return_to=%2Fteams");
+  await expectNoSeriousViolations(page);
+});
+
 test("an expired session returns to login", async ({ page, context }) => {
   await signIn(page);
   await context.clearCookies();

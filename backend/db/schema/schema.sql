@@ -483,11 +483,20 @@ CREATE TABLE garage.part_install (
   created_at          timestamptz NOT NULL DEFAULT now(),
   updated_at          timestamptz NOT NULL DEFAULT now(),
   version             integer     NOT NULL DEFAULT 1,
+  removal_destination text,
   FOREIGN KEY (team_id, part_id)   REFERENCES garage.part (team_id, id)   ON DELETE CASCADE,
   FOREIGN KEY (team_id, car_id)    REFERENCES garage.car (team_id, id)    ON DELETE CASCADE,
   FOREIGN KEY (team_id, engine_id) REFERENCES garage.engine (team_id, id) ON DELETE CASCADE,
   CHECK (num_nonnulls(car_id, engine_id) = 1),
-  CHECK (removed_at IS NULL OR removed_at > installed_at)
+  CHECK (removed_at IS NULL OR removed_at > installed_at),
+  CONSTRAINT part_install_removal_ck CHECK (
+    CASE
+      WHEN removed_at IS NULL THEN removal_destination IS NULL AND removal_reason IS NULL
+      WHEN removal_destination = 'scrap' THEN COALESCE(removal_reason IN ('broken', 'worn', 'lost'), false)
+      WHEN removal_destination IN ('stock', 'spare') THEN removal_reason IS NULL
+      ELSE false
+    END
+  )
 );
 CREATE INDEX part_install_active_idx ON garage.part_install (team_id, part_id) WHERE removed_at IS NULL;
 

@@ -138,6 +138,44 @@ DO $$ BEGIN
   EXCEPTION WHEN exclusion_violation THEN NULL; END;
 END $$;
 
+-- Montagens de peças (F1-07b): alvo único e remoção coerente
+INSERT INTO garage.part (id, team_id, kind, description, unit, has_service_life)
+VALUES ('01900000-0000-7000-8000-0000000000f1', app.current_team_id(), 'glow_plug', 'Vela', 'un', true);
+INSERT INTO garage.part_install (id, team_id, part_id, engine_id)
+VALUES ('01900000-0000-7000-8000-0000000000f2', app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', '01900000-0000-7000-8000-0000000000e1');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO garage.part_install (team_id, part_id, car_id, engine_id)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', '01900000-0000-7000-8000-0000000000c1', '01900000-0000-7000-8000-0000000000e1');
+    RAISE EXCEPTION 'FALHOU: montagem em carro e motor ao mesmo tempo';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.part_install SET removed_at = now() + interval '1 second' WHERE id = '01900000-0000-7000-8000-0000000000f2';
+    RAISE EXCEPTION 'FALHOU: montagem fechada sem destino';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.part_install SET removed_at = now() + interval '1 second', removal_destination = 'scrap'
+    WHERE id = '01900000-0000-7000-8000-0000000000f2';
+    RAISE EXCEPTION 'FALHOU: abate sem motivo';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.part_install SET removed_at = now() + interval '1 second', removal_destination = 'stock', removal_reason = 'worn'
+    WHERE id = '01900000-0000-7000-8000-0000000000f2';
+    RAISE EXCEPTION 'FALHOU: motivo fora do abate';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.part_install SET removal_destination = 'stock' WHERE id = '01900000-0000-7000-8000-0000000000f2';
+    RAISE EXCEPTION 'FALHOU: destino numa montagem ativa';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.part_install SET removed_at = now() + interval '1 second', removal_destination = 'scrap', removal_reason = 'sold'
+    WHERE id = '01900000-0000-7000-8000-0000000000f2';
+    RAISE EXCEPTION 'FALHOU: motivo de abate desconhecido';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  UPDATE garage.part_install SET removed_at = now() + interval '1 second', removal_destination = 'scrap', removal_reason = 'broken'
+  WHERE id = '01900000-0000-7000-8000-0000000000f2';
+END $$;
+
 -- Vistas
 DO $$ BEGIN
   ASSERT (SELECT best_lap_ms FROM events.session_lap_stats) = 41000, 'melhor volta';

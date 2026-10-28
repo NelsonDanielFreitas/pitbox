@@ -187,7 +187,7 @@ Utilizadores autenticam-se no Zitadel por OIDC com PKCE; o backend nunca vê pal
 
 ### 5.1 Utilizadores
 
-- **IdP**: Zitadel, alojado na UE; passkeys, TOTP, verificação de palavras-passe comprometidas, política de bloqueio e emails transacionais configurados lá
+- **IdP**: Zitadel, alojado na UE; passkeys, TOTP, verificação de email e emails transacionais configurados lá. O bloqueio permanente de password está desligado (ADR 0019); HIBP/CAPTCHA ficam no F5.
 - **Web**: padrão BFF. O `pitbox-api` faz o fluxo Authorization Code + PKCE (S256) como cliente confidencial; o estado do pré-login vai num cookie cifrado (`__Host-pitbox_login`, Lax) e a sessão no Valkey, com o cookie `__Host-pitbox_session` (HttpOnly, Secure, SameSite=Strict) a guardar só um valor aleatório (no Valkey fica o SHA-256). A sessão guarda identificadores e o refresh token cifrado; nenhum token no JavaScript (ADR 0013)
 - **Android/iOS (Capacitor)**: Authorization Code + PKCE com o browser do sistema (AppAuth); tokens no Keychain/Keystore
 - **Tokens**: ID token validado no login (`go-oidc`, algoritmo fixo em `PITBOX_OIDC_ALLOWED_ALGS`, por omissão ES256 configurado nas *web keys* do Zitadel); access token de 10 min, ID token de 5 min, refresh token com 168 h de inatividade e 720 h absolutas. O Zitadel rota o refresh token mas **não revoga a família** se um antigo for reutilizado (ADR 0004, emenda)
@@ -195,6 +195,10 @@ Utilizadores autenticam-se no Zitadel por OIDC com PKCE; o backend nunca vê pal
 - **Principal interno**: `{user_id, session_id, amr, auth_time}` lido da **sessão**, não do token (`auth_time`, `amr` e `sid` só existem no ID token); as equipas e papéis não vêm da sessão, são verificados no motor de autorização
 - **Utilizador desativado**: o access token de 10 min é a janela de revogação. No refresh seguinte o Zitadel recusa (`invalid_grant`, ou `invalid_request` com `Errors.User.*`) e a sessão acaba; uma falha do Zitadel ou do Valkey nunca desloga (`UNAVAILABLE`, graça de 2 min)
 - **Operações sensíveis** (F1-03c) exigem `auth_time` ≤ 5 min e `amr` com fator forte (lidos da sessão, renovados por reautenticação com `prompt=login`); caso contrário a API devolve `UNAUTHENTICATED` com pedido de reautenticação (step-up). OTP por SMS e por email estão desligados no Zitadel: dão `amr` `mfa` e estragariam esta regra
+- **Registo e verificação** (F1-03e): `allowRegister=true`, `ignoreUnknownUsernames=true`, passkeys permitidas e `allowExternalIdp=false`; o login v2 corre com `EMAIL_VERIFICATION=true`, pelo que envia o código e exige a verificação antes de concluir o pedido de autorização. O BFF só cria `user_account` depois de `email_verified=true`; se receber um login não verificado (defesa em profundidade, por exemplo de um cliente antigo), responde 303 para `/confirm-email`, uma página pública sem sessão e sem dados pessoais. O link de verificação e os códigos têm 30 min; a recuperação tem 15 min.
+- **Email local**: Mailpit (SMTP interno `mailpit:1025`, UI/API em `127.0.0.1:8025`) configurado por `zitadel-provision.py`; credenciais separadas para SMTP e UI. Em produção, o fornecedor real (UE, DPA) entra no F5-04/F5-05; o Mailpit nunca é usado fora do local.
+- **Defesa de palavra-passe**: mínimo de 12 caracteres sem composição obrigatória; `maxPasswordAttempts=0` no Zitadel para não haver bloqueio permanente; apenas os POST do login v2 são limitados por IP no Traefik (10/min, burst 10). HIBP, CAPTCHA e aviso de novo dispositivo ficam no F5; ver ADR 0019.
+- **Códigos em logs**: o access log do Traefik é JSON e omite `RequestPath`, `RequestLine` e query parameters, para não guardar códigos de verificação/recuperação. O BFF nunca regista códigos, links, emails ou tokens.
 
 ### 5.2 Modo box offline
 

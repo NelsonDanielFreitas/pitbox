@@ -6,9 +6,11 @@ import { cn } from "@/shared/lib/cn";
 export function TeamTabBar({
   teamId,
   showGarage,
+  showMore,
 }: {
   teamId: string;
   showGarage: boolean;
+  showMore: boolean;
 }) {
   const { t } = useTranslation();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
@@ -34,6 +36,14 @@ export function TeamTabBar({
             active={pathname.startsWith(`/teams/${teamId}/garage`)}
           />
         ) : null}
+        {showMore ? (
+          <TabLink
+            to="/teams/$teamId/more"
+            params={{ teamId }}
+            label={t("teams.more")}
+            active={pathname.startsWith(`/teams/${teamId}/more`)}
+          />
+        ) : null}
       </div>
     </nav>
   );
@@ -45,7 +55,7 @@ function TabLink({
   label,
   active,
 }: {
-  to: "/teams/$teamId" | "/teams/$teamId/garage/cars";
+  to: "/teams/$teamId" | "/teams/$teamId/garage/cars" | "/teams/$teamId/more";
   params: { teamId: string };
   label: string;
   active: boolean;

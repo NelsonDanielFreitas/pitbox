@@ -121,7 +121,7 @@ O backend é um único binário `pitbox-api` com módulos de domínio isolados, 
 | Módulo | Serviço Connect | Esquema SQL | Responsabilidade |
 | --- | --- | --- | --- |
 | identity | `TeamService`, `MemberService` | `identity` | Equipas, membros, convites, papéis (utilizadores vivem no IdP) |
-| garage | `CarService`, `EngineService`, `TyreService`, `PartService` | `garage` | Carros, motores, pneus, peças, stock, contadores |
+| garage | `CarService`, `EngineService`, `TyreService`, `PartService` | `garage` | Carros, motores, pneus, peças, stock, montagens de peças com vida útil (`InstallPart`/`RemovePart`), contadores |
 | setup | `SetupService` | `setup` | Fichas versionadas, comparação, partilha |
 | maintenance | `MaintenanceService` | `maintenance` | Intervenções, regras, checklists |
 | events | `EventService`, `SessionService` | `events` | Provas, horário, sessões, resultados, finais e paragens |

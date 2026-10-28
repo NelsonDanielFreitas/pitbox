@@ -26,6 +26,7 @@ const (
 	CallbackPath            = "/auth/callback"
 	LogoutPath              = "/auth/logout"
 	SignedOutPath           = "/auth/signed-out"
+	AccountSecurityPath     = "/auth/account-security"
 	ConfirmEmailPath        = "/confirm-email"
 	SessionPath             = "/auth/session"
 	SessionsPath            = "/auth/sessions"
@@ -46,6 +47,10 @@ const (
 // ErrStepUpRefused is returned by the step-up callback when the reauthenticated subject
 // does not match the existing session or the factor is not strong enough.
 var ErrStepUpRefused = errors.New("auth: step-up refused")
+
+// ErrStepUpWeakFactor means the same user reauthenticated, but without a strong factor.
+// The app can then guide the user to enroll passkey/TOTP without treating it as a bad login.
+var ErrStepUpWeakFactor = errors.New("auth: step-up requires a strong factor")
 
 // Handler serves /auth/login, /auth/callback, /auth/logout and /auth/signed-out.
 type Handler struct {
@@ -73,6 +78,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+CallbackPath, h.callback)
 	mux.HandleFunc("POST "+LogoutPath, h.logout)
 	mux.HandleFunc("GET "+SignedOutPath, h.signedOut)
+	mux.HandleFunc("GET "+AccountSecurityPath, h.accountSecurity)
 	mux.HandleFunc("GET "+SessionPath, h.sessionInfo)
 	mux.HandleFunc("GET "+SessionsPath, h.listSessions)
 	mux.HandleFunc("DELETE "+SessionRefPath, h.revokeSession)
@@ -251,6 +257,9 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case errors.Is(err, ErrUnauthenticated):
 				fail(w, http.StatusUnauthorized, msgUnauthenticated)
+			case errors.Is(err, ErrStepUpWeakFactor):
+				h.failLogin(ctx, r, "stepup_refused", claims.Subject)
+				h.redirectWeakStepUp(w, r)
 			case errors.Is(err, ErrStepUpRefused):
 				h.failLogin(ctx, r, "stepup_refused", claims.Subject)
 				fail(w, http.StatusForbidden, msgNotAllowed)
@@ -386,7 +395,7 @@ func (h *Handler) stepUp(ctx context.Context, w http.ResponseWriter, r *http.Req
 		return ErrStepUpRefused
 	}
 	if !principal.IsStrongFactor(claims.AMR) {
-		return ErrStepUpRefused
+		return ErrStepUpWeakFactor
 	}
 
 	existing.AuthTime = claims.authTime()
@@ -614,6 +623,60 @@ func (h *Handler) redirectConfirmEmail(w http.ResponseWriter, r *http.Request, r
 	noStore(w)
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+// accountSecurity sends an authenticated user to ZITADEL's self-service page for passkeys
+// and TOTP. The destination is derived only from the configured issuer; the request cannot
+// supply a redirect target.
+func (h *Handler) accountSecurity(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	noStore(w)
+	token := SessionTokenFromHeader(r.Header)
+	if token == "" {
+		h.redirectAccountSecurityLogin(w, r)
+		return
+	}
+	if _, err := h.Store.Get(ctx, token); err != nil {
+		if errors.Is(err, ErrNoSession) {
+			h.redirectAccountSecurityLogin(w, r)
+			return
+		}
+		h.Log.ErrorContext(ctx, "account security session", slog.String("reason", "store"))
+		fail(w, http.StatusServiceUnavailable, msgUnavailable)
+		return
+	}
+	target, err := accountSecurityURL(h.Provider.cfg.Issuer)
+	if err != nil {
+		h.Log.ErrorContext(ctx, "account security URL", slog.String("reason", "issuer"))
+		fail(w, http.StatusServiceUnavailable, msgUnavailable)
+		return
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func accountSecurityURL(issuer string) (string, error) {
+	u, err := url.Parse(issuer)
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", errors.New("invalid configured issuer")
+	}
+	u.Path = "/ui/console/users/me"
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
+}
+
+func (h *Handler) redirectAccountSecurityLogin(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	returnTo := url.QueryEscape("/teams/new")
+	http.Redirect(w, r, strings.TrimRight(h.PublicURL, "/")+"/login?returnTo="+returnTo, http.StatusSeeOther)
+}
+
+// redirectWeakStepUp returns the app to its fixed create-team guidance screen. No session
+// update or new cookie has happened because stepUp refused the weak factor.
+func (h *Handler) redirectWeakStepUp(w http.ResponseWriter, r *http.Request) {
+	noStore(w)
+	http.Redirect(w, r, strings.TrimRight(h.PublicURL, "/")+"/teams/new?step_up=weak", http.StatusSeeOther)
 }
 
 // endSessionURL is where the identity provider ends its own session. id_token_hint is

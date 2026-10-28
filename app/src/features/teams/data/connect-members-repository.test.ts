@@ -105,13 +105,14 @@ describe("ConnectMembersRepository", () => {
       }),
     }));
     const repository = new ConnectMembersRepository(client, refreshTeams);
-    const token = "B".repeat(43);
+    const bearer = "B".repeat(43);
+    const requestId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d65";
 
-    await expect(repository.acceptInvitation(token, "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d65")).resolves.toMatchObject({
+    await expect(repository.acceptInvitation(bearer, requestId)).resolves.toMatchObject({
       id: teamId,
       role: "pilot",
     });
-    expect(client.acceptInvitation).toHaveBeenCalledWith({ token, requestId: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d65" });
+    expect(client.acceptInvitation).toHaveBeenCalledWith({ token: bearer, requestId });
     expect(refreshTeams).toHaveBeenCalledOnce();
   });
 

@@ -11,7 +11,10 @@ import "pitbox/garage/v1/garage.proto";
 // PartService manages the parts catalogue and its append-only stock movements.
 // Quantities are hundredths of the part's unit (qty_centi); costs are cents.
 // The unit cost is omitted for pilots. A movement that crosses the minimum
-// writes one garage.stock_low event.
+// writes one garage.stock_low event. A part with a service life can be installed
+// in a car or an engine (each installation is one unit); installing writes an
+// `installed` movement (-1) and removing to stock writes a `returned` one (+1),
+// in the same transaction as the installation row.
 service PartService {
   rpc GetPart(GetPartRequest) returns (GetPartResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -22,10 +25,50 @@ service PartService {
   rpc ListStockMovements(ListStockMovementsRequest) returns (ListStockMovementsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  rpc ListPartInstalls(ListPartInstallsRequest) returns (ListPartInstallsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   rpc CreatePart(CreatePartRequest) returns (CreatePartResponse);
   rpc UpdatePart(UpdatePartRequest) returns (UpdatePartResponse);
   rpc DeletePart(DeletePartRequest) returns (DeletePartResponse);
   rpc AddStockMovement(AddStockMovementRequest) returns (AddStockMovementResponse);
+  rpc InstallPart(InstallPartRequest) returns (InstallPartResponse);
+  rpc RemovePart(RemovePartRequest) returns (RemovePartResponse);
+}
+
+// Where a removed part goes. STOCK returns one unit to the stock; SCRAP writes
+// off the unit and needs a reason; SPARE keeps it outside the stock.
+enum RemovalDestination {
+  REMOVAL_DESTINATION_UNSPECIFIED = 0;
+  REMOVAL_DESTINATION_STOCK = 1;
+  REMOVAL_DESTINATION_SCRAP = 2;
+  REMOVAL_DESTINATION_SPARE = 3;
+}
+
+// Why a unit was scrapped. Only valid with REMOVAL_DESTINATION_SCRAP.
+enum RemovalReason {
+  REMOVAL_REASON_UNSPECIFIED = 0;
+  REMOVAL_REASON_BROKEN = 1;
+  REMOVAL_REASON_WORN = 2;
+  REMOVAL_REASON_LOST = 3;
+}
+
+// PartInstall is one installation of one unit of a part in a car or an engine.
+// run_seconds and sessions stay at zero until usage accounting (F2-04).
+message PartInstall {
+  string id = 1;
+  string part_id = 2;
+  oneof target {
+    string car_id = 3;
+    string engine_id = 4;
+  }
+  google.protobuf.Timestamp installed_at = 5;
+  optional google.protobuf.Timestamp removed_at = 6;
+  RemovalDestination removal_destination = 7;
+  RemovalReason removal_reason = 8;
+  int32 run_seconds = 9;
+  int32 sessions = 10;
+  int32 version = 11;
 }
 
 message Part {
@@ -171,4 +214,67 @@ message AddStockMovementRequest {
 message AddStockMovementResponse {
   Part part = 1;
   StockMovement movement = 2;
+}
+
+message InstallPartRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string part_id = 3 [(buf.validate.field).string.uuid = true];
+  oneof target {
+    option (buf.validate.oneof).required = true;
+    string car_id = 4 [(buf.validate.field).string.uuid = true];
+    string engine_id = 5 [(buf.validate.field).string.uuid = true];
+  }
+  // Defaults to the server time; a client that was offline may send the real time.
+  optional google.protobuf.Timestamp installed_at = 6 [(buf.validate.field).timestamp.lt_now = true];
+  optional string note = 7 [(buf.validate.field).string.max_len = 500];
+}
+
+message InstallPartResponse {
+  PartInstall install = 1;
+  Part part = 2;
+}
+
+message RemovePartRequest {
+  option (buf.validate.message).cel = {
+    id: "remove_part.reason"
+    message: "a reason is required for scrap and not allowed otherwise"
+    expression: "(this.destination == 2) == (this.reason != 0)"
+  };
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string install_id = 3 [(buf.validate.field).string.uuid = true];
+  RemovalDestination destination = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  RemovalReason reason = 5 [(buf.validate.field).enum.defined_only = true];
+  optional string note = 6 [(buf.validate.field).string.max_len = 500];
+}
+
+message RemovePartResponse {
+  PartInstall install = 1;
+  Part part = 2;
+}
+
+message ListPartInstallsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  oneof filter {
+    option (buf.validate.oneof).required = true;
+    string part_id = 2 [(buf.validate.field).string.uuid = true];
+    string car_id = 3 [(buf.validate.field).string.uuid = true];
+    string engine_id = 4 [(buf.validate.field).string.uuid = true];
+  }
+  // false lists only the active installations.
+  bool include_history = 5;
+  int32 page_size = 6 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 7 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListPartInstallsResponse {
+  repeated PartInstall installs = 1;
+  string next_page_token = 2;
 }

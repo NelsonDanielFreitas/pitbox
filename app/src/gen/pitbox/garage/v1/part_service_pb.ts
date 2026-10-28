@@ -2,8 +2,8 @@
 // @generated from file pitbox/garage/v1/part_service.proto (package pitbox.garage.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
@@ -15,7 +15,84 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file pitbox/garage/v1/part_service.proto.
  */
 export const file_pitbox_garage_v1_part_service: GenFile = /*@__PURE__*/
-  fileDesc("CiNwaXRib3gvZ2FyYWdlL3YxL3BhcnRfc2VydmljZS5wcm90bxIQcGl0Ym94LmdhcmFnZS52MSKpAwoEUGFydBIKCgJpZBgBIAEoCRIoCgRraW5kGAIgASgOMhoucGl0Ym94LmdhcmFnZS52MS5QYXJ0S2luZBISCgVicmFuZBgDIAEoCUgAiAEBEhYKCXJlZmVyZW5jZRgEIAEoCUgBiAEBEhMKC2Rlc2NyaXB0aW9uGAUgASgJEgwKBHVuaXQYBiABKAkSJgoFc3BlY3MYByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhcKD21pbl9zdG9ja19jZW50aRgIIAEoAxIcCg91bml0X2Nvc3RfY2VudHMYCSABKAVIAogBARIQCghjdXJyZW5jeRgKIAEoCRIYChBoYXNfc2VydmljZV9saWZlGAsgASgIEhEKCXF0eV9jZW50aRgMIAEoAxIRCgliZWxvd19taW4YDSABKAgSLgoKY3JlYXRlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyc2lvbhgPIAEoBUIICgZfYnJhbmRCDAoKX3JlZmVyZW5jZUISChBfdW5pdF9jb3N0X2NlbnRzIsEBCg1TdG9ja01vdmVtZW50EgoKAmlkGAEgASgJEg8KB3BhcnRfaWQYAiABKAkSFwoPcXR5X2RlbHRhX2NlbnRpGAMgASgDEi0KBnJlYXNvbhgEIAEoDjIdLnBpdGJveC5nYXJhZ2UudjEuU3RvY2tSZWFzb24SEQoEbm90ZRgFIAEoCUgAiAEBEi8KC29jY3VycmVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIHCgVfbm90ZSJGCg5HZXRQYXJ0UmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIZCgdwYXJ0X2lkGAIgASgJQgi6SAVyA7ABASI3Cg9HZXRQYXJ0UmVzcG9uc2USJAoEcGFydBgBIAEoCzIWLnBpdGJveC5nYXJhZ2UudjEuUGFydCJqChBMaXN0UGFydHNSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEh0KCXBhZ2Vfc2l6ZRgCIAEoBUIKukgHGgUYyAEoABIcCgpwYWdlX3Rva2Vu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X2lkGAMgASgJQgi6SAVyA7ABARIvCg9xdHlfZGVsdGFfY2VudGkYBCABKANCFrpIEyIRGP/Hr6AlKIG40N/a/////wESNwoGcmVhc29uGAUgASgOMh0ucGl0Ym94LmdhcmFnZS52MS5TdG9ja1JlYXNvbkIIukgFggECEAESGwoEbm90ZRgGIAEoCUIIukgFcgMY9ANIAIgBAUIHCgVfbm90ZSJzChhBZGRTdG9ja01vdmVtZW50UmVzcG9uc2USJAoEcGFydBgBIAEoCzIWLnBpdGJveC5nYXJhZ2UudjEuUGFydBIxCghtb3ZlbWVudBgCIAEoCzIfLnBpdGJveC5nYXJhZ2UudjEuU3RvY2tNb3ZlbWVudDKpBQoLUGFydFNlcnZpY2USUwoHR2V0UGFydBIgLnBpdGJveC5nYXJhZ2UudjEuR2V0UGFydFJlcXVlc3QaIS5waXRib3guZ2FyYWdlLnYxLkdldFBhcnRSZXNwb25zZSIDkAIBElkKCUxpc3RQYXJ0cxIiLnBpdGJveC5nYXJhZ2UudjEuTGlzdFBhcnRzUmVxdWVzdBojLnBpdGJveC5nYXJhZ2UudjEuTGlzdFBhcnRzUmVzcG9uc2UiA5ACARJ0ChJMaXN0U3RvY2tNb3ZlbWVudHMSKy5waXRib3guZ2FyYWdlLnYxLkxpc3RTdG9ja01vdmVtZW50c1JlcXVlc3QaLC5waXRib3guZ2FyYWdlLnYxLkxpc3RTdG9ja01vdmVtZW50c1Jlc3BvbnNlIgOQAgESVwoKQ3JlYXRlUGFydBIjLnBpdGJveC5nYXJhZ2UudjEuQ3JlYXRlUGFydFJlcXVlc3QaJC5waXRib3guZ2FyYWdlLnYxLkNyZWF0ZVBhcnRSZXNwb25zZRJXCgpVcGRhdGVQYXJ0EiMucGl0Ym94LmdhcmFnZS52MS5VcGRhdGVQYXJ0UmVxdWVzdBokLnBpdGJveC5nYXJhZ2UudjEuVXBkYXRlUGFydFJlc3BvbnNlElcKCkRlbGV0ZVBhcnQSIy5waXRib3guZ2FyYWdlLnYxLkRlbGV0ZVBhcnRSZXF1ZXN0GiQucGl0Ym94LmdhcmFnZS52MS5EZWxldGVQYXJ0UmVzcG9uc2USaQoQQWRkU3RvY2tNb3ZlbWVudBIpLnBpdGJveC5nYXJhZ2UudjEuQWRkU3RvY2tNb3ZlbWVudFJlcXVlc3QaKi5waXRib3guZ2FyYWdlLnYxLkFkZFN0b2NrTW92ZW1lbnRSZXNwb25zZULXAQoUY29tLnBpdGJveC5nYXJhZ2UudjFCEFBhcnRTZXJ2aWNlUHJvdG9QAVpLZ2l0aHViLmNvbS9OZWxzb25EYW5pZWxGcmVpdGFzL3BpdGJveC9iYWNrZW5kL2dlbi9waXRib3gvZ2FyYWdlL3YxO2dhcmFnZXYxogIDUEdYqgIQUGl0Ym94LkdhcmFnZS5WMcoCEFBpdGJveFxHYXJhZ2VcVjHiAhxQaXRib3hcR2FyYWdlXFYxXEdQQk1ldGFkYXRh6gISUGl0Ym94OjpHYXJhZ2U6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_struct, file_google_protobuf_timestamp, file_pitbox_garage_v1_garage]);
+  fileDesc("CiNwaXRib3gvZ2FyYWdlL3YxL3BhcnRfc2VydmljZS5wcm90bxIQcGl0Ym94LmdhcmFnZS52MSKFAwoLUGFydEluc3RhbGwSCgoCaWQYASABKAkSDwoHcGFydF9pZBgCIAEoCRIQCgZjYXJfaWQYAyABKAlIABITCgllbmdpbmVfaWQYBCABKAlIABIwCgxpbnN0YWxsZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKCnJlbW92ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESQQoTcmVtb3ZhbF9kZXN0aW5hdGlvbhgHIAEoDjIkLnBpdGJveC5nYXJhZ2UudjEuUmVtb3ZhbERlc3RpbmF0aW9uEjcKDnJlbW92YWxfcmVhc29uGAggASgOMh8ucGl0Ym94LmdhcmFnZS52MS5SZW1vdmFsUmVhc29uEhMKC3J1bl9zZWNvbmRzGAkgASgFEhAKCHNlc3Npb25zGAogASgFEg8KB3ZlcnNpb24YCyABKAVCCAoGdGFyZ2V0Qg0KC19yZW1vdmVkX2F0IqkDCgRQYXJ0EgoKAmlkGAEgASgJEigKBGtpbmQYAiABKA4yGi5waXRib3guZ2FyYWdlLnYxLlBhcnRLaW5kEhIKBWJyYW5kGAMgASgJSACIAQESFgoJcmVmZXJlbmNlGAQgASgJSAGIAQESEwoLZGVzY3JpcHRpb24YBSABKAkSDAoEdW5pdBgGIAEoCRImCgVzcGVjcxgHIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSFwoPbWluX3N0b2NrX2NlbnRpGAggASgDEhwKD3VuaXRfY29zdF9jZW50cxgJIAEoBUgCiAEBEhAKCGN1cnJlbmN5GAogASgJEhgKEGhhc19zZXJ2aWNlX2xpZmUYCyABKAgSEQoJcXR5X2NlbnRpGAwgASgDEhEKCWJlbG93X21pbhgNIAEoCBIuCgpjcmVhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgd2ZXJzaW9uGA8gASgFQggKBl9icmFuZEIMCgpfcmVmZXJlbmNlQhIKEF91bml0X2Nvc3RfY2VudHMiwQEKDVN0b2NrTW92ZW1lbnQSCgoCaWQYASABKAkSDwoHcGFydF9pZBgCIAEoCRIXCg9xdHlfZGVsdGFfY2VudGkYAyABKAMSLQoGcmVhc29uGAQgASgOMh0ucGl0Ym94LmdhcmFnZS52MS5TdG9ja1JlYXNvbhIRCgRub3RlGAUgASgJSACIAQESLwoLb2NjdXJyZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQgcKBV9ub3RlIkYKDkdldFBhcnRSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhkKB3BhcnRfaWQYAiABKAlCCLpIBXIDsAEBIjcKD0dldFBhcnRSZXNwb25zZRIkCgRwYXJ0GAEgASgLMhYucGl0Ym94LmdhcmFnZS52MS5QYXJ0ImoKEExpc3RQYXJ0c1JlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHQoJcGFnZV9zaXplGAIgASgFQgq6SAcaBRjIASgAEhwKCnBhZ2VfdG9rZW4YAyABKAlCCLpIBXIDGIAEIlMKEUxpc3RQYXJ0c1Jlc3BvbnNlEiUKBXBhcnRzGAEgAygLMhYucGl0Ym94LmdhcmFnZS52MS5QYXJ0EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSKOAQoZTGlzdFN0b2NrTW92ZW1lbnRzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIZCgdwYXJ0X2lkGAIgASgJQgi6SAVyA7ABARIdCglwYWdlX3NpemUYAyABKAVCCrpIBxoFGMgBKAASHAoKcGFnZV90b2tlbhgEIAEoCUIIukgFcgMYgAQiaQoaTGlzdFN0b2NrTW92ZW1lbnRzUmVzcG9uc2USMgoJbW92ZW1lbnRzGAEgAygLMh8ucGl0Ym94LmdhcmFnZS52MS5TdG9ja01vdmVtZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSL4AwoRQ3JlYXRlUGFydFJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESMgoEa2luZBgDIAEoDjIaLnBpdGJveC5nYXJhZ2UudjEuUGFydEtpbmRCCLpIBYIBAhABEhsKBWJyYW5kGAQgASgJQge6SARyAhhQ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iAEBEhsKBG5vdGUYByABKAlCCLpIBXIDGPQDSAKIAQFCDwoGdGFyZ2V0EgW6SAIIAUIPCg1faW5zdGFsbGVkX2F0QgcKBV9ub3RlImsKE0luc3RhbGxQYXJ0UmVzcG9uc2USLgoHaW5zdGFsbBgBIAEoCzIdLnBpdGJveC5nYXJhZ2UudjEuUGFydEluc3RhbGwSJAoEcGFydBgCIAEoCzIWLnBpdGJveC5nYXJhZ2UudjEuUGFydCKXAwoRUmVtb3ZlUGFydFJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESHAoKaW5zdGFsbF9pZBgDIAEoCUIIukgFcgOwAQESRQoLZGVzdGluYXRpb24YBCABKA4yJC5waXRib3guZ2FyYWdlLnYxLlJlbW92YWxEZXN0aW5hdGlvbkIKukgHggEEEAEgABI5CgZyZWFzb24YBSABKA4yHy5waXRib3guZ2FyYWdlLnYxLlJlbW92YWxSZWFzb25CCLpIBYIBAhABEhsKBG5vdGUYBiABKAlCCLpIBXIDGPQDSACIAQE6ggG6SH8afQoScmVtb3ZlX3BhcnQucmVhc29uEjhhIHJlYXNvbiBpcyByZXF1aXJlZCBmb3Igc2NyYXAgYW5kIG5vdCBhbGxvd2VkIG90aGVyd2lzZRotKHRoaXMuZGVzdGluYXRpb24gPT0gMikgPT0gKHRoaXMucmVhc29uICE9IDApQgcKBV9ub3RlImoKElJlbW92ZVBhcnRSZXNwb25zZRIuCgdpbnN0YWxsGAEgASgLMh0ucGl0Ym94LmdhcmFnZS52MS5QYXJ0SW5zdGFsbBIkCgRwYXJ0GAIgASgLMhYucGl0Ym94LmdhcmFnZS52MS5QYXJ0IvMBChdMaXN0UGFydEluc3RhbGxzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIbCgdwYXJ0X2lkGAIgASgJQgi6SAVyA7ABAUgAEhoKBmNhcl9pZBgDIAEoCUIIukgFcgOwAQFIABIdCgllbmdpbmVfaWQYBCABKAlCCLpIBXIDsAEBSAASFwoPaW5jbHVkZV9oaXN0b3J5GAUgASgIEh0KCXBhZ2Vfc2l6ZRgGIAEoBUIKukgHGgUYyAEoABIcCgpwYWdlX3Rva2VuGAcgASgJQgi6SAVyAxiABEIPCgZmaWx0ZXISBbpIAggBImQKGExpc3RQYXJ0SW5zdGFsbHNSZXNwb25zZRIvCghpbnN0YWxscxgBIAMoCzIdLnBpdGJveC5nYXJhZ2UudjEuUGFydEluc3RhbGwSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJKpYBChJSZW1vdmFsRGVzdGluYXRpb24SIwofUkVNT1ZBTF9ERVNUSU5BVElPTl9VTlNQRUNJRklFRBAAEh0KGVJFTU9WQUxfREVTVElOQVRJT05fU1RPQ0sQARIdChlSRU1PVkFMX0RFU1RJTkFUSU9OX1NDUkFQEAISHQoZUkVNT1ZBTF9ERVNUSU5BVElPTl9TUEFSRRADKnwKDVJlbW92YWxSZWFzb24SHgoaUkVNT1ZBTF9SRUFTT05fVU5TUEVDSUZJRUQQABIZChVSRU1PVkFMX1JFQVNPTl9CUk9LRU4QARIXChNSRU1PVkFMX1JFQVNPTl9XT1JOEAISFwoTUkVNT1ZBTF9SRUFTT05fTE9TVBADMs4HCgtQYXJ0U2VydmljZRJTCgdHZXRQYXJ0EiAucGl0Ym94LmdhcmFnZS52MS5HZXRQYXJ0UmVxdWVzdBohLnBpdGJveC5nYXJhZ2UudjEuR2V0UGFydFJlc3BvbnNlIgOQAgESWQoJTGlzdFBhcnRzEiIucGl0Ym94LmdhcmFnZS52MS5MaXN0UGFydHNSZXF1ZXN0GiMucGl0Ym94LmdhcmFnZS52MS5MaXN0UGFydHNSZXNwb25zZSIDkAIBEnQKEkxpc3RTdG9ja01vdmVtZW50cxIrLnBpdGJveC5nYXJhZ2UudjEuTGlzdFN0b2NrTW92ZW1lbnRzUmVxdWVzdBosLnBpdGJveC5nYXJhZ2UudjEuTGlzdFN0b2NrTW92ZW1lbnRzUmVzcG9uc2UiA5ACARJuChBMaXN0UGFydEluc3RhbGxzEikucGl0Ym94LmdhcmFnZS52MS5MaXN0UGFydEluc3RhbGxzUmVxdWVzdBoqLnBpdGJveC5nYXJhZ2UudjEuTGlzdFBhcnRJbnN0YWxsc1Jlc3BvbnNlIgOQAgESVwoKQ3JlYXRlUGFydBIjLnBpdGJveC5nYXJhZ2UudjEuQ3JlYXRlUGFydFJlcXVlc3QaJC5waXRib3guZ2FyYWdlLnYxLkNyZWF0ZVBhcnRSZXNwb25zZRJXCgpVcGRhdGVQYXJ0EiMucGl0Ym94LmdhcmFnZS52MS5VcGRhdGVQYXJ0UmVxdWVzdBokLnBpdGJveC5nYXJhZ2UudjEuVXBkYXRlUGFydFJlc3BvbnNlElcKCkRlbGV0ZVBhcnQSIy5waXRib3guZ2FyYWdlLnYxLkRlbGV0ZVBhcnRSZXF1ZXN0GiQucGl0Ym94LmdhcmFnZS52MS5EZWxldGVQYXJ0UmVzcG9uc2USaQoQQWRkU3RvY2tNb3ZlbWVudBIpLnBpdGJveC5nYXJhZ2UudjEuQWRkU3RvY2tNb3ZlbWVudFJlcXVlc3QaKi5waXRib3guZ2FyYWdlLnYxLkFkZFN0b2NrTW92ZW1lbnRSZXNwb25zZRJaCgtJbnN0YWxsUGFydBIkLnBpdGJveC5nYXJhZ2UudjEuSW5zdGFsbFBhcnRSZXF1ZXN0GiUucGl0Ym94LmdhcmFnZS52MS5JbnN0YWxsUGFydFJlc3BvbnNlElcKClJlbW92ZVBhcnQSIy5waXRib3guZ2FyYWdlLnYxLlJlbW92ZVBhcnRSZXF1ZXN0GiQucGl0Ym94LmdhcmFnZS52MS5SZW1vdmVQYXJ0UmVzcG9uc2VC1wEKFGNvbS5waXRib3guZ2FyYWdlLnYxQhBQYXJ0U2VydmljZVByb3RvUAFaS2dpdGh1Yi5jb20vTmVsc29uRGFuaWVsRnJlaXRhcy9waXRib3gvYmFja2VuZC9nZW4vcGl0Ym94L2dhcmFnZS92MTtnYXJhZ2V2MaICA1BHWKoCEFBpdGJveC5HYXJhZ2UuVjHKAhBQaXRib3hcR2FyYWdlXFYx4gIcUGl0Ym94XEdhcmFnZVxWMVxHUEJNZXRhZGF0YeoCElBpdGJveDo6R2FyYWdlOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_struct, file_google_protobuf_timestamp, file_pitbox_garage_v1_garage]);
+
+/**
+ * PartInstall is one installation of one unit of a part in a car or an engine.
+ * run_seconds and sessions stay at zero until usage accounting (F2-04).
+ *
+ * @generated from message pitbox.garage.v1.PartInstall
+ */
+export type PartInstall = Message<"pitbox.garage.v1.PartInstall"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string part_id = 2;
+   */
+  partId: string;
+
+  /**
+   * @generated from oneof pitbox.garage.v1.PartInstall.target
+   */
+  target: {
+    /**
+     * @generated from field: string car_id = 3;
+     */
+    value: string;
+    case: "carId";
+  } | {
+    /**
+     * @generated from field: string engine_id = 4;
+     */
+    value: string;
+    case: "engineId";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * @generated from field: google.protobuf.Timestamp installed_at = 5;
+   */
+  installedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp removed_at = 6;
+   */
+  removedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: pitbox.garage.v1.RemovalDestination removal_destination = 7;
+   */
+  removalDestination: RemovalDestination;
+
+  /**
+   * @generated from field: pitbox.garage.v1.RemovalReason removal_reason = 8;
+   */
+  removalReason: RemovalReason;
+
+  /**
+   * @generated from field: int32 run_seconds = 9;
+   */
+  runSeconds: number;
+
+  /**
+   * @generated from field: int32 sessions = 10;
+   */
+  sessions: number;
+
+  /**
+   * @generated from field: int32 version = 11;
+   */
+  version: number;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.PartInstall.
+ * Use `create(PartInstallSchema)` to create a new message.
+ */
+export const PartInstallSchema: GenMessage<PartInstall> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 0);
 
 /**
  * @generated from message pitbox.garage.v1.Part
@@ -102,7 +179,7 @@ export type Part = Message<"pitbox.garage.v1.Part"> & {
  * Use `create(PartSchema)` to create a new message.
  */
 export const PartSchema: GenMessage<Part> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 0);
+  messageDesc(file_pitbox_garage_v1_part_service, 1);
 
 /**
  * @generated from message pitbox.garage.v1.StockMovement
@@ -144,7 +221,7 @@ export type StockMovement = Message<"pitbox.garage.v1.StockMovement"> & {
  * Use `create(StockMovementSchema)` to create a new message.
  */
 export const StockMovementSchema: GenMessage<StockMovement> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 1);
+  messageDesc(file_pitbox_garage_v1_part_service, 2);
 
 /**
  * @generated from message pitbox.garage.v1.GetPartRequest
@@ -166,7 +243,7 @@ export type GetPartRequest = Message<"pitbox.garage.v1.GetPartRequest"> & {
  * Use `create(GetPartRequestSchema)` to create a new message.
  */
 export const GetPartRequestSchema: GenMessage<GetPartRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 2);
+  messageDesc(file_pitbox_garage_v1_part_service, 3);
 
 /**
  * @generated from message pitbox.garage.v1.GetPartResponse
@@ -183,7 +260,7 @@ export type GetPartResponse = Message<"pitbox.garage.v1.GetPartResponse"> & {
  * Use `create(GetPartResponseSchema)` to create a new message.
  */
 export const GetPartResponseSchema: GenMessage<GetPartResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 3);
+  messageDesc(file_pitbox_garage_v1_part_service, 4);
 
 /**
  * @generated from message pitbox.garage.v1.ListPartsRequest
@@ -210,7 +287,7 @@ export type ListPartsRequest = Message<"pitbox.garage.v1.ListPartsRequest"> & {
  * Use `create(ListPartsRequestSchema)` to create a new message.
  */
 export const ListPartsRequestSchema: GenMessage<ListPartsRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 4);
+  messageDesc(file_pitbox_garage_v1_part_service, 5);
 
 /**
  * @generated from message pitbox.garage.v1.ListPartsResponse
@@ -232,7 +309,7 @@ export type ListPartsResponse = Message<"pitbox.garage.v1.ListPartsResponse"> & 
  * Use `create(ListPartsResponseSchema)` to create a new message.
  */
 export const ListPartsResponseSchema: GenMessage<ListPartsResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 5);
+  messageDesc(file_pitbox_garage_v1_part_service, 6);
 
 /**
  * @generated from message pitbox.garage.v1.ListStockMovementsRequest
@@ -264,7 +341,7 @@ export type ListStockMovementsRequest = Message<"pitbox.garage.v1.ListStockMovem
  * Use `create(ListStockMovementsRequestSchema)` to create a new message.
  */
 export const ListStockMovementsRequestSchema: GenMessage<ListStockMovementsRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 6);
+  messageDesc(file_pitbox_garage_v1_part_service, 7);
 
 /**
  * @generated from message pitbox.garage.v1.ListStockMovementsResponse
@@ -286,7 +363,7 @@ export type ListStockMovementsResponse = Message<"pitbox.garage.v1.ListStockMove
  * Use `create(ListStockMovementsResponseSchema)` to create a new message.
  */
 export const ListStockMovementsResponseSchema: GenMessage<ListStockMovementsResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 7);
+  messageDesc(file_pitbox_garage_v1_part_service, 8);
 
 /**
  * @generated from message pitbox.garage.v1.CreatePartRequest
@@ -363,7 +440,7 @@ export type CreatePartRequest = Message<"pitbox.garage.v1.CreatePartRequest"> & 
  * Use `create(CreatePartRequestSchema)` to create a new message.
  */
 export const CreatePartRequestSchema: GenMessage<CreatePartRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 8);
+  messageDesc(file_pitbox_garage_v1_part_service, 9);
 
 /**
  * @generated from message pitbox.garage.v1.CreatePartResponse
@@ -380,7 +457,7 @@ export type CreatePartResponse = Message<"pitbox.garage.v1.CreatePartResponse"> 
  * Use `create(CreatePartResponseSchema)` to create a new message.
  */
 export const CreatePartResponseSchema: GenMessage<CreatePartResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 9);
+  messageDesc(file_pitbox_garage_v1_part_service, 10);
 
 /**
  * @generated from message pitbox.garage.v1.UpdatePartRequest
@@ -467,7 +544,7 @@ export type UpdatePartRequest = Message<"pitbox.garage.v1.UpdatePartRequest"> & 
  * Use `create(UpdatePartRequestSchema)` to create a new message.
  */
 export const UpdatePartRequestSchema: GenMessage<UpdatePartRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 10);
+  messageDesc(file_pitbox_garage_v1_part_service, 11);
 
 /**
  * @generated from message pitbox.garage.v1.UpdatePartResponse
@@ -484,7 +561,7 @@ export type UpdatePartResponse = Message<"pitbox.garage.v1.UpdatePartResponse"> 
  * Use `create(UpdatePartResponseSchema)` to create a new message.
  */
 export const UpdatePartResponseSchema: GenMessage<UpdatePartResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 11);
+  messageDesc(file_pitbox_garage_v1_part_service, 12);
 
 /**
  * @generated from message pitbox.garage.v1.DeletePartRequest
@@ -516,7 +593,7 @@ export type DeletePartRequest = Message<"pitbox.garage.v1.DeletePartRequest"> & 
  * Use `create(DeletePartRequestSchema)` to create a new message.
  */
 export const DeletePartRequestSchema: GenMessage<DeletePartRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 12);
+  messageDesc(file_pitbox_garage_v1_part_service, 13);
 
 /**
  * @generated from message pitbox.garage.v1.DeletePartResponse
@@ -529,7 +606,7 @@ export type DeletePartResponse = Message<"pitbox.garage.v1.DeletePartResponse"> 
  * Use `create(DeletePartResponseSchema)` to create a new message.
  */
 export const DeletePartResponseSchema: GenMessage<DeletePartResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 13);
+  messageDesc(file_pitbox_garage_v1_part_service, 14);
 
 /**
  * @generated from message pitbox.garage.v1.AddStockMovementRequest
@@ -571,7 +648,7 @@ export type AddStockMovementRequest = Message<"pitbox.garage.v1.AddStockMovement
  * Use `create(AddStockMovementRequestSchema)` to create a new message.
  */
 export const AddStockMovementRequestSchema: GenMessage<AddStockMovementRequest> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 14);
+  messageDesc(file_pitbox_garage_v1_part_service, 15);
 
 /**
  * @generated from message pitbox.garage.v1.AddStockMovementResponse
@@ -593,13 +670,304 @@ export type AddStockMovementResponse = Message<"pitbox.garage.v1.AddStockMovemen
  * Use `create(AddStockMovementResponseSchema)` to create a new message.
  */
 export const AddStockMovementResponseSchema: GenMessage<AddStockMovementResponse> = /*@__PURE__*/
-  messageDesc(file_pitbox_garage_v1_part_service, 15);
+  messageDesc(file_pitbox_garage_v1_part_service, 16);
+
+/**
+ * @generated from message pitbox.garage.v1.InstallPartRequest
+ */
+export type InstallPartRequest = Message<"pitbox.garage.v1.InstallPartRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from field: string request_id = 2;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string part_id = 3;
+   */
+  partId: string;
+
+  /**
+   * @generated from oneof pitbox.garage.v1.InstallPartRequest.target
+   */
+  target: {
+    /**
+     * @generated from field: string car_id = 4;
+     */
+    value: string;
+    case: "carId";
+  } | {
+    /**
+     * @generated from field: string engine_id = 5;
+     */
+    value: string;
+    case: "engineId";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * Defaults to the server time; a client that was offline may send the real time.
+   *
+   * @generated from field: optional google.protobuf.Timestamp installed_at = 6;
+   */
+  installedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: optional string note = 7;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.InstallPartRequest.
+ * Use `create(InstallPartRequestSchema)` to create a new message.
+ */
+export const InstallPartRequestSchema: GenMessage<InstallPartRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 17);
+
+/**
+ * @generated from message pitbox.garage.v1.InstallPartResponse
+ */
+export type InstallPartResponse = Message<"pitbox.garage.v1.InstallPartResponse"> & {
+  /**
+   * @generated from field: pitbox.garage.v1.PartInstall install = 1;
+   */
+  install?: PartInstall | undefined;
+
+  /**
+   * @generated from field: pitbox.garage.v1.Part part = 2;
+   */
+  part?: Part | undefined;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.InstallPartResponse.
+ * Use `create(InstallPartResponseSchema)` to create a new message.
+ */
+export const InstallPartResponseSchema: GenMessage<InstallPartResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 18);
+
+/**
+ * @generated from message pitbox.garage.v1.RemovePartRequest
+ */
+export type RemovePartRequest = Message<"pitbox.garage.v1.RemovePartRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from field: string request_id = 2;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string install_id = 3;
+   */
+  installId: string;
+
+  /**
+   * @generated from field: pitbox.garage.v1.RemovalDestination destination = 4;
+   */
+  destination: RemovalDestination;
+
+  /**
+   * @generated from field: pitbox.garage.v1.RemovalReason reason = 5;
+   */
+  reason: RemovalReason;
+
+  /**
+   * @generated from field: optional string note = 6;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.RemovePartRequest.
+ * Use `create(RemovePartRequestSchema)` to create a new message.
+ */
+export const RemovePartRequestSchema: GenMessage<RemovePartRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 19);
+
+/**
+ * @generated from message pitbox.garage.v1.RemovePartResponse
+ */
+export type RemovePartResponse = Message<"pitbox.garage.v1.RemovePartResponse"> & {
+  /**
+   * @generated from field: pitbox.garage.v1.PartInstall install = 1;
+   */
+  install?: PartInstall | undefined;
+
+  /**
+   * @generated from field: pitbox.garage.v1.Part part = 2;
+   */
+  part?: Part | undefined;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.RemovePartResponse.
+ * Use `create(RemovePartResponseSchema)` to create a new message.
+ */
+export const RemovePartResponseSchema: GenMessage<RemovePartResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 20);
+
+/**
+ * @generated from message pitbox.garage.v1.ListPartInstallsRequest
+ */
+export type ListPartInstallsRequest = Message<"pitbox.garage.v1.ListPartInstallsRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from oneof pitbox.garage.v1.ListPartInstallsRequest.filter
+   */
+  filter: {
+    /**
+     * @generated from field: string part_id = 2;
+     */
+    value: string;
+    case: "partId";
+  } | {
+    /**
+     * @generated from field: string car_id = 3;
+     */
+    value: string;
+    case: "carId";
+  } | {
+    /**
+     * @generated from field: string engine_id = 4;
+     */
+    value: string;
+    case: "engineId";
+  } | { case: undefined; value?: undefined };
+
+  /**
+   * false lists only the active installations.
+   *
+   * @generated from field: bool include_history = 5;
+   */
+  includeHistory: boolean;
+
+  /**
+   * @generated from field: int32 page_size = 6;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 7;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.ListPartInstallsRequest.
+ * Use `create(ListPartInstallsRequestSchema)` to create a new message.
+ */
+export const ListPartInstallsRequestSchema: GenMessage<ListPartInstallsRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 21);
+
+/**
+ * @generated from message pitbox.garage.v1.ListPartInstallsResponse
+ */
+export type ListPartInstallsResponse = Message<"pitbox.garage.v1.ListPartInstallsResponse"> & {
+  /**
+   * @generated from field: repeated pitbox.garage.v1.PartInstall installs = 1;
+   */
+  installs: PartInstall[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.ListPartInstallsResponse.
+ * Use `create(ListPartInstallsResponseSchema)` to create a new message.
+ */
+export const ListPartInstallsResponseSchema: GenMessage<ListPartInstallsResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_part_service, 22);
+
+/**
+ * Where a removed part goes. STOCK returns one unit to the stock; SCRAP writes
+ * off the unit and needs a reason; SPARE keeps it outside the stock.
+ *
+ * @generated from enum pitbox.garage.v1.RemovalDestination
+ */
+export enum RemovalDestination {
+  /**
+   * @generated from enum value: REMOVAL_DESTINATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: REMOVAL_DESTINATION_STOCK = 1;
+   */
+  STOCK = 1,
+
+  /**
+   * @generated from enum value: REMOVAL_DESTINATION_SCRAP = 2;
+   */
+  SCRAP = 2,
+
+  /**
+   * @generated from enum value: REMOVAL_DESTINATION_SPARE = 3;
+   */
+  SPARE = 3,
+}
+
+/**
+ * Describes the enum pitbox.garage.v1.RemovalDestination.
+ */
+export const RemovalDestinationSchema: GenEnum<RemovalDestination> = /*@__PURE__*/
+  enumDesc(file_pitbox_garage_v1_part_service, 0);
+
+/**
+ * Why a unit was scrapped. Only valid with REMOVAL_DESTINATION_SCRAP.
+ *
+ * @generated from enum pitbox.garage.v1.RemovalReason
+ */
+export enum RemovalReason {
+  /**
+   * @generated from enum value: REMOVAL_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: REMOVAL_REASON_BROKEN = 1;
+   */
+  BROKEN = 1,
+
+  /**
+   * @generated from enum value: REMOVAL_REASON_WORN = 2;
+   */
+  WORN = 2,
+
+  /**
+   * @generated from enum value: REMOVAL_REASON_LOST = 3;
+   */
+  LOST = 3,
+}
+
+/**
+ * Describes the enum pitbox.garage.v1.RemovalReason.
+ */
+export const RemovalReasonSchema: GenEnum<RemovalReason> = /*@__PURE__*/
+  enumDesc(file_pitbox_garage_v1_part_service, 1);
 
 /**
  * PartService manages the parts catalogue and its append-only stock movements.
  * Quantities are hundredths of the part's unit (qty_centi); costs are cents.
  * The unit cost is omitted for pilots. A movement that crosses the minimum
- * writes one garage.stock_low event.
+ * writes one garage.stock_low event. A part with a service life can be installed
+ * in a car or an engine (each installation is one unit); installing writes an
+ * `installed` movement (-1) and removing to stock writes a `returned` one (+1),
+ * in the same transaction as the installation row.
  *
  * @generated from service pitbox.garage.v1.PartService
  */
@@ -627,6 +995,14 @@ export const PartService: GenService<{
     methodKind: "unary";
     input: typeof ListStockMovementsRequestSchema;
     output: typeof ListStockMovementsResponseSchema;
+  },
+  /**
+   * @generated from rpc pitbox.garage.v1.PartService.ListPartInstalls
+   */
+  listPartInstalls: {
+    methodKind: "unary";
+    input: typeof ListPartInstallsRequestSchema;
+    output: typeof ListPartInstallsResponseSchema;
   },
   /**
    * @generated from rpc pitbox.garage.v1.PartService.CreatePart
@@ -659,6 +1035,22 @@ export const PartService: GenService<{
     methodKind: "unary";
     input: typeof AddStockMovementRequestSchema;
     output: typeof AddStockMovementResponseSchema;
+  },
+  /**
+   * @generated from rpc pitbox.garage.v1.PartService.InstallPart
+   */
+  installPart: {
+    methodKind: "unary";
+    input: typeof InstallPartRequestSchema;
+    output: typeof InstallPartResponseSchema;
+  },
+  /**
+   * @generated from rpc pitbox.garage.v1.PartService.RemovePart
+   */
+  removePart: {
+    methodKind: "unary";
+    input: typeof RemovePartRequestSchema;
+    output: typeof RemovePartResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_pitbox_garage_v1_part_service, 0);

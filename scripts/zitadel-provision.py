@@ -373,9 +373,9 @@ def ensure_lockout(z: Zitadel, log) -> None:
     current = z.call("/admin/v1/policies/lockout", method="GET").get("policy", {})
     desired = {
         "maxPasswordAttempts": 0,
-        "maxOtpAttempts": _as_int(current.get("maxOtpAttempts"), 10),
+        "maxOtpAttempts": _as_int(current.get("maxOtpAttempts"), 0),
     }
-    if _as_int(current.get("maxPasswordAttempts")) != 0 or _as_int(current.get("maxOtpAttempts"), 10) != desired["maxOtpAttempts"]:
+    if _as_int(current.get("maxPasswordAttempts")) != 0 or _as_int(current.get("maxOtpAttempts"), 0) != desired["maxOtpAttempts"]:
         z.call("/admin/v1/policies/password/lockout", desired, method="PUT")
         log("bloqueio: password sem lockout; OTP preservado")
     else:

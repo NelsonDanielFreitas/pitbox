@@ -298,6 +298,16 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(self.env.read_text(), before)
         self.assertNotIn(SECRET, out)
 
+    def test_an_omitted_otp_attempt_limit_stays_unlimited(self):
+        # O JSON do Zitadel omite os valores zero: numa instância nova o campo não existe.
+        # Não podemos inventar 10 tentativas, senão ligamos um bloqueio que não existia.
+        self.state.lockout = {"maxPasswordAttempts": 10}
+        self.run_once()
+        self.assertEqual(self.state.lockout, {"maxPasswordAttempts": 0, "maxOtpAttempts": 0})
+        self.state.calls.clear()
+        self.run_once()
+        self.assertEqual(self.state.calls, [], "a segunda execução não pode voltar a mudar o lockout")
+
     def test_drift_is_corrected_without_rotating_the_secret(self):
         self.run_once()
         self.state.apps[0]["oidcConfiguration"]["accessTokenType"] = "OIDC_TOKEN_TYPE_BEARER"

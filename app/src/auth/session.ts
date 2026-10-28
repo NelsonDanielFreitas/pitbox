@@ -59,6 +59,11 @@ export function loginHref(returnTo: string): string {
   return `/auth/login?return_to=${encodeURIComponent(safe)}`;
 }
 
+export function stepUpHref(returnTo: string): string {
+  const safe = safeReturnTo(returnTo);
+  return `/auth/login?step_up=true&return_to=${encodeURIComponent(safe)}`;
+}
+
 export function safeReturnTo(value: string): string {
   if (!value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) {
     return "/teams";

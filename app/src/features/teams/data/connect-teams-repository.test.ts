@@ -2,6 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  CreateTeamResponseSchema,
   ListMyTeamsResponseSchema,
   TeamMembershipSchema,
   TeamRole,
@@ -42,7 +43,7 @@ describe("ConnectTeamsRepository", () => {
       .fn()
       .mockResolvedValueOnce(listResponse([membership("Alpha", TeamRole.OWNER)], "next"))
       .mockResolvedValueOnce(listResponse([membership("Beta", TeamRole.PILOT)]));
-    const repository = new ConnectTeamsRepository({ listMyTeams: list });
+    const repository = new ConnectTeamsRepository({ listMyTeams: list, createTeam: vi.fn() });
 
     const teams = await repository.listMyTeams();
 
@@ -55,9 +56,39 @@ describe("ConnectTeamsRepository", () => {
 
   it("stops after five pages", async () => {
     const list = vi.fn().mockResolvedValue(listResponse([], "more"));
-    const repository = new ConnectTeamsRepository({ listMyTeams: list });
+    const repository = new ConnectTeamsRepository({ listMyTeams: list, createTeam: vi.fn() });
 
     await expect(repository.listMyTeams()).resolves.toEqual([]);
     expect(list).toHaveBeenCalledTimes(5);
+  });
+
+  it("creates a team through the existing contract and maps the caller as owner", async () => {
+    const createTeam = vi.fn().mockResolvedValue(
+      create(CreateTeamResponseSchema, {
+        team: create(TeamSchema, {
+          id: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60",
+          name: "Freitas Racing",
+          category: "1/8 TT nitro",
+          countryCode: "PT",
+        }),
+      }),
+    );
+    const repository = new ConnectTeamsRepository({ listMyTeams: vi.fn(), createTeam });
+
+    await expect(
+      repository.createTeam({
+        requestId: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61",
+        name: "Freitas Racing",
+        category: "",
+        countryCode: "PT",
+      }),
+    ).resolves.toMatchObject({ name: "Freitas Racing", role: "owner" });
+    expect(createTeam).toHaveBeenCalledWith({
+      requestId: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61",
+      name: "Freitas Racing",
+      category: "",
+      club: undefined,
+      countryCode: "PT",
+    });
   });
 });

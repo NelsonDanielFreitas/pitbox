@@ -697,6 +697,90 @@ func TestUnverifiedEmailDoesNotFollowAnExternalReturnTo(t *testing.T) {
 	}
 }
 
+func TestWeakStepUpRedirectsToCreateTeamGuidanceWithoutChangingTheSession(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	sessionToken := f.login("ana", "sid-ana", []string{"pwd"})
+	sessionCookie := &http.Cookie{
+		Name: SessionCookieName, Value: sessionToken, Path: "/", Secure: true,
+		HttpOnly: true, SameSite: http.SameSiteStrictMode,
+	}
+	before, err := f.store.Get(context.Background(), sessionToken)
+	if err != nil {
+		t.Fatalf("get session before step-up: %v", err)
+	}
+
+	start := f.do(http.MethodGet, LoginPath+"?step_up=true&return_to=%2Fteams%2Fnew", []*http.Cookie{sessionCookie}, nil)
+	if start.Code != http.StatusFound {
+		t.Fatalf("step-up start: status %d: %s", start.Code, start.Body.String())
+	}
+	location, err := url.Parse(start.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse step-up location: %v", err)
+	}
+	loginCookie := cookieNamed(start, LoginCookieName)
+	if loginCookie == nil {
+		t.Fatal("step-up start did not set login cookie")
+	}
+	a := attempt{
+		state: location.Query().Get("state"), nonce: location.Query().Get("nonce"),
+		challenge: location.Query().Get("code_challenge"), cookie: loginCookie,
+	}
+
+	f.idp.mutateClaims = func(claims map[string]any) {
+		claims["sid"] = "sid-ana"
+		claims["amr"] = []string{"pwd"}
+	}
+	w := f.callback(a, f.idp.issueCode("ana", a.nonce, a.challenge), sessionCookie)
+	f.idp.mutateClaims = nil
+
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != publicURL+"/teams/new?step_up=weak" {
+		t.Fatalf("status %d location %q body %q", w.Code, w.Header().Get("Location"), w.Body.String())
+	}
+	if cookieNamed(w, SessionCookieName) != nil {
+		t.Fatal("weak step-up must not issue a session cookie")
+	}
+	after, err := f.store.Get(context.Background(), sessionToken)
+	if err != nil {
+		t.Fatalf("get session after step-up: %v", err)
+	}
+	if after.AuthTime != before.AuthTime || strings.Join(after.AMR, ",") != strings.Join(before.AMR, ",") || after.RefreshToken != before.RefreshToken {
+		t.Fatalf("weak step-up changed the existing session: before=%+v after=%+v", before, after)
+	}
+	if f.sessions() != 1 {
+		t.Fatalf("sessions = %d, want the original session only", f.sessions())
+	}
+	if got := f.audit.actions(); len(got) != 2 || got[1] != "auth.login_failed:stepup_refused" {
+		t.Fatalf("audit = %v, want the login followed by a weak step-up refusal", got)
+	}
+}
+
+func TestAccountSecurityRedirectIsFixedToConfiguredIssuer(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	sessionToken := f.login("ana", "sid-ana", []string{"pwd"})
+	cookie := &http.Cookie{Name: SessionCookieName, Value: sessionToken, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+	w := f.do(http.MethodGet, AccountSecurityPath+"?return_to=https%3A%2F%2Fevil.example", []*http.Cookie{cookie}, nil)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("status %d body %q", w.Code, w.Body.String())
+	}
+	if got, want := w.Header().Get("Location"), f.idp.srv.URL+"/ui/console/users/me"; got != want {
+		t.Fatalf("Location = %q, want fixed issuer destination %q", got, want)
+	}
+	if w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("security headers = cache %q referrer %q", w.Header().Get("Cache-Control"), w.Header().Get("Referrer-Policy"))
+	}
+}
+
+func TestAccountSecurityWithoutSessionReturnsToAppLogin(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	w := f.do(http.MethodGet, AccountSecurityPath, nil, nil)
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != publicURL+"/login?returnTo=%2Fteams%2Fnew" {
+		t.Fatalf("status %d location %q", w.Code, w.Header().Get("Location"))
+	}
+}
+
 func TestRefusalsAfterExchangeRevokeTheRefreshToken(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -1,0 +1,3 @@
+# Fixture "B" x 43 used as a fake invitation token in a unit test (not a secret).
+# The line was reworded in the following commit; this fingerprint covers the history only.
+68be6c09173df1aa8b74faa7dab8fbedf53da089:app/src/features/teams/data/connect-members-repository.test.ts:generic-api-key:110

@@ -26,6 +26,7 @@ describe("team home route", () => {
   it("returns not found for a team outside the user's list", async () => {
     const repository = {
       listMyTeams: vi.fn().mockResolvedValue([alpha]),
+      createTeam: vi.fn().mockRejectedValue(new Error("unused")),
     };
     renderApp({ initialPath: "/teams/0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d99", repository });
     expect(await screen.findByRole("heading", { name: "Página não encontrada" })).toBeVisible();
@@ -33,7 +34,10 @@ describe("team home route", () => {
   });
 
   it("does not query the repository for an invalid id", async () => {
-    const repository = { listMyTeams: vi.fn().mockResolvedValue([alpha]) };
+    const repository = {
+      listMyTeams: vi.fn().mockResolvedValue([alpha]),
+      createTeam: vi.fn().mockRejectedValue(new Error("unused")),
+    };
     renderApp({ initialPath: "/teams/not-a-uuid", repository });
     expect(await screen.findByRole("heading", { name: "Página não encontrada" })).toBeVisible();
     expect(repository.listMyTeams).not.toHaveBeenCalled();

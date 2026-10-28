@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { AuthUnavailableError, OriginMismatchError } from "@/shared/lib/errors";
 import { ErrorState } from "@/shared/ui/ErrorState";
+import { NotFound } from "@/shared/ui/NotFound";
 
 import type { RouterContext } from "../router-context";
 
@@ -41,16 +42,6 @@ export function RootError({ error }: Pick<ErrorComponentProps, "error">) {
           {error instanceof Error ? error.message : String(error)}
         </pre>
       ) : null}
-    </main>
-  );
-}
-
-export function NotFound() {
-  const { t } = useTranslation();
-  return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
-      <h1 className="text-2xl font-bold">{t("errors.notFoundTitle")}</h1>
-      <p className="mt-2 text-muted">{t("errors.generic")}</p>
     </main>
   );
 }

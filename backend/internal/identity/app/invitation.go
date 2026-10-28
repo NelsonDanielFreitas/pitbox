@@ -71,8 +71,8 @@ func (s *Service) InviteMember(ctx context.Context, user db.UserID, teamID db.Te
 	return created, token, nil
 }
 
-// ListInvitations lists a team's not accepted and not revoked invitations. Any
-// member may call it; a guest is refused by the member Check (NOT_FOUND).
+// ListInvitations lists a team's not accepted and not revoked invitations. It is
+// owner-only because an invitation can contain personal data.
 func (s *Service) ListInvitations(ctx context.Context, user db.UserID, teamID db.TeamID, size int32, pageToken string) ([]domain.Invitation, string, error) {
 	var cursor invitationsCursor
 	if err := decodeCursor(pageToken, &cursor); err != nil {

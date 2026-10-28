@@ -77,7 +77,7 @@ A app é o centro: recebe a telemetria do recetor por BLE, trabalha na base loca
 
 ## 3. App de box (PWA offline-first)
 
-A app guarda tudo localmente numa base SQLite no dispositivo e trata o servidor como um destino de sincronização; a interface lê sempre da base local.
+A app guarda os dados de negócio localmente numa base SQLite no dispositivo e trata o servidor como destino de sincronização; a interface lê normalmente da base local. Login e gestão de equipas/convites são exceções online-only: dependem de autenticação, autorização e estado atual no servidor (ADR 0020). Os componentes não chamam a API diretamente; usam repositórios da camada `data`.
 
 **Stack**
 
@@ -97,6 +97,7 @@ A app guarda tudo localmente numa base SQLite no dispositivo e trata o servidor 
 
 - `features/setups`, `features/engines`, `features/events`, `features/final`, `features/telemetry`, `features/auth`
 - Cada funcionalidade tem: repositório local (SQL), serviço de domínio, ecrãs; nenhum ecrã chama a API diretamente
+- **Exceção F1-09b:** a criação de equipas, aceitação de convites e gestão de membros/convites é online-only. Os repositórios fazem os RPCs, e só atualizam a lista local de equipas após confirmação; não há fila offline nem cache local de tokens, convites ou emails (ADR 0020).
 
 **Modo final**
 

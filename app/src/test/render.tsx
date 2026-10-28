@@ -24,6 +24,7 @@ vi.mock("@/sync/teams", () => ({
 
 import { routeTree } from "@/app/routeTree.gen";
 import type { GarageRepository } from "@/features/garage/data/garage-repository";
+import type { MembersRepository } from "@/features/teams/data/members-repository";
 import type { TeamsRepository } from "@/features/teams/data/teams-repository";
 import type { Team } from "@/features/teams/domain/team";
 import { emptyGarageRepository } from "./garage";
@@ -38,12 +39,16 @@ export function renderWithQuery(ui: ReactElement) {
 export function renderApp({
   initialPath = "/teams",
   teams = [],
+  sessionAmr = [],
   repository,
+  membersRepository: membersRepositoryOverride,
   garageRepository,
 }: {
   initialPath?: string;
   teams?: Team[];
+  sessionAmr?: string[];
   repository?: TeamsRepository;
+  membersRepository?: MembersRepository;
   garageRepository?: GarageRepository;
 } = {}) {
   vi.stubGlobal(
@@ -55,7 +60,7 @@ export function renderApp({
             JSON.stringify({
               authenticated: true,
               user_id: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60",
-              amr: [],
+              amr: sessionAmr,
               auth_time: "2026-10-25T12:00:00Z",
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -68,6 +73,16 @@ export function renderApp({
   });
   const teamsRepository: TeamsRepository = repository ?? {
     listMyTeams: vi.fn().mockResolvedValue(teams),
+    createTeam: vi.fn().mockRejectedValue(new Error("createTeam is not configured in this test")),
+  };
+  const membersRepository: MembersRepository = membersRepositoryOverride ?? {
+    listMembers: vi.fn().mockResolvedValue([]),
+    listInvitations: vi.fn().mockResolvedValue([]),
+    inviteMember: vi.fn().mockRejectedValue(new Error("inviteMember is not configured in this test")),
+    acceptInvitation: vi.fn().mockRejectedValue(new Error("acceptInvitation is not configured in this test")),
+    changeMemberRole: vi.fn().mockRejectedValue(new Error("changeMemberRole is not configured in this test")),
+    removeMember: vi.fn().mockRejectedValue(new Error("removeMember is not configured in this test")),
+    revokeInvitation: vi.fn().mockRejectedValue(new Error("revokeInvitation is not configured in this test")),
   };
   const router = createRouter({
     routeTree,
@@ -75,6 +90,7 @@ export function renderApp({
     context: {
       queryClient,
       teamsRepository,
+      membersRepository,
       garageRepository: garageRepository ?? emptyGarageRepository(),
     },
   });
@@ -83,5 +99,5 @@ export function renderApp({
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return { ...view, queryClient, router, teamsRepository };
+  return { ...view, queryClient, router, teamsRepository, membersRepository };
 }

@@ -3,9 +3,8 @@ import { CorruptLocalDataError } from "@/db/errors";
 import { localTeamRowSchema } from "@/db/schema";
 
 import type { Team } from "../domain/team";
-import type { TeamsRepository } from "./teams-repository";
 
-export class LocalTeamsRepository implements TeamsRepository {
+export class LocalTeamsRepository {
   async listMyTeams(): Promise<Team[]> {
     const rows = await query(
       `SELECT id, name, category, club, country_code, role

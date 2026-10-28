@@ -82,6 +82,11 @@ O pacote `wa-sqlite` do npm está em 1.0.0 (jan/2024). O repositório oficial es
 - No F1-10 não há fila de escrita offline. As equipas são um bootstrap read-through
   temporário (`ListMyTeams` → tabela local); a UI lê a tabela local. O F1-13 substitui o
   bootstrap pelo `Pull`.
+- **Emenda F1-09b:** gestão de equipas e convites (criar equipa, convidar/aceitar, listar e gerir
+  membros) é exceção online-only, porque depende da autorização e do estado atual no servidor.
+  Os repositórios fazem os RPCs e só atualizam a tabela local `team` depois do sucesso; não se
+  guardam membros, convites, emails ou tokens na base local e não há fila offline para estas
+  ações. Ver [ADR 0020](0020-gestao-online-equipas-convites.md).
 
 ### Segurança
 

@@ -34,6 +34,7 @@ describe("TeamsPage", () => {
       listMyTeams: vi.fn().mockImplementation(() =>
         succeed ? Promise.resolve([alpha]) : Promise.reject(new Error("offline")),
       ),
+      createTeam: vi.fn().mockRejectedValue(new Error("unused")),
     };
     renderApp({ repository });
     expect(

@@ -30,7 +30,7 @@ export function securityHeaders(mode: "development" | "production"): Record<stri
     "Content-Security-Policy": [baseCSP(), script, style, connect].join("; "),
     "Cross-Origin-Opener-Policy": "same-origin",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Referrer-Policy": "same-origin",
     "Cache-Control": "no-cache",
   };
 }

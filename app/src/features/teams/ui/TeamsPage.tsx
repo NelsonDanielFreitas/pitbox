@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Link } from "@tanstack/react-router";
 
+import { Button } from "@/shared/ui/Button";
 import { EmptyState } from "@/shared/ui/EmptyState";
 import { ErrorState } from "@/shared/ui/ErrorState";
 import { PageHeader } from "@/shared/ui/PageHeader";
@@ -37,15 +39,35 @@ export function TeamsPage({ repository }: { repository: TeamsRepository }) {
     <>
       <PageHeader title={t("teams.title")} subtitle={t("teams.subtitle")} />
       {teams.data.length === 0 ? (
-        <EmptyState title={t("teams.emptyTitle")} body={t("teams.emptyBody")} />
+        <div className="space-y-4">
+          <EmptyState title={t("teams.emptyTitle")} body={t("teams.emptyBody")} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button asChild size="lg" full>
+              <Link to="/teams/new">{t("teams.create.action")}</Link>
+            </Button>
+            <Button asChild variant="secondary" size="lg" full>
+              <Link to="/invite">{t("teams.invite.pasteAction")}</Link>
+            </Button>
+          </div>
+        </div>
       ) : (
-        <ul className="grid gap-3">
-          {teams.data.map((team) => (
-            <li key={team.id}>
-              <TeamCard team={team} />
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button asChild size="lg" full>
+              <Link to="/teams/new">{t("teams.create.action")}</Link>
+            </Button>
+            <Button asChild variant="secondary" size="lg" full>
+              <Link to="/invite">{t("teams.invite.pasteAction")}</Link>
+            </Button>
+          </div>
+          <ul className="grid gap-3">
+            {teams.data.map((team) => (
+              <li key={team.id}>
+                <TeamCard team={team} />
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </>
   );

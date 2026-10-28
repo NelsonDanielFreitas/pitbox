@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { AuthUnavailableError, OriginMismatchError } from "@/shared/lib/errors";
 
-import { NotFound, RootError } from "./routes/__root";
+import { RootError } from "./routes/__root";
+import { NotFound } from "@/shared/ui/NotFound";
 
 describe("root error page", () => {
   it("shows the unavailable message with a retry action", () => {

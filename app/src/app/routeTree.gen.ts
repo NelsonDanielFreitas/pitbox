@@ -12,12 +12,18 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as ConfirmEmailRouteImport } from './routes/confirm-email'
+import { Route as InviteRouteImport } from './routes/invite'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthenticatedTeamsRouteImport } from './routes/_authenticated/teams'
+import { Route as AuthenticatedTeamsRouteRouteImport } from './routes/_authenticated/teams/route'
+import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
+import { Route as AuthenticatedTeamsNewRouteImport } from './routes/_authenticated/teams/new'
 import { Route as AuthenticatedTeamsTeamIdRouteRouteImport } from './routes/_authenticated/teams_.$teamId/route'
 import { Route as AuthenticatedTeamsTeamIdIndexRouteImport } from './routes/_authenticated/teams_.$teamId/index'
 import { Route as AuthenticatedTeamsTeamIdGarageRouteRouteImport } from './routes/_authenticated/teams_.$teamId/garage/route'
+import { Route as AuthenticatedTeamsTeamIdMoreRouteRouteImport } from './routes/_authenticated/teams_.$teamId/more/route'
 import { Route as AuthenticatedTeamsTeamIdGarageIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/index'
+import { Route as AuthenticatedTeamsTeamIdMoreIndexRouteImport } from './routes/_authenticated/teams_.$teamId/more/index'
+import { Route as AuthenticatedTeamsTeamIdMoreTeamRouteImport } from './routes/_authenticated/teams_.$teamId/more/team'
 import { Route as AuthenticatedTeamsTeamIdGarageCarsIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/cars/index'
 import { Route as AuthenticatedTeamsTeamIdGarageCarsNewRouteImport } from './routes/_authenticated/teams_.$teamId/garage/cars/new'
 import { Route as AuthenticatedTeamsTeamIdGarageEnginesIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/engines/index'
@@ -49,15 +55,30 @@ const ConfirmEmailRoute = ConfirmEmailRouteImport.update({
   path: '/confirm-email',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InviteRoute = InviteRouteImport.update({
+  id: '/invite',
+  path: '/invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedTeamsRoute = AuthenticatedTeamsRouteImport.update({
+const AuthenticatedTeamsRouteRoute = AuthenticatedTeamsRouteRouteImport.update({
   id: '/teams',
   path: '/teams',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTeamsIndexRoute = AuthenticatedTeamsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedTeamsRouteRoute,
+} as any)
+const AuthenticatedTeamsNewRoute = AuthenticatedTeamsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AuthenticatedTeamsRouteRoute,
 } as any)
 const AuthenticatedTeamsTeamIdRouteRoute =
   AuthenticatedTeamsTeamIdRouteRouteImport.update({
@@ -77,11 +98,29 @@ const AuthenticatedTeamsTeamIdGarageRouteRoute =
     path: '/garage',
     getParentRoute: () => AuthenticatedTeamsTeamIdRouteRoute,
   } as any)
+const AuthenticatedTeamsTeamIdMoreRouteRoute =
+  AuthenticatedTeamsTeamIdMoreRouteRouteImport.update({
+    id: '/more',
+    path: '/more',
+    getParentRoute: () => AuthenticatedTeamsTeamIdRouteRoute,
+  } as any)
 const AuthenticatedTeamsTeamIdGarageIndexRoute =
   AuthenticatedTeamsTeamIdGarageIndexRouteImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedTeamsTeamIdGarageRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdMoreIndexRoute =
+  AuthenticatedTeamsTeamIdMoreIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedTeamsTeamIdMoreRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdMoreTeamRoute =
+  AuthenticatedTeamsTeamIdMoreTeamRouteImport.update({
+    id: '/team',
+    path: '/team',
+    getParentRoute: () => AuthenticatedTeamsTeamIdMoreRouteRoute,
   } as any)
 const AuthenticatedTeamsTeamIdGarageCarsIndexRoute =
   AuthenticatedTeamsTeamIdGarageCarsIndexRouteImport.update({
@@ -183,12 +222,18 @@ const AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/confirm-email': typeof ConfirmEmailRoute
+  '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
-  '/teams': typeof AuthenticatedTeamsRoute
+  '/teams': typeof AuthenticatedTeamsRouteRouteWithChildren
   '/teams/$teamId': typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
+  '/teams/new': typeof AuthenticatedTeamsNewRoute
+  '/teams/': typeof AuthenticatedTeamsIndexRoute
   '/teams/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
+  '/teams/$teamId/more': typeof AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren
   '/teams/$teamId/': typeof AuthenticatedTeamsTeamIdIndexRoute
+  '/teams/$teamId/more/team': typeof AuthenticatedTeamsTeamIdMoreTeamRoute
   '/teams/$teamId/garage/': typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  '/teams/$teamId/more/': typeof AuthenticatedTeamsTeamIdMoreIndexRoute
   '/teams/$teamId/garage/cars/new': typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
   '/teams/$teamId/garage/engines/new': typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
   '/teams/$teamId/garage/parts/new': typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
@@ -209,10 +254,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/confirm-email': typeof ConfirmEmailRoute
+  '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
-  '/teams': typeof AuthenticatedTeamsRoute
+  '/teams/new': typeof AuthenticatedTeamsNewRoute
+  '/teams': typeof AuthenticatedTeamsIndexRoute
   '/teams/$teamId': typeof AuthenticatedTeamsTeamIdIndexRoute
+  '/teams/$teamId/more/team': typeof AuthenticatedTeamsTeamIdMoreTeamRoute
   '/teams/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  '/teams/$teamId/more': typeof AuthenticatedTeamsTeamIdMoreIndexRoute
   '/teams/$teamId/garage/cars/new': typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
   '/teams/$teamId/garage/engines/new': typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
   '/teams/$teamId/garage/parts/new': typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
@@ -235,12 +284,18 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/confirm-email': typeof ConfirmEmailRoute
+  '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
-  '/_authenticated/teams': typeof AuthenticatedTeamsRoute
+  '/_authenticated/teams': typeof AuthenticatedTeamsRouteRouteWithChildren
   '/_authenticated/teams_/$teamId': typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
+  '/_authenticated/teams/new': typeof AuthenticatedTeamsNewRoute
+  '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
   '/_authenticated/teams_/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
+  '/_authenticated/teams_/$teamId/more': typeof AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren
   '/_authenticated/teams_/$teamId/': typeof AuthenticatedTeamsTeamIdIndexRoute
+  '/_authenticated/teams_/$teamId/more/team': typeof AuthenticatedTeamsTeamIdMoreTeamRoute
   '/_authenticated/teams_/$teamId/garage/': typeof AuthenticatedTeamsTeamIdGarageIndexRoute
+  '/_authenticated/teams_/$teamId/more/': typeof AuthenticatedTeamsTeamIdMoreIndexRoute
   '/_authenticated/teams_/$teamId/garage/cars/new': typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
   '/_authenticated/teams_/$teamId/garage/engines/new': typeof AuthenticatedTeamsTeamIdGarageEnginesNewRoute
   '/_authenticated/teams_/$teamId/garage/parts/new': typeof AuthenticatedTeamsTeamIdGaragePartsNewRoute
@@ -263,12 +318,18 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/confirm-email'
+    | '/invite'
     | '/login'
     | '/teams'
     | '/teams/$teamId'
+    | '/teams/new'
+    | '/teams/'
     | '/teams/$teamId/garage'
+    | '/teams/$teamId/more'
     | '/teams/$teamId/'
+    | '/teams/$teamId/more/team'
     | '/teams/$teamId/garage/'
+    | '/teams/$teamId/more/'
     | '/teams/$teamId/garage/cars/new'
     | '/teams/$teamId/garage/engines/new'
     | '/teams/$teamId/garage/parts/new'
@@ -289,10 +350,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/confirm-email'
+    | '/invite'
     | '/login'
+    | '/teams/new'
     | '/teams'
     | '/teams/$teamId'
+    | '/teams/$teamId/more/team'
     | '/teams/$teamId/garage'
+    | '/teams/$teamId/more'
     | '/teams/$teamId/garage/cars/new'
     | '/teams/$teamId/garage/engines/new'
     | '/teams/$teamId/garage/parts/new'
@@ -314,12 +379,18 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/confirm-email'
+    | '/invite'
     | '/login'
     | '/_authenticated/teams'
     | '/_authenticated/teams_/$teamId'
+    | '/_authenticated/teams/new'
+    | '/_authenticated/teams/'
     | '/_authenticated/teams_/$teamId/garage'
+    | '/_authenticated/teams_/$teamId/more'
     | '/_authenticated/teams_/$teamId/'
+    | '/_authenticated/teams_/$teamId/more/team'
     | '/_authenticated/teams_/$teamId/garage/'
+    | '/_authenticated/teams_/$teamId/more/'
     | '/_authenticated/teams_/$teamId/garage/cars/new'
     | '/_authenticated/teams_/$teamId/garage/engines/new'
     | '/_authenticated/teams_/$teamId/garage/parts/new'
@@ -342,6 +413,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ConfirmEmailRoute: typeof ConfirmEmailRoute
+  InviteRoute: typeof InviteRoute
   LoginRoute: typeof LoginRoute
 }
 
@@ -368,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfirmEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invite': {
+      id: '/invite'
+      path: '/invite'
+      fullPath: '/invite'
+      preLoaderRoute: typeof InviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -379,8 +458,22 @@ declare module '@tanstack/react-router' {
       id: '/_authenticated/teams'
       path: '/teams'
       fullPath: '/teams'
-      preLoaderRoute: typeof AuthenticatedTeamsRouteImport
+      preLoaderRoute: typeof AuthenticatedTeamsRouteRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/teams/': {
+      id: '/_authenticated/teams/'
+      path: '/'
+      fullPath: '/teams/'
+      preLoaderRoute: typeof AuthenticatedTeamsIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsRouteRoute
+    }
+    '/_authenticated/teams/new': {
+      id: '/_authenticated/teams/new'
+      path: '/new'
+      fullPath: '/teams/new'
+      preLoaderRoute: typeof AuthenticatedTeamsNewRouteImport
+      parentRoute: typeof AuthenticatedTeamsRouteRoute
     }
     '/_authenticated/teams_/$teamId': {
       id: '/_authenticated/teams_/$teamId'
@@ -403,12 +496,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRouteImport
       parentRoute: typeof AuthenticatedTeamsTeamIdRouteRoute
     }
+    '/_authenticated/teams_/$teamId/more': {
+      id: '/_authenticated/teams_/$teamId/more'
+      path: '/more'
+      fullPath: '/teams/$teamId/more'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdMoreRouteRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdRouteRoute
+    }
     '/_authenticated/teams_/$teamId/garage/': {
       id: '/_authenticated/teams_/$teamId/garage/'
       path: '/'
       fullPath: '/teams/$teamId/garage/'
       preLoaderRoute: typeof AuthenticatedTeamsTeamIdGarageIndexRouteImport
       parentRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/more/': {
+      id: '/_authenticated/teams_/$teamId/more/'
+      path: '/'
+      fullPath: '/teams/$teamId/more/'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdMoreIndexRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdMoreRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/more/team': {
+      id: '/_authenticated/teams_/$teamId/more/team'
+      path: '/team'
+      fullPath: '/teams/$teamId/more/team'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdMoreTeamRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdMoreRouteRoute
     }
     '/_authenticated/teams_/$teamId/garage/cars/': {
       id: '/_authenticated/teams_/$teamId/garage/cars/'
@@ -525,6 +639,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedTeamsRouteRouteChildren {
+  AuthenticatedTeamsNewRoute: typeof AuthenticatedTeamsNewRoute
+  AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
+}
+
+const AuthenticatedTeamsRouteRouteChildren: AuthenticatedTeamsRouteRouteChildren =
+  {
+    AuthenticatedTeamsNewRoute: AuthenticatedTeamsNewRoute,
+    AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,
+  }
+
+const AuthenticatedTeamsRouteRouteWithChildren =
+  AuthenticatedTeamsRouteRoute._addFileChildren(
+    AuthenticatedTeamsRouteRouteChildren,
+  )
+
 interface AuthenticatedTeamsTeamIdGarageRouteRouteChildren {
   AuthenticatedTeamsTeamIdGarageIndexRoute: typeof AuthenticatedTeamsTeamIdGarageIndexRoute
   AuthenticatedTeamsTeamIdGarageCarsNewRoute: typeof AuthenticatedTeamsTeamIdGarageCarsNewRoute
@@ -588,8 +718,27 @@ const AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren =
     AuthenticatedTeamsTeamIdGarageRouteRouteChildren,
   )
 
+interface AuthenticatedTeamsTeamIdMoreRouteRouteChildren {
+  AuthenticatedTeamsTeamIdMoreTeamRoute: typeof AuthenticatedTeamsTeamIdMoreTeamRoute
+  AuthenticatedTeamsTeamIdMoreIndexRoute: typeof AuthenticatedTeamsTeamIdMoreIndexRoute
+}
+
+const AuthenticatedTeamsTeamIdMoreRouteRouteChildren: AuthenticatedTeamsTeamIdMoreRouteRouteChildren =
+  {
+    AuthenticatedTeamsTeamIdMoreTeamRoute:
+      AuthenticatedTeamsTeamIdMoreTeamRoute,
+    AuthenticatedTeamsTeamIdMoreIndexRoute:
+      AuthenticatedTeamsTeamIdMoreIndexRoute,
+  }
+
+const AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren =
+  AuthenticatedTeamsTeamIdMoreRouteRoute._addFileChildren(
+    AuthenticatedTeamsTeamIdMoreRouteRouteChildren,
+  )
+
 interface AuthenticatedTeamsTeamIdRouteRouteChildren {
   AuthenticatedTeamsTeamIdGarageRouteRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
+  AuthenticatedTeamsTeamIdMoreRouteRoute: typeof AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren
   AuthenticatedTeamsTeamIdIndexRoute: typeof AuthenticatedTeamsTeamIdIndexRoute
 }
 
@@ -597,6 +746,8 @@ const AuthenticatedTeamsTeamIdRouteRouteChildren: AuthenticatedTeamsTeamIdRouteR
   {
     AuthenticatedTeamsTeamIdGarageRouteRoute:
       AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren,
+    AuthenticatedTeamsTeamIdMoreRouteRoute:
+      AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren,
     AuthenticatedTeamsTeamIdIndexRoute: AuthenticatedTeamsTeamIdIndexRoute,
   }
 
@@ -606,12 +757,12 @@ const AuthenticatedTeamsTeamIdRouteRouteWithChildren =
   )
 
 interface AuthenticatedRouteRouteChildren {
-  AuthenticatedTeamsRoute: typeof AuthenticatedTeamsRoute
+  AuthenticatedTeamsRouteRoute: typeof AuthenticatedTeamsRouteRouteWithChildren
   AuthenticatedTeamsTeamIdRouteRoute: typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
-  AuthenticatedTeamsRoute: AuthenticatedTeamsRoute,
+  AuthenticatedTeamsRouteRoute: AuthenticatedTeamsRouteRouteWithChildren,
   AuthenticatedTeamsTeamIdRouteRoute:
     AuthenticatedTeamsTeamIdRouteRouteWithChildren,
 }
@@ -623,6 +774,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ConfirmEmailRoute: ConfirmEmailRoute,
+  InviteRoute: InviteRoute,
   LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport

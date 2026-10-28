@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
-import { NotFound } from "@/app/routes/__root";
+import { NotFound } from "@/shared/ui/NotFound";
 import { canReadGarage } from "@/features/garage/domain/roles";
 import { teamsQueryOptions } from "@/features/teams/data/teams-query";
 import { TeamContext } from "@/features/teams/ui/team-context";
@@ -57,7 +57,7 @@ function TeamLayout() {
         <div className="mt-5">
           <Outlet />
         </div>
-        <TeamTabBar teamId={team.id} showGarage={canReadGarage(team.role)} />
+        <TeamTabBar teamId={team.id} showGarage={canReadGarage(team.role)} showMore={team.role !== "guest" && team.role !== "unknown"} />
       </div>
     </TeamContext.Provider>
   );

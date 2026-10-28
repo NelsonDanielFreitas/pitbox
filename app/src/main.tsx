@@ -14,6 +14,13 @@ import { LocalGarageRepository } from "@/features/garage/data/local-garage-repos
 import { LocalTeamsRepository } from "@/features/teams/data/local-teams-repository";
 import { isUnauthenticated } from "@/shared/api/errors";
 import { handleQueryError } from "@/shared/api/query-error";
+import { canonicalDevOrigin } from "@/shared/lib/canonical-dev-origin";
+import { env } from "@/shared/lib/env";
+
+const devOrigin = canonicalDevOrigin(new URL(window.location.href), env.isDev);
+if (devOrigin) {
+  window.location.replace(devOrigin);
+}
 
 const routerRef: { current?: ReturnType<typeof createAppRouter> } = {};
 

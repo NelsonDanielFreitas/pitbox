@@ -47,6 +47,7 @@ func requestMessages() []proto.Message {
 		&garagev1.CreateTyreSetRequest{}, &garagev1.GetTyreSetRequest{}, &garagev1.ListTyreSetsRequest{}, &garagev1.UpdateTyreSetRequest{}, &garagev1.DeleteTyreSetRequest{},
 		&garagev1.CreatePartRequest{}, &garagev1.GetPartRequest{}, &garagev1.ListPartsRequest{}, &garagev1.UpdatePartRequest{}, &garagev1.DeletePartRequest{},
 		&garagev1.ListStockMovementsRequest{}, &garagev1.AddStockMovementRequest{},
+		&garagev1.InstallPartRequest{}, &garagev1.RemovePartRequest{}, &garagev1.ListPartInstallsRequest{},
 		&setupv1.CreateSetupRequest{}, &setupv1.CreateVersionRequest{}, &setupv1.GetVersionRequest{},
 		&setupv1.ListSetupsRequest{}, &setupv1.ListVersionsRequest{}, &setupv1.CompareVersionsRequest{},
 		&setupv1.CreateShareLinkRequest{}, &setupv1.ListShareLinksRequest{}, &setupv1.RevokeShareLinkRequest{},

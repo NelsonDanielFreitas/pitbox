@@ -25,6 +25,269 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Where a removed part goes. STOCK returns one unit to the stock; SCRAP writes
+// off the unit and needs a reason; SPARE keeps it outside the stock.
+type RemovalDestination int32
+
+const (
+	RemovalDestination_REMOVAL_DESTINATION_UNSPECIFIED RemovalDestination = 0
+	RemovalDestination_REMOVAL_DESTINATION_STOCK       RemovalDestination = 1
+	RemovalDestination_REMOVAL_DESTINATION_SCRAP       RemovalDestination = 2
+	RemovalDestination_REMOVAL_DESTINATION_SPARE       RemovalDestination = 3
+)
+
+// Enum value maps for RemovalDestination.
+var (
+	RemovalDestination_name = map[int32]string{
+		0: "REMOVAL_DESTINATION_UNSPECIFIED",
+		1: "REMOVAL_DESTINATION_STOCK",
+		2: "REMOVAL_DESTINATION_SCRAP",
+		3: "REMOVAL_DESTINATION_SPARE",
+	}
+	RemovalDestination_value = map[string]int32{
+		"REMOVAL_DESTINATION_UNSPECIFIED": 0,
+		"REMOVAL_DESTINATION_STOCK":       1,
+		"REMOVAL_DESTINATION_SCRAP":       2,
+		"REMOVAL_DESTINATION_SPARE":       3,
+	}
+)
+
+func (x RemovalDestination) Enum() *RemovalDestination {
+	p := new(RemovalDestination)
+	*p = x
+	return p
+}
+
+func (x RemovalDestination) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RemovalDestination) Descriptor() protoreflect.EnumDescriptor {
+	return file_pitbox_garage_v1_part_service_proto_enumTypes[0].Descriptor()
+}
+
+func (RemovalDestination) Type() protoreflect.EnumType {
+	return &file_pitbox_garage_v1_part_service_proto_enumTypes[0]
+}
+
+func (x RemovalDestination) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RemovalDestination.Descriptor instead.
+func (RemovalDestination) EnumDescriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{0}
+}
+
+// Why a unit was scrapped. Only valid with REMOVAL_DESTINATION_SCRAP.
+type RemovalReason int32
+
+const (
+	RemovalReason_REMOVAL_REASON_UNSPECIFIED RemovalReason = 0
+	RemovalReason_REMOVAL_REASON_BROKEN      RemovalReason = 1
+	RemovalReason_REMOVAL_REASON_WORN        RemovalReason = 2
+	RemovalReason_REMOVAL_REASON_LOST        RemovalReason = 3
+)
+
+// Enum value maps for RemovalReason.
+var (
+	RemovalReason_name = map[int32]string{
+		0: "REMOVAL_REASON_UNSPECIFIED",
+		1: "REMOVAL_REASON_BROKEN",
+		2: "REMOVAL_REASON_WORN",
+		3: "REMOVAL_REASON_LOST",
+	}
+	RemovalReason_value = map[string]int32{
+		"REMOVAL_REASON_UNSPECIFIED": 0,
+		"REMOVAL_REASON_BROKEN":      1,
+		"REMOVAL_REASON_WORN":        2,
+		"REMOVAL_REASON_LOST":        3,
+	}
+)
+
+func (x RemovalReason) Enum() *RemovalReason {
+	p := new(RemovalReason)
+	*p = x
+	return p
+}
+
+func (x RemovalReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RemovalReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_pitbox_garage_v1_part_service_proto_enumTypes[1].Descriptor()
+}
+
+func (RemovalReason) Type() protoreflect.EnumType {
+	return &file_pitbox_garage_v1_part_service_proto_enumTypes[1]
+}
+
+func (x RemovalReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RemovalReason.Descriptor instead.
+func (RemovalReason) EnumDescriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{1}
+}
+
+// PartInstall is one installation of one unit of a part in a car or an engine.
+// run_seconds and sessions stay at zero until usage accounting (F2-04).
+type PartInstall struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	PartId string                 `protobuf:"bytes,2,opt,name=part_id,json=partId,proto3" json:"part_id,omitempty"`
+	// Types that are valid to be assigned to Target:
+	//
+	//	*PartInstall_CarId
+	//	*PartInstall_EngineId
+	Target             isPartInstall_Target   `protobuf_oneof:"target"`
+	InstalledAt        *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=installed_at,json=installedAt,proto3" json:"installed_at,omitempty"`
+	RemovedAt          *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=removed_at,json=removedAt,proto3,oneof" json:"removed_at,omitempty"`
+	RemovalDestination RemovalDestination     `protobuf:"varint,7,opt,name=removal_destination,json=removalDestination,proto3,enum=pitbox.garage.v1.RemovalDestination" json:"removal_destination,omitempty"`
+	RemovalReason      RemovalReason          `protobuf:"varint,8,opt,name=removal_reason,json=removalReason,proto3,enum=pitbox.garage.v1.RemovalReason" json:"removal_reason,omitempty"`
+	RunSeconds         int32                  `protobuf:"varint,9,opt,name=run_seconds,json=runSeconds,proto3" json:"run_seconds,omitempty"`
+	Sessions           int32                  `protobuf:"varint,10,opt,name=sessions,proto3" json:"sessions,omitempty"`
+	Version            int32                  `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *PartInstall) Reset() {
+	*x = PartInstall{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PartInstall) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PartInstall) ProtoMessage() {}
+
+func (x *PartInstall) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PartInstall.ProtoReflect.Descriptor instead.
+func (*PartInstall) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PartInstall) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PartInstall) GetPartId() string {
+	if x != nil {
+		return x.PartId
+	}
+	return ""
+}
+
+func (x *PartInstall) GetTarget() isPartInstall_Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *PartInstall) GetCarId() string {
+	if x != nil {
+		if x, ok := x.Target.(*PartInstall_CarId); ok {
+			return x.CarId
+		}
+	}
+	return ""
+}
+
+func (x *PartInstall) GetEngineId() string {
+	if x != nil {
+		if x, ok := x.Target.(*PartInstall_EngineId); ok {
+			return x.EngineId
+		}
+	}
+	return ""
+}
+
+func (x *PartInstall) GetInstalledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.InstalledAt
+	}
+	return nil
+}
+
+func (x *PartInstall) GetRemovedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RemovedAt
+	}
+	return nil
+}
+
+func (x *PartInstall) GetRemovalDestination() RemovalDestination {
+	if x != nil {
+		return x.RemovalDestination
+	}
+	return RemovalDestination_REMOVAL_DESTINATION_UNSPECIFIED
+}
+
+func (x *PartInstall) GetRemovalReason() RemovalReason {
+	if x != nil {
+		return x.RemovalReason
+	}
+	return RemovalReason_REMOVAL_REASON_UNSPECIFIED
+}
+
+func (x *PartInstall) GetRunSeconds() int32 {
+	if x != nil {
+		return x.RunSeconds
+	}
+	return 0
+}
+
+func (x *PartInstall) GetSessions() int32 {
+	if x != nil {
+		return x.Sessions
+	}
+	return 0
+}
+
+func (x *PartInstall) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type isPartInstall_Target interface {
+	isPartInstall_Target()
+}
+
+type PartInstall_CarId struct {
+	CarId string `protobuf:"bytes,3,opt,name=car_id,json=carId,proto3,oneof"`
+}
+
+type PartInstall_EngineId struct {
+	EngineId string `protobuf:"bytes,4,opt,name=engine_id,json=engineId,proto3,oneof"`
+}
+
+func (*PartInstall_CarId) isPartInstall_Target() {}
+
+func (*PartInstall_EngineId) isPartInstall_Target() {}
+
 type Part struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -48,7 +311,7 @@ type Part struct {
 
 func (x *Part) Reset() {
 	*x = Part{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[0]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -60,7 +323,7 @@ func (x *Part) String() string {
 func (*Part) ProtoMessage() {}
 
 func (x *Part) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[0]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -73,7 +336,7 @@ func (x *Part) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Part.ProtoReflect.Descriptor instead.
 func (*Part) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{0}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Part) GetId() string {
@@ -195,7 +458,7 @@ type StockMovement struct {
 
 func (x *StockMovement) Reset() {
 	*x = StockMovement{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[1]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +470,7 @@ func (x *StockMovement) String() string {
 func (*StockMovement) ProtoMessage() {}
 
 func (x *StockMovement) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[1]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +483,7 @@ func (x *StockMovement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StockMovement.ProtoReflect.Descriptor instead.
 func (*StockMovement) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{1}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StockMovement) GetId() string {
@@ -275,7 +538,7 @@ type GetPartRequest struct {
 
 func (x *GetPartRequest) Reset() {
 	*x = GetPartRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[2]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -287,7 +550,7 @@ func (x *GetPartRequest) String() string {
 func (*GetPartRequest) ProtoMessage() {}
 
 func (x *GetPartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[2]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -300,7 +563,7 @@ func (x *GetPartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPartRequest.ProtoReflect.Descriptor instead.
 func (*GetPartRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{2}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetPartRequest) GetTeamId() string {
@@ -326,7 +589,7 @@ type GetPartResponse struct {
 
 func (x *GetPartResponse) Reset() {
 	*x = GetPartResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[3]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +601,7 @@ func (x *GetPartResponse) String() string {
 func (*GetPartResponse) ProtoMessage() {}
 
 func (x *GetPartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[3]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +614,7 @@ func (x *GetPartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPartResponse.ProtoReflect.Descriptor instead.
 func (*GetPartResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{3}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetPartResponse) GetPart() *Part {
@@ -372,7 +635,7 @@ type ListPartsRequest struct {
 
 func (x *ListPartsRequest) Reset() {
 	*x = ListPartsRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[4]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -384,7 +647,7 @@ func (x *ListPartsRequest) String() string {
 func (*ListPartsRequest) ProtoMessage() {}
 
 func (x *ListPartsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[4]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -397,7 +660,7 @@ func (x *ListPartsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPartsRequest.ProtoReflect.Descriptor instead.
 func (*ListPartsRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{4}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListPartsRequest) GetTeamId() string {
@@ -431,7 +694,7 @@ type ListPartsResponse struct {
 
 func (x *ListPartsResponse) Reset() {
 	*x = ListPartsResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[5]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -443,7 +706,7 @@ func (x *ListPartsResponse) String() string {
 func (*ListPartsResponse) ProtoMessage() {}
 
 func (x *ListPartsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[5]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -456,7 +719,7 @@ func (x *ListPartsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPartsResponse.ProtoReflect.Descriptor instead.
 func (*ListPartsResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{5}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListPartsResponse) GetParts() []*Part {
@@ -485,7 +748,7 @@ type ListStockMovementsRequest struct {
 
 func (x *ListStockMovementsRequest) Reset() {
 	*x = ListStockMovementsRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[6]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -497,7 +760,7 @@ func (x *ListStockMovementsRequest) String() string {
 func (*ListStockMovementsRequest) ProtoMessage() {}
 
 func (x *ListStockMovementsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[6]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -510,7 +773,7 @@ func (x *ListStockMovementsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStockMovementsRequest.ProtoReflect.Descriptor instead.
 func (*ListStockMovementsRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{6}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListStockMovementsRequest) GetTeamId() string {
@@ -551,7 +814,7 @@ type ListStockMovementsResponse struct {
 
 func (x *ListStockMovementsResponse) Reset() {
 	*x = ListStockMovementsResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[7]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -563,7 +826,7 @@ func (x *ListStockMovementsResponse) String() string {
 func (*ListStockMovementsResponse) ProtoMessage() {}
 
 func (x *ListStockMovementsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[7]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -576,7 +839,7 @@ func (x *ListStockMovementsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListStockMovementsResponse.ProtoReflect.Descriptor instead.
 func (*ListStockMovementsResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{7}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListStockMovementsResponse) GetMovements() []*StockMovement {
@@ -614,7 +877,7 @@ type CreatePartRequest struct {
 
 func (x *CreatePartRequest) Reset() {
 	*x = CreatePartRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[8]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -626,7 +889,7 @@ func (x *CreatePartRequest) String() string {
 func (*CreatePartRequest) ProtoMessage() {}
 
 func (x *CreatePartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[8]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -639,7 +902,7 @@ func (x *CreatePartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePartRequest.ProtoReflect.Descriptor instead.
 func (*CreatePartRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{8}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *CreatePartRequest) GetTeamId() string {
@@ -742,7 +1005,7 @@ type CreatePartResponse struct {
 
 func (x *CreatePartResponse) Reset() {
 	*x = CreatePartResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[9]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -754,7 +1017,7 @@ func (x *CreatePartResponse) String() string {
 func (*CreatePartResponse) ProtoMessage() {}
 
 func (x *CreatePartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[9]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -767,7 +1030,7 @@ func (x *CreatePartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePartResponse.ProtoReflect.Descriptor instead.
 func (*CreatePartResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{9}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreatePartResponse) GetPart() *Part {
@@ -800,7 +1063,7 @@ type UpdatePartRequest struct {
 
 func (x *UpdatePartRequest) Reset() {
 	*x = UpdatePartRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[10]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -812,7 +1075,7 @@ func (x *UpdatePartRequest) String() string {
 func (*UpdatePartRequest) ProtoMessage() {}
 
 func (x *UpdatePartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[10]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -825,7 +1088,7 @@ func (x *UpdatePartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePartRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePartRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{10}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdatePartRequest) GetTeamId() string {
@@ -942,7 +1205,7 @@ type UpdatePartResponse struct {
 
 func (x *UpdatePartResponse) Reset() {
 	*x = UpdatePartResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[11]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1217,7 @@ func (x *UpdatePartResponse) String() string {
 func (*UpdatePartResponse) ProtoMessage() {}
 
 func (x *UpdatePartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[11]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1230,7 @@ func (x *UpdatePartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePartResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePartResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{11}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *UpdatePartResponse) GetPart() *Part {
@@ -989,7 +1252,7 @@ type DeletePartRequest struct {
 
 func (x *DeletePartRequest) Reset() {
 	*x = DeletePartRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[12]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1001,7 +1264,7 @@ func (x *DeletePartRequest) String() string {
 func (*DeletePartRequest) ProtoMessage() {}
 
 func (x *DeletePartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[12]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1014,7 +1277,7 @@ func (x *DeletePartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePartRequest.ProtoReflect.Descriptor instead.
 func (*DeletePartRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{12}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeletePartRequest) GetTeamId() string {
@@ -1053,7 +1316,7 @@ type DeletePartResponse struct {
 
 func (x *DeletePartResponse) Reset() {
 	*x = DeletePartResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[13]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1065,7 +1328,7 @@ func (x *DeletePartResponse) String() string {
 func (*DeletePartResponse) ProtoMessage() {}
 
 func (x *DeletePartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[13]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1078,7 +1341,7 @@ func (x *DeletePartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePartResponse.ProtoReflect.Descriptor instead.
 func (*DeletePartResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{13}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{14}
 }
 
 type AddStockMovementRequest struct {
@@ -1095,7 +1358,7 @@ type AddStockMovementRequest struct {
 
 func (x *AddStockMovementRequest) Reset() {
 	*x = AddStockMovementRequest{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[14]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1107,7 +1370,7 @@ func (x *AddStockMovementRequest) String() string {
 func (*AddStockMovementRequest) ProtoMessage() {}
 
 func (x *AddStockMovementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[14]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1120,7 +1383,7 @@ func (x *AddStockMovementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddStockMovementRequest.ProtoReflect.Descriptor instead.
 func (*AddStockMovementRequest) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{14}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AddStockMovementRequest) GetTeamId() string {
@@ -1175,7 +1438,7 @@ type AddStockMovementResponse struct {
 
 func (x *AddStockMovementResponse) Reset() {
 	*x = AddStockMovementResponse{}
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[15]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1187,7 +1450,7 @@ func (x *AddStockMovementResponse) String() string {
 func (*AddStockMovementResponse) ProtoMessage() {}
 
 func (x *AddStockMovementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[15]
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1200,7 +1463,7 @@ func (x *AddStockMovementResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddStockMovementResponse.ProtoReflect.Descriptor instead.
 func (*AddStockMovementResponse) Descriptor() ([]byte, []int) {
-	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{15}
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AddStockMovementResponse) GetPart() *Part {
@@ -1217,11 +1480,522 @@ func (x *AddStockMovementResponse) GetMovement() *StockMovement {
 	return nil
 }
 
+type InstallPartRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	TeamId    string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	RequestId string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	PartId    string                 `protobuf:"bytes,3,opt,name=part_id,json=partId,proto3" json:"part_id,omitempty"`
+	// Types that are valid to be assigned to Target:
+	//
+	//	*InstallPartRequest_CarId
+	//	*InstallPartRequest_EngineId
+	Target isInstallPartRequest_Target `protobuf_oneof:"target"`
+	// Defaults to the server time; a client that was offline may send the real time.
+	InstalledAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=installed_at,json=installedAt,proto3,oneof" json:"installed_at,omitempty"`
+	Note          *string                `protobuf:"bytes,7,opt,name=note,proto3,oneof" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallPartRequest) Reset() {
+	*x = InstallPartRequest{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallPartRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallPartRequest) ProtoMessage() {}
+
+func (x *InstallPartRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallPartRequest.ProtoReflect.Descriptor instead.
+func (*InstallPartRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *InstallPartRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *InstallPartRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *InstallPartRequest) GetPartId() string {
+	if x != nil {
+		return x.PartId
+	}
+	return ""
+}
+
+func (x *InstallPartRequest) GetTarget() isInstallPartRequest_Target {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *InstallPartRequest) GetCarId() string {
+	if x != nil {
+		if x, ok := x.Target.(*InstallPartRequest_CarId); ok {
+			return x.CarId
+		}
+	}
+	return ""
+}
+
+func (x *InstallPartRequest) GetEngineId() string {
+	if x != nil {
+		if x, ok := x.Target.(*InstallPartRequest_EngineId); ok {
+			return x.EngineId
+		}
+	}
+	return ""
+}
+
+func (x *InstallPartRequest) GetInstalledAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.InstalledAt
+	}
+	return nil
+}
+
+func (x *InstallPartRequest) GetNote() string {
+	if x != nil && x.Note != nil {
+		return *x.Note
+	}
+	return ""
+}
+
+type isInstallPartRequest_Target interface {
+	isInstallPartRequest_Target()
+}
+
+type InstallPartRequest_CarId struct {
+	CarId string `protobuf:"bytes,4,opt,name=car_id,json=carId,proto3,oneof"`
+}
+
+type InstallPartRequest_EngineId struct {
+	EngineId string `protobuf:"bytes,5,opt,name=engine_id,json=engineId,proto3,oneof"`
+}
+
+func (*InstallPartRequest_CarId) isInstallPartRequest_Target() {}
+
+func (*InstallPartRequest_EngineId) isInstallPartRequest_Target() {}
+
+type InstallPartResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Install       *PartInstall           `protobuf:"bytes,1,opt,name=install,proto3" json:"install,omitempty"`
+	Part          *Part                  `protobuf:"bytes,2,opt,name=part,proto3" json:"part,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *InstallPartResponse) Reset() {
+	*x = InstallPartResponse{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *InstallPartResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*InstallPartResponse) ProtoMessage() {}
+
+func (x *InstallPartResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use InstallPartResponse.ProtoReflect.Descriptor instead.
+func (*InstallPartResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *InstallPartResponse) GetInstall() *PartInstall {
+	if x != nil {
+		return x.Install
+	}
+	return nil
+}
+
+func (x *InstallPartResponse) GetPart() *Part {
+	if x != nil {
+		return x.Part
+	}
+	return nil
+}
+
+type RemovePartRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TeamId        string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	RequestId     string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	InstallId     string                 `protobuf:"bytes,3,opt,name=install_id,json=installId,proto3" json:"install_id,omitempty"`
+	Destination   RemovalDestination     `protobuf:"varint,4,opt,name=destination,proto3,enum=pitbox.garage.v1.RemovalDestination" json:"destination,omitempty"`
+	Reason        RemovalReason          `protobuf:"varint,5,opt,name=reason,proto3,enum=pitbox.garage.v1.RemovalReason" json:"reason,omitempty"`
+	Note          *string                `protobuf:"bytes,6,opt,name=note,proto3,oneof" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePartRequest) Reset() {
+	*x = RemovePartRequest{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePartRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePartRequest) ProtoMessage() {}
+
+func (x *RemovePartRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePartRequest.ProtoReflect.Descriptor instead.
+func (*RemovePartRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RemovePartRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *RemovePartRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *RemovePartRequest) GetInstallId() string {
+	if x != nil {
+		return x.InstallId
+	}
+	return ""
+}
+
+func (x *RemovePartRequest) GetDestination() RemovalDestination {
+	if x != nil {
+		return x.Destination
+	}
+	return RemovalDestination_REMOVAL_DESTINATION_UNSPECIFIED
+}
+
+func (x *RemovePartRequest) GetReason() RemovalReason {
+	if x != nil {
+		return x.Reason
+	}
+	return RemovalReason_REMOVAL_REASON_UNSPECIFIED
+}
+
+func (x *RemovePartRequest) GetNote() string {
+	if x != nil && x.Note != nil {
+		return *x.Note
+	}
+	return ""
+}
+
+type RemovePartResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Install       *PartInstall           `protobuf:"bytes,1,opt,name=install,proto3" json:"install,omitempty"`
+	Part          *Part                  `protobuf:"bytes,2,opt,name=part,proto3" json:"part,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePartResponse) Reset() {
+	*x = RemovePartResponse{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePartResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePartResponse) ProtoMessage() {}
+
+func (x *RemovePartResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePartResponse.ProtoReflect.Descriptor instead.
+func (*RemovePartResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *RemovePartResponse) GetInstall() *PartInstall {
+	if x != nil {
+		return x.Install
+	}
+	return nil
+}
+
+func (x *RemovePartResponse) GetPart() *Part {
+	if x != nil {
+		return x.Part
+	}
+	return nil
+}
+
+type ListPartInstallsRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TeamId string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	// Types that are valid to be assigned to Filter:
+	//
+	//	*ListPartInstallsRequest_PartId
+	//	*ListPartInstallsRequest_CarId
+	//	*ListPartInstallsRequest_EngineId
+	Filter isListPartInstallsRequest_Filter `protobuf_oneof:"filter"`
+	// false lists only the active installations.
+	IncludeHistory bool   `protobuf:"varint,5,opt,name=include_history,json=includeHistory,proto3" json:"include_history,omitempty"`
+	PageSize       int32  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken      string `protobuf:"bytes,7,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ListPartInstallsRequest) Reset() {
+	*x = ListPartInstallsRequest{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPartInstallsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPartInstallsRequest) ProtoMessage() {}
+
+func (x *ListPartInstallsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPartInstallsRequest.ProtoReflect.Descriptor instead.
+func (*ListPartInstallsRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ListPartInstallsRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *ListPartInstallsRequest) GetFilter() isListPartInstallsRequest_Filter {
+	if x != nil {
+		return x.Filter
+	}
+	return nil
+}
+
+func (x *ListPartInstallsRequest) GetPartId() string {
+	if x != nil {
+		if x, ok := x.Filter.(*ListPartInstallsRequest_PartId); ok {
+			return x.PartId
+		}
+	}
+	return ""
+}
+
+func (x *ListPartInstallsRequest) GetCarId() string {
+	if x != nil {
+		if x, ok := x.Filter.(*ListPartInstallsRequest_CarId); ok {
+			return x.CarId
+		}
+	}
+	return ""
+}
+
+func (x *ListPartInstallsRequest) GetEngineId() string {
+	if x != nil {
+		if x, ok := x.Filter.(*ListPartInstallsRequest_EngineId); ok {
+			return x.EngineId
+		}
+	}
+	return ""
+}
+
+func (x *ListPartInstallsRequest) GetIncludeHistory() bool {
+	if x != nil {
+		return x.IncludeHistory
+	}
+	return false
+}
+
+func (x *ListPartInstallsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListPartInstallsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type isListPartInstallsRequest_Filter interface {
+	isListPartInstallsRequest_Filter()
+}
+
+type ListPartInstallsRequest_PartId struct {
+	PartId string `protobuf:"bytes,2,opt,name=part_id,json=partId,proto3,oneof"`
+}
+
+type ListPartInstallsRequest_CarId struct {
+	CarId string `protobuf:"bytes,3,opt,name=car_id,json=carId,proto3,oneof"`
+}
+
+type ListPartInstallsRequest_EngineId struct {
+	EngineId string `protobuf:"bytes,4,opt,name=engine_id,json=engineId,proto3,oneof"`
+}
+
+func (*ListPartInstallsRequest_PartId) isListPartInstallsRequest_Filter() {}
+
+func (*ListPartInstallsRequest_CarId) isListPartInstallsRequest_Filter() {}
+
+func (*ListPartInstallsRequest_EngineId) isListPartInstallsRequest_Filter() {}
+
+type ListPartInstallsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Installs      []*PartInstall         `protobuf:"bytes,1,rep,name=installs,proto3" json:"installs,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPartInstallsResponse) Reset() {
+	*x = ListPartInstallsResponse{}
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPartInstallsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPartInstallsResponse) ProtoMessage() {}
+
+func (x *ListPartInstallsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_part_service_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPartInstallsResponse.ProtoReflect.Descriptor instead.
+func (*ListPartInstallsResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_part_service_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListPartInstallsResponse) GetInstalls() []*PartInstall {
+	if x != nil {
+		return x.Installs
+	}
+	return nil
+}
+
+func (x *ListPartInstallsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pitbox_garage_v1_part_service_proto protoreflect.FileDescriptor
 
 const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\n" +
-	"#pitbox/garage/v1/part_service.proto\x12\x10pitbox.garage.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpitbox/garage/v1/garage.proto\"\xbf\x04\n" +
+	"#pitbox/garage/v1/part_service.proto\x12\x10pitbox.garage.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpitbox/garage/v1/garage.proto\"\xfc\x03\n" +
+	"\vPartInstall\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
+	"\apart_id\x18\x02 \x01(\tR\x06partId\x12\x17\n" +
+	"\x06car_id\x18\x03 \x01(\tH\x00R\x05carId\x12\x1d\n" +
+	"\tengine_id\x18\x04 \x01(\tH\x00R\bengineId\x12=\n" +
+	"\finstalled_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vinstalledAt\x12>\n" +
+	"\n" +
+	"removed_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\tremovedAt\x88\x01\x01\x12U\n" +
+	"\x13removal_destination\x18\a \x01(\x0e2$.pitbox.garage.v1.RemovalDestinationR\x12removalDestination\x12F\n" +
+	"\x0eremoval_reason\x18\b \x01(\x0e2\x1f.pitbox.garage.v1.RemovalReasonR\rremovalReason\x12\x1f\n" +
+	"\vrun_seconds\x18\t \x01(\x05R\n" +
+	"runSeconds\x12\x1a\n" +
+	"\bsessions\x18\n" +
+	" \x01(\x05R\bsessions\x12\x18\n" +
+	"\aversion\x18\v \x01(\x05R\aversionB\b\n" +
+	"\x06targetB\r\n" +
+	"\v_removed_at\"\xbf\x04\n" +
 	"\x04Part\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1a.pitbox.garage.v1.PartKindR\x04kind\x12\x19\n" +
@@ -1346,18 +2120,76 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\x05_note\"\x83\x01\n" +
 	"\x18AddStockMovementResponse\x12*\n" +
 	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\x12;\n" +
-	"\bmovement\x18\x02 \x01(\v2\x1f.pitbox.garage.v1.StockMovementR\bmovement2\xa9\x05\n" +
+	"\bmovement\x18\x02 \x01(\v2\x1f.pitbox.garage.v1.StockMovementR\bmovement\"\xeb\x02\n" +
+	"\x12InstallPartRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12!\n" +
+	"\apart_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12!\n" +
+	"\x06car_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x05carId\x12'\n" +
+	"\tengine_id\x18\x05 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\bengineId\x12L\n" +
+	"\finstalled_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampB\b\xbaH\x05\xb2\x01\x028\x01H\x01R\vinstalledAt\x88\x01\x01\x12!\n" +
+	"\x04note\x18\a \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x02R\x04note\x88\x01\x01B\x0f\n" +
+	"\x06target\x12\x05\xbaH\x02\b\x01B\x0f\n" +
+	"\r_installed_atB\a\n" +
+	"\x05_note\"z\n" +
+	"\x13InstallPartResponse\x127\n" +
+	"\ainstall\x18\x01 \x01(\v2\x1d.pitbox.garage.v1.PartInstallR\ainstall\x12*\n" +
+	"\x04part\x18\x02 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xd0\x03\n" +
+	"\x11RemovePartRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12'\n" +
+	"\n" +
+	"install_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tinstallId\x12R\n" +
+	"\vdestination\x18\x04 \x01(\x0e2$.pitbox.garage.v1.RemovalDestinationB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\vdestination\x12A\n" +
+	"\x06reason\x18\x05 \x01(\x0e2\x1f.pitbox.garage.v1.RemovalReasonB\b\xbaH\x05\x82\x01\x02\x10\x01R\x06reason\x12!\n" +
+	"\x04note\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\x04note\x88\x01\x01:\x82\x01\xbaH\x7f\x1a}\n" +
+	"\x12remove_part.reason\x128a reason is required for scrap and not allowed otherwise\x1a-(this.destination == 2) == (this.reason != 0)B\a\n" +
+	"\x05_note\"y\n" +
+	"\x12RemovePartResponse\x127\n" +
+	"\ainstall\x18\x01 \x01(\v2\x1d.pitbox.garage.v1.PartInstallR\ainstall\x12*\n" +
+	"\x04part\x18\x02 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xb9\x02\n" +
+	"\x17ListPartInstallsRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12#\n" +
+	"\apart_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06partId\x12!\n" +
+	"\x06car_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x05carId\x12'\n" +
+	"\tengine_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\bengineId\x12'\n" +
+	"\x0finclude_history\x18\x05 \x01(\bR\x0eincludeHistory\x12'\n" +
+	"\tpage_size\x18\x06 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\a \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageTokenB\x0f\n" +
+	"\x06filter\x12\x05\xbaH\x02\b\x01\"}\n" +
+	"\x18ListPartInstallsResponse\x129\n" +
+	"\binstalls\x18\x01 \x03(\v2\x1d.pitbox.garage.v1.PartInstallR\binstalls\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\x96\x01\n" +
+	"\x12RemovalDestination\x12#\n" +
+	"\x1fREMOVAL_DESTINATION_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19REMOVAL_DESTINATION_STOCK\x10\x01\x12\x1d\n" +
+	"\x19REMOVAL_DESTINATION_SCRAP\x10\x02\x12\x1d\n" +
+	"\x19REMOVAL_DESTINATION_SPARE\x10\x03*|\n" +
+	"\rRemovalReason\x12\x1e\n" +
+	"\x1aREMOVAL_REASON_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15REMOVAL_REASON_BROKEN\x10\x01\x12\x17\n" +
+	"\x13REMOVAL_REASON_WORN\x10\x02\x12\x17\n" +
+	"\x13REMOVAL_REASON_LOST\x10\x032\xce\a\n" +
 	"\vPartService\x12S\n" +
 	"\aGetPart\x12 .pitbox.garage.v1.GetPartRequest\x1a!.pitbox.garage.v1.GetPartResponse\"\x03\x90\x02\x01\x12Y\n" +
 	"\tListParts\x12\".pitbox.garage.v1.ListPartsRequest\x1a#.pitbox.garage.v1.ListPartsResponse\"\x03\x90\x02\x01\x12t\n" +
-	"\x12ListStockMovements\x12+.pitbox.garage.v1.ListStockMovementsRequest\x1a,.pitbox.garage.v1.ListStockMovementsResponse\"\x03\x90\x02\x01\x12W\n" +
+	"\x12ListStockMovements\x12+.pitbox.garage.v1.ListStockMovementsRequest\x1a,.pitbox.garage.v1.ListStockMovementsResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x10ListPartInstalls\x12).pitbox.garage.v1.ListPartInstallsRequest\x1a*.pitbox.garage.v1.ListPartInstallsResponse\"\x03\x90\x02\x01\x12W\n" +
 	"\n" +
 	"CreatePart\x12#.pitbox.garage.v1.CreatePartRequest\x1a$.pitbox.garage.v1.CreatePartResponse\x12W\n" +
 	"\n" +
 	"UpdatePart\x12#.pitbox.garage.v1.UpdatePartRequest\x1a$.pitbox.garage.v1.UpdatePartResponse\x12W\n" +
 	"\n" +
 	"DeletePart\x12#.pitbox.garage.v1.DeletePartRequest\x1a$.pitbox.garage.v1.DeletePartResponse\x12i\n" +
-	"\x10AddStockMovement\x12).pitbox.garage.v1.AddStockMovementRequest\x1a*.pitbox.garage.v1.AddStockMovementResponseB\xd7\x01\n" +
+	"\x10AddStockMovement\x12).pitbox.garage.v1.AddStockMovementRequest\x1a*.pitbox.garage.v1.AddStockMovementResponse\x12Z\n" +
+	"\vInstallPart\x12$.pitbox.garage.v1.InstallPartRequest\x1a%.pitbox.garage.v1.InstallPartResponse\x12W\n" +
+	"\n" +
+	"RemovePart\x12#.pitbox.garage.v1.RemovePartRequest\x1a$.pitbox.garage.v1.RemovePartResponseB\xd7\x01\n" +
 	"\x14com.pitbox.garage.v1B\x10PartServiceProtoP\x01ZKgithub.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1;garagev1\xa2\x02\x03PGX\xaa\x02\x10Pitbox.Garage.V1\xca\x02\x10Pitbox\\Garage\\V1\xe2\x02\x1cPitbox\\Garage\\V1\\GPBMetadata\xea\x02\x12Pitbox::Garage::V1b\x06proto3"
 
 var (
@@ -1372,68 +2204,96 @@ func file_pitbox_garage_v1_part_service_proto_rawDescGZIP() []byte {
 	return file_pitbox_garage_v1_part_service_proto_rawDescData
 }
 
-var file_pitbox_garage_v1_part_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pitbox_garage_v1_part_service_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pitbox_garage_v1_part_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_pitbox_garage_v1_part_service_proto_goTypes = []any{
-	(*Part)(nil),                       // 0: pitbox.garage.v1.Part
-	(*StockMovement)(nil),              // 1: pitbox.garage.v1.StockMovement
-	(*GetPartRequest)(nil),             // 2: pitbox.garage.v1.GetPartRequest
-	(*GetPartResponse)(nil),            // 3: pitbox.garage.v1.GetPartResponse
-	(*ListPartsRequest)(nil),           // 4: pitbox.garage.v1.ListPartsRequest
-	(*ListPartsResponse)(nil),          // 5: pitbox.garage.v1.ListPartsResponse
-	(*ListStockMovementsRequest)(nil),  // 6: pitbox.garage.v1.ListStockMovementsRequest
-	(*ListStockMovementsResponse)(nil), // 7: pitbox.garage.v1.ListStockMovementsResponse
-	(*CreatePartRequest)(nil),          // 8: pitbox.garage.v1.CreatePartRequest
-	(*CreatePartResponse)(nil),         // 9: pitbox.garage.v1.CreatePartResponse
-	(*UpdatePartRequest)(nil),          // 10: pitbox.garage.v1.UpdatePartRequest
-	(*UpdatePartResponse)(nil),         // 11: pitbox.garage.v1.UpdatePartResponse
-	(*DeletePartRequest)(nil),          // 12: pitbox.garage.v1.DeletePartRequest
-	(*DeletePartResponse)(nil),         // 13: pitbox.garage.v1.DeletePartResponse
-	(*AddStockMovementRequest)(nil),    // 14: pitbox.garage.v1.AddStockMovementRequest
-	(*AddStockMovementResponse)(nil),   // 15: pitbox.garage.v1.AddStockMovementResponse
-	(PartKind)(0),                      // 16: pitbox.garage.v1.PartKind
-	(*structpb.Struct)(nil),            // 17: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),      // 18: google.protobuf.Timestamp
-	(StockReason)(0),                   // 19: pitbox.garage.v1.StockReason
-	(*fieldmaskpb.FieldMask)(nil),      // 20: google.protobuf.FieldMask
+	(RemovalDestination)(0),            // 0: pitbox.garage.v1.RemovalDestination
+	(RemovalReason)(0),                 // 1: pitbox.garage.v1.RemovalReason
+	(*PartInstall)(nil),                // 2: pitbox.garage.v1.PartInstall
+	(*Part)(nil),                       // 3: pitbox.garage.v1.Part
+	(*StockMovement)(nil),              // 4: pitbox.garage.v1.StockMovement
+	(*GetPartRequest)(nil),             // 5: pitbox.garage.v1.GetPartRequest
+	(*GetPartResponse)(nil),            // 6: pitbox.garage.v1.GetPartResponse
+	(*ListPartsRequest)(nil),           // 7: pitbox.garage.v1.ListPartsRequest
+	(*ListPartsResponse)(nil),          // 8: pitbox.garage.v1.ListPartsResponse
+	(*ListStockMovementsRequest)(nil),  // 9: pitbox.garage.v1.ListStockMovementsRequest
+	(*ListStockMovementsResponse)(nil), // 10: pitbox.garage.v1.ListStockMovementsResponse
+	(*CreatePartRequest)(nil),          // 11: pitbox.garage.v1.CreatePartRequest
+	(*CreatePartResponse)(nil),         // 12: pitbox.garage.v1.CreatePartResponse
+	(*UpdatePartRequest)(nil),          // 13: pitbox.garage.v1.UpdatePartRequest
+	(*UpdatePartResponse)(nil),         // 14: pitbox.garage.v1.UpdatePartResponse
+	(*DeletePartRequest)(nil),          // 15: pitbox.garage.v1.DeletePartRequest
+	(*DeletePartResponse)(nil),         // 16: pitbox.garage.v1.DeletePartResponse
+	(*AddStockMovementRequest)(nil),    // 17: pitbox.garage.v1.AddStockMovementRequest
+	(*AddStockMovementResponse)(nil),   // 18: pitbox.garage.v1.AddStockMovementResponse
+	(*InstallPartRequest)(nil),         // 19: pitbox.garage.v1.InstallPartRequest
+	(*InstallPartResponse)(nil),        // 20: pitbox.garage.v1.InstallPartResponse
+	(*RemovePartRequest)(nil),          // 21: pitbox.garage.v1.RemovePartRequest
+	(*RemovePartResponse)(nil),         // 22: pitbox.garage.v1.RemovePartResponse
+	(*ListPartInstallsRequest)(nil),    // 23: pitbox.garage.v1.ListPartInstallsRequest
+	(*ListPartInstallsResponse)(nil),   // 24: pitbox.garage.v1.ListPartInstallsResponse
+	(*timestamppb.Timestamp)(nil),      // 25: google.protobuf.Timestamp
+	(PartKind)(0),                      // 26: pitbox.garage.v1.PartKind
+	(*structpb.Struct)(nil),            // 27: google.protobuf.Struct
+	(StockReason)(0),                   // 28: pitbox.garage.v1.StockReason
+	(*fieldmaskpb.FieldMask)(nil),      // 29: google.protobuf.FieldMask
 }
 var file_pitbox_garage_v1_part_service_proto_depIdxs = []int32{
-	16, // 0: pitbox.garage.v1.Part.kind:type_name -> pitbox.garage.v1.PartKind
-	17, // 1: pitbox.garage.v1.Part.specs:type_name -> google.protobuf.Struct
-	18, // 2: pitbox.garage.v1.Part.created_at:type_name -> google.protobuf.Timestamp
-	19, // 3: pitbox.garage.v1.StockMovement.reason:type_name -> pitbox.garage.v1.StockReason
-	18, // 4: pitbox.garage.v1.StockMovement.occurred_at:type_name -> google.protobuf.Timestamp
-	0,  // 5: pitbox.garage.v1.GetPartResponse.part:type_name -> pitbox.garage.v1.Part
-	0,  // 6: pitbox.garage.v1.ListPartsResponse.parts:type_name -> pitbox.garage.v1.Part
-	1,  // 7: pitbox.garage.v1.ListStockMovementsResponse.movements:type_name -> pitbox.garage.v1.StockMovement
-	16, // 8: pitbox.garage.v1.CreatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
-	17, // 9: pitbox.garage.v1.CreatePartRequest.specs:type_name -> google.protobuf.Struct
-	0,  // 10: pitbox.garage.v1.CreatePartResponse.part:type_name -> pitbox.garage.v1.Part
-	20, // 11: pitbox.garage.v1.UpdatePartRequest.update_mask:type_name -> google.protobuf.FieldMask
-	16, // 12: pitbox.garage.v1.UpdatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
-	17, // 13: pitbox.garage.v1.UpdatePartRequest.specs:type_name -> google.protobuf.Struct
-	0,  // 14: pitbox.garage.v1.UpdatePartResponse.part:type_name -> pitbox.garage.v1.Part
-	19, // 15: pitbox.garage.v1.AddStockMovementRequest.reason:type_name -> pitbox.garage.v1.StockReason
-	0,  // 16: pitbox.garage.v1.AddStockMovementResponse.part:type_name -> pitbox.garage.v1.Part
-	1,  // 17: pitbox.garage.v1.AddStockMovementResponse.movement:type_name -> pitbox.garage.v1.StockMovement
-	2,  // 18: pitbox.garage.v1.PartService.GetPart:input_type -> pitbox.garage.v1.GetPartRequest
-	4,  // 19: pitbox.garage.v1.PartService.ListParts:input_type -> pitbox.garage.v1.ListPartsRequest
-	6,  // 20: pitbox.garage.v1.PartService.ListStockMovements:input_type -> pitbox.garage.v1.ListStockMovementsRequest
-	8,  // 21: pitbox.garage.v1.PartService.CreatePart:input_type -> pitbox.garage.v1.CreatePartRequest
-	10, // 22: pitbox.garage.v1.PartService.UpdatePart:input_type -> pitbox.garage.v1.UpdatePartRequest
-	12, // 23: pitbox.garage.v1.PartService.DeletePart:input_type -> pitbox.garage.v1.DeletePartRequest
-	14, // 24: pitbox.garage.v1.PartService.AddStockMovement:input_type -> pitbox.garage.v1.AddStockMovementRequest
-	3,  // 25: pitbox.garage.v1.PartService.GetPart:output_type -> pitbox.garage.v1.GetPartResponse
-	5,  // 26: pitbox.garage.v1.PartService.ListParts:output_type -> pitbox.garage.v1.ListPartsResponse
-	7,  // 27: pitbox.garage.v1.PartService.ListStockMovements:output_type -> pitbox.garage.v1.ListStockMovementsResponse
-	9,  // 28: pitbox.garage.v1.PartService.CreatePart:output_type -> pitbox.garage.v1.CreatePartResponse
-	11, // 29: pitbox.garage.v1.PartService.UpdatePart:output_type -> pitbox.garage.v1.UpdatePartResponse
-	13, // 30: pitbox.garage.v1.PartService.DeletePart:output_type -> pitbox.garage.v1.DeletePartResponse
-	15, // 31: pitbox.garage.v1.PartService.AddStockMovement:output_type -> pitbox.garage.v1.AddStockMovementResponse
-	25, // [25:32] is the sub-list for method output_type
-	18, // [18:25] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	25, // 0: pitbox.garage.v1.PartInstall.installed_at:type_name -> google.protobuf.Timestamp
+	25, // 1: pitbox.garage.v1.PartInstall.removed_at:type_name -> google.protobuf.Timestamp
+	0,  // 2: pitbox.garage.v1.PartInstall.removal_destination:type_name -> pitbox.garage.v1.RemovalDestination
+	1,  // 3: pitbox.garage.v1.PartInstall.removal_reason:type_name -> pitbox.garage.v1.RemovalReason
+	26, // 4: pitbox.garage.v1.Part.kind:type_name -> pitbox.garage.v1.PartKind
+	27, // 5: pitbox.garage.v1.Part.specs:type_name -> google.protobuf.Struct
+	25, // 6: pitbox.garage.v1.Part.created_at:type_name -> google.protobuf.Timestamp
+	28, // 7: pitbox.garage.v1.StockMovement.reason:type_name -> pitbox.garage.v1.StockReason
+	25, // 8: pitbox.garage.v1.StockMovement.occurred_at:type_name -> google.protobuf.Timestamp
+	3,  // 9: pitbox.garage.v1.GetPartResponse.part:type_name -> pitbox.garage.v1.Part
+	3,  // 10: pitbox.garage.v1.ListPartsResponse.parts:type_name -> pitbox.garage.v1.Part
+	4,  // 11: pitbox.garage.v1.ListStockMovementsResponse.movements:type_name -> pitbox.garage.v1.StockMovement
+	26, // 12: pitbox.garage.v1.CreatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
+	27, // 13: pitbox.garage.v1.CreatePartRequest.specs:type_name -> google.protobuf.Struct
+	3,  // 14: pitbox.garage.v1.CreatePartResponse.part:type_name -> pitbox.garage.v1.Part
+	29, // 15: pitbox.garage.v1.UpdatePartRequest.update_mask:type_name -> google.protobuf.FieldMask
+	26, // 16: pitbox.garage.v1.UpdatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
+	27, // 17: pitbox.garage.v1.UpdatePartRequest.specs:type_name -> google.protobuf.Struct
+	3,  // 18: pitbox.garage.v1.UpdatePartResponse.part:type_name -> pitbox.garage.v1.Part
+	28, // 19: pitbox.garage.v1.AddStockMovementRequest.reason:type_name -> pitbox.garage.v1.StockReason
+	3,  // 20: pitbox.garage.v1.AddStockMovementResponse.part:type_name -> pitbox.garage.v1.Part
+	4,  // 21: pitbox.garage.v1.AddStockMovementResponse.movement:type_name -> pitbox.garage.v1.StockMovement
+	25, // 22: pitbox.garage.v1.InstallPartRequest.installed_at:type_name -> google.protobuf.Timestamp
+	2,  // 23: pitbox.garage.v1.InstallPartResponse.install:type_name -> pitbox.garage.v1.PartInstall
+	3,  // 24: pitbox.garage.v1.InstallPartResponse.part:type_name -> pitbox.garage.v1.Part
+	0,  // 25: pitbox.garage.v1.RemovePartRequest.destination:type_name -> pitbox.garage.v1.RemovalDestination
+	1,  // 26: pitbox.garage.v1.RemovePartRequest.reason:type_name -> pitbox.garage.v1.RemovalReason
+	2,  // 27: pitbox.garage.v1.RemovePartResponse.install:type_name -> pitbox.garage.v1.PartInstall
+	3,  // 28: pitbox.garage.v1.RemovePartResponse.part:type_name -> pitbox.garage.v1.Part
+	2,  // 29: pitbox.garage.v1.ListPartInstallsResponse.installs:type_name -> pitbox.garage.v1.PartInstall
+	5,  // 30: pitbox.garage.v1.PartService.GetPart:input_type -> pitbox.garage.v1.GetPartRequest
+	7,  // 31: pitbox.garage.v1.PartService.ListParts:input_type -> pitbox.garage.v1.ListPartsRequest
+	9,  // 32: pitbox.garage.v1.PartService.ListStockMovements:input_type -> pitbox.garage.v1.ListStockMovementsRequest
+	23, // 33: pitbox.garage.v1.PartService.ListPartInstalls:input_type -> pitbox.garage.v1.ListPartInstallsRequest
+	11, // 34: pitbox.garage.v1.PartService.CreatePart:input_type -> pitbox.garage.v1.CreatePartRequest
+	13, // 35: pitbox.garage.v1.PartService.UpdatePart:input_type -> pitbox.garage.v1.UpdatePartRequest
+	15, // 36: pitbox.garage.v1.PartService.DeletePart:input_type -> pitbox.garage.v1.DeletePartRequest
+	17, // 37: pitbox.garage.v1.PartService.AddStockMovement:input_type -> pitbox.garage.v1.AddStockMovementRequest
+	19, // 38: pitbox.garage.v1.PartService.InstallPart:input_type -> pitbox.garage.v1.InstallPartRequest
+	21, // 39: pitbox.garage.v1.PartService.RemovePart:input_type -> pitbox.garage.v1.RemovePartRequest
+	6,  // 40: pitbox.garage.v1.PartService.GetPart:output_type -> pitbox.garage.v1.GetPartResponse
+	8,  // 41: pitbox.garage.v1.PartService.ListParts:output_type -> pitbox.garage.v1.ListPartsResponse
+	10, // 42: pitbox.garage.v1.PartService.ListStockMovements:output_type -> pitbox.garage.v1.ListStockMovementsResponse
+	24, // 43: pitbox.garage.v1.PartService.ListPartInstalls:output_type -> pitbox.garage.v1.ListPartInstallsResponse
+	12, // 44: pitbox.garage.v1.PartService.CreatePart:output_type -> pitbox.garage.v1.CreatePartResponse
+	14, // 45: pitbox.garage.v1.PartService.UpdatePart:output_type -> pitbox.garage.v1.UpdatePartResponse
+	16, // 46: pitbox.garage.v1.PartService.DeletePart:output_type -> pitbox.garage.v1.DeletePartResponse
+	18, // 47: pitbox.garage.v1.PartService.AddStockMovement:output_type -> pitbox.garage.v1.AddStockMovementResponse
+	20, // 48: pitbox.garage.v1.PartService.InstallPart:output_type -> pitbox.garage.v1.InstallPartResponse
+	22, // 49: pitbox.garage.v1.PartService.RemovePart:output_type -> pitbox.garage.v1.RemovePartResponse
+	40, // [40:50] is the sub-list for method output_type
+	30, // [30:40] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_pitbox_garage_v1_part_service_proto_init() }
@@ -1442,23 +2302,38 @@ func file_pitbox_garage_v1_part_service_proto_init() {
 		return
 	}
 	file_pitbox_garage_v1_garage_proto_init()
-	file_pitbox_garage_v1_part_service_proto_msgTypes[0].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[0].OneofWrappers = []any{
+		(*PartInstall_CarId)(nil),
+		(*PartInstall_EngineId)(nil),
+	}
 	file_pitbox_garage_v1_part_service_proto_msgTypes[1].OneofWrappers = []any{}
-	file_pitbox_garage_v1_part_service_proto_msgTypes[8].OneofWrappers = []any{}
-	file_pitbox_garage_v1_part_service_proto_msgTypes[10].OneofWrappers = []any{}
-	file_pitbox_garage_v1_part_service_proto_msgTypes[14].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[2].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[9].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[11].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[15].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[17].OneofWrappers = []any{
+		(*InstallPartRequest_CarId)(nil),
+		(*InstallPartRequest_EngineId)(nil),
+	}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[19].OneofWrappers = []any{}
+	file_pitbox_garage_v1_part_service_proto_msgTypes[21].OneofWrappers = []any{
+		(*ListPartInstallsRequest_PartId)(nil),
+		(*ListPartInstallsRequest_CarId)(nil),
+		(*ListPartInstallsRequest_EngineId)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pitbox_garage_v1_part_service_proto_rawDesc), len(file_pitbox_garage_v1_part_service_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   16,
+			NumEnums:      2,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_pitbox_garage_v1_part_service_proto_goTypes,
 		DependencyIndexes: file_pitbox_garage_v1_part_service_proto_depIdxs,
+		EnumInfos:         file_pitbox_garage_v1_part_service_proto_enumTypes,
 		MessageInfos:      file_pitbox_garage_v1_part_service_proto_msgTypes,
 	}.Build()
 	File_pitbox_garage_v1_part_service_proto = out.File

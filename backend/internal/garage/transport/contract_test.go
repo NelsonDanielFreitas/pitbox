@@ -3,10 +3,12 @@ package transport
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"buf.build/go/protovalidate"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	garagev1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1"
 )
@@ -125,5 +127,89 @@ func TestPartQuantityContract(t *testing.T) {
 	tooSmall.QtyDeltaCenti = -10_000_000_000
 	if v.Validate(tooSmall) == nil {
 		t.Fatal("oversized negative delta accepted")
+	}
+}
+
+func TestPartInstallContract(t *testing.T) {
+	v, err := protovalidate.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const team, part, car, engine = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61", "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d62",
+		"0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d63", "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d64"
+	install := func(mutate func(*garagev1.InstallPartRequest)) *garagev1.InstallPartRequest {
+		r := &garagev1.InstallPartRequest{
+			TeamId: team, RequestId: validRequestID, PartId: part,
+			Target: &garagev1.InstallPartRequest_EngineId{EngineId: engine},
+		}
+		if mutate != nil {
+			mutate(r)
+		}
+		return r
+	}
+	remove := func(mutate func(*garagev1.RemovePartRequest)) *garagev1.RemovePartRequest {
+		r := &garagev1.RemovePartRequest{
+			TeamId: team, RequestId: validRequestID, InstallId: part,
+			Destination: garagev1.RemovalDestination_REMOVAL_DESTINATION_STOCK,
+		}
+		if mutate != nil {
+			mutate(r)
+		}
+		return r
+	}
+	list := func(mutate func(*garagev1.ListPartInstallsRequest)) *garagev1.ListPartInstallsRequest {
+		r := &garagev1.ListPartInstallsRequest{TeamId: team, Filter: &garagev1.ListPartInstallsRequest_CarId{CarId: car}}
+		if mutate != nil {
+			mutate(r)
+		}
+		return r
+	}
+	past := timestamppb.New(time.Now().Add(-time.Hour))
+	future := timestamppb.New(time.Now().Add(time.Hour))
+
+	valid := []proto.Message{
+		install(nil),
+		install(func(r *garagev1.InstallPartRequest) { r.Target = &garagev1.InstallPartRequest_CarId{CarId: car} }),
+		install(func(r *garagev1.InstallPartRequest) { r.InstalledAt = past }),
+		remove(nil),
+		remove(func(r *garagev1.RemovePartRequest) {
+			r.Destination = garagev1.RemovalDestination_REMOVAL_DESTINATION_SCRAP
+			r.Reason = garagev1.RemovalReason_REMOVAL_REASON_WORN
+		}),
+		list(nil),
+		list(func(r *garagev1.ListPartInstallsRequest) {
+			r.Filter = &garagev1.ListPartInstallsRequest_PartId{PartId: part}
+		}),
+	}
+	for i, msg := range valid {
+		if err := v.Validate(msg); err != nil {
+			t.Errorf("valid message %d refused: %v", i, err)
+		}
+	}
+	invalid := map[string]proto.Message{
+		"install without target":     install(func(r *garagev1.InstallPartRequest) { r.Target = nil }),
+		"install bad target id":      install(func(r *garagev1.InstallPartRequest) { r.Target = &garagev1.InstallPartRequest_CarId{CarId: "x"} }),
+		"install time in the future": install(func(r *garagev1.InstallPartRequest) { r.InstalledAt = future }),
+		"install note too long":      install(func(r *garagev1.InstallPartRequest) { r.Note = proto.String(strings.Repeat("a", 501)) }),
+		"install request missing":    install(func(r *garagev1.InstallPartRequest) { r.RequestId = "" }),
+		"remove destination missing": remove(func(r *garagev1.RemovePartRequest) { r.Destination = 0 }),
+		"remove destination unknown": remove(func(r *garagev1.RemovePartRequest) { r.Destination = 99 }),
+		"scrap without reason": remove(func(r *garagev1.RemovePartRequest) {
+			r.Destination = garagev1.RemovalDestination_REMOVAL_DESTINATION_SCRAP
+		}),
+		"reason without scrap": remove(func(r *garagev1.RemovePartRequest) { r.Reason = garagev1.RemovalReason_REMOVAL_REASON_LOST }),
+		"scrap reason unknown": remove(func(r *garagev1.RemovePartRequest) {
+			r.Destination = garagev1.RemovalDestination_REMOVAL_DESTINATION_SCRAP
+			r.Reason = 99
+		}),
+		"remove note too long": remove(func(r *garagev1.RemovePartRequest) { r.Note = proto.String(strings.Repeat("a", 501)) }),
+		"list without filter":  list(func(r *garagev1.ListPartInstallsRequest) { r.Filter = nil }),
+		"list page too large":  list(func(r *garagev1.ListPartInstallsRequest) { r.PageSize = 201 }),
+		"list token too long":  list(func(r *garagev1.ListPartInstallsRequest) { r.PageToken = strings.Repeat("a", 513) }),
+	}
+	for name, msg := range invalid {
+		if v.Validate(msg) == nil {
+			t.Errorf("%s: accepted", name)
+		}
 	}
 }

@@ -31,6 +31,9 @@ const (
 	// PartServiceListStockMovementsProcedure is the procedure name of the PartService's
 	// ListStockMovements RPC.
 	PartServiceListStockMovementsProcedure = "/pitbox.garage.v1.PartService/ListStockMovements"
+	// PartServiceListPartInstallsProcedure is the procedure name of the PartService's ListPartInstalls
+	// RPC.
+	PartServiceListPartInstallsProcedure = "/pitbox.garage.v1.PartService/ListPartInstalls"
 	// PartServiceCreatePartProcedure is the procedure name of the PartService's CreatePart RPC.
 	PartServiceCreatePartProcedure = "/pitbox.garage.v1.PartService/CreatePart"
 	// PartServiceUpdatePartProcedure is the procedure name of the PartService's UpdatePart RPC.
@@ -40,6 +43,10 @@ const (
 	// PartServiceAddStockMovementProcedure is the procedure name of the PartService's AddStockMovement
 	// RPC.
 	PartServiceAddStockMovementProcedure = "/pitbox.garage.v1.PartService/AddStockMovement"
+	// PartServiceInstallPartProcedure is the procedure name of the PartService's InstallPart RPC.
+	PartServiceInstallPartProcedure = "/pitbox.garage.v1.PartService/InstallPart"
+	// PartServiceRemovePartProcedure is the procedure name of the PartService's RemovePart RPC.
+	PartServiceRemovePartProcedure = "/pitbox.garage.v1.PartService/RemovePart"
 )
 
 var (
@@ -64,6 +71,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_pitbox_garage_v1_part_service_proto.Services().ByName("PartService").Methods().ByName("ListStockMovements"),
 			Procedure:        PartServiceListStockMovementsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	partServiceListPartInstallsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pitbox_garage_v1_part_service_proto.Services().ByName("PartService").Methods().ByName("ListPartInstalls"),
+			Procedure:        PartServiceListPartInstallsProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -95,6 +110,20 @@ var (
 			Procedure:  PartServiceAddStockMovementProcedure,
 		}
 	})
+	partServiceInstallPartSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_garage_v1_part_service_proto.Services().ByName("PartService").Methods().ByName("InstallPart"),
+			Procedure:  PartServiceInstallPartProcedure,
+		}
+	})
+	partServiceRemovePartSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_garage_v1_part_service_proto.Services().ByName("PartService").Methods().ByName("RemovePart"),
+			Procedure:  PartServiceRemovePartProcedure,
+		}
+	})
 )
 
 // PartServiceClient is a client for the pitbox.garage.v1.PartService service.
@@ -102,10 +131,13 @@ type PartServiceClient interface {
 	GetPart(context.Context, *v1.GetPartRequest) (*v1.GetPartResponse, error)
 	ListParts(context.Context, *v1.ListPartsRequest) (*v1.ListPartsResponse, error)
 	ListStockMovements(context.Context, *v1.ListStockMovementsRequest) (*v1.ListStockMovementsResponse, error)
+	ListPartInstalls(context.Context, *v1.ListPartInstallsRequest) (*v1.ListPartInstallsResponse, error)
 	CreatePart(context.Context, *v1.CreatePartRequest) (*v1.CreatePartResponse, error)
 	UpdatePart(context.Context, *v1.UpdatePartRequest) (*v1.UpdatePartResponse, error)
 	DeletePart(context.Context, *v1.DeletePartRequest) (*v1.DeletePartResponse, error)
 	AddStockMovement(context.Context, *v1.AddStockMovementRequest) (*v1.AddStockMovementResponse, error)
+	InstallPart(context.Context, *v1.InstallPartRequest) (*v1.InstallPartResponse, error)
+	RemovePart(context.Context, *v1.RemovePartRequest) (*v1.RemovePartResponse, error)
 }
 
 // NewPartServiceClient constructs a client for the pitbox.garage.v1.PartService service. Multiple
@@ -119,10 +151,13 @@ type PartServiceHandler interface {
 	GetPart(context.Context, *v1.GetPartRequest) (*v1.GetPartResponse, error)
 	ListParts(context.Context, *v1.ListPartsRequest) (*v1.ListPartsResponse, error)
 	ListStockMovements(context.Context, *v1.ListStockMovementsRequest) (*v1.ListStockMovementsResponse, error)
+	ListPartInstalls(context.Context, *v1.ListPartInstallsRequest) (*v1.ListPartInstallsResponse, error)
 	CreatePart(context.Context, *v1.CreatePartRequest) (*v1.CreatePartResponse, error)
 	UpdatePart(context.Context, *v1.UpdatePartRequest) (*v1.UpdatePartResponse, error)
 	DeletePart(context.Context, *v1.DeletePartRequest) (*v1.DeletePartResponse, error)
 	AddStockMovement(context.Context, *v1.AddStockMovementRequest) (*v1.AddStockMovementResponse, error)
+	InstallPart(context.Context, *v1.InstallPartRequest) (*v1.InstallPartResponse, error)
+	RemovePart(context.Context, *v1.RemovePartRequest) (*v1.RemovePartResponse, error)
 }
 
 // RegisterPartServiceHandler registers svc as the pitbox.garage.v1.PartService implementation on
@@ -133,10 +168,13 @@ func RegisterPartServiceHandler(server *connect.Server, svc PartServiceHandler) 
 		connect.Method{Spec: partServiceGetPartSpec(), Handler: adapter.getPart},
 		connect.Method{Spec: partServiceListPartsSpec(), Handler: adapter.listParts},
 		connect.Method{Spec: partServiceListStockMovementsSpec(), Handler: adapter.listStockMovements},
+		connect.Method{Spec: partServiceListPartInstallsSpec(), Handler: adapter.listPartInstalls},
 		connect.Method{Spec: partServiceCreatePartSpec(), Handler: adapter.createPart},
 		connect.Method{Spec: partServiceUpdatePartSpec(), Handler: adapter.updatePart},
 		connect.Method{Spec: partServiceDeletePartSpec(), Handler: adapter.deletePart},
 		connect.Method{Spec: partServiceAddStockMovementSpec(), Handler: adapter.addStockMovement},
+		connect.Method{Spec: partServiceInstallPartSpec(), Handler: adapter.installPart},
+		connect.Method{Spec: partServiceRemovePartSpec(), Handler: adapter.removePart},
 	)
 }
 
@@ -155,6 +193,10 @@ func (UnimplementedPartServiceHandler) ListStockMovements(context.Context, *v1.L
 	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.PartService.ListStockMovements is not implemented")
 }
 
+func (UnimplementedPartServiceHandler) ListPartInstalls(context.Context, *v1.ListPartInstallsRequest) (*v1.ListPartInstallsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.PartService.ListPartInstalls is not implemented")
+}
+
 func (UnimplementedPartServiceHandler) CreatePart(context.Context, *v1.CreatePartRequest) (*v1.CreatePartResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.PartService.CreatePart is not implemented")
 }
@@ -169,6 +211,14 @@ func (UnimplementedPartServiceHandler) DeletePart(context.Context, *v1.DeletePar
 
 func (UnimplementedPartServiceHandler) AddStockMovement(context.Context, *v1.AddStockMovementRequest) (*v1.AddStockMovementResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.PartService.AddStockMovement is not implemented")
+}
+
+func (UnimplementedPartServiceHandler) InstallPart(context.Context, *v1.InstallPartRequest) (*v1.InstallPartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.PartService.InstallPart is not implemented")
+}
+
+func (UnimplementedPartServiceHandler) RemovePart(context.Context, *v1.RemovePartRequest) (*v1.RemovePartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.PartService.RemovePart is not implemented")
 }
 
 type partServiceClient struct {
@@ -194,6 +244,14 @@ func (c *partServiceClient) ListParts(ctx context.Context, req *v1.ListPartsRequ
 func (c *partServiceClient) ListStockMovements(ctx context.Context, req *v1.ListStockMovementsRequest) (*v1.ListStockMovementsResponse, error) {
 	var res v1.ListStockMovementsResponse
 	if err := c.client.CallUnary(ctx, partServiceListStockMovementsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *partServiceClient) ListPartInstalls(ctx context.Context, req *v1.ListPartInstallsRequest) (*v1.ListPartInstallsResponse, error) {
+	var res v1.ListPartInstallsResponse
+	if err := c.client.CallUnary(ctx, partServiceListPartInstallsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -231,6 +289,22 @@ func (c *partServiceClient) AddStockMovement(ctx context.Context, req *v1.AddSto
 	return &res, nil
 }
 
+func (c *partServiceClient) InstallPart(ctx context.Context, req *v1.InstallPartRequest) (*v1.InstallPartResponse, error) {
+	var res v1.InstallPartResponse
+	if err := c.client.CallUnary(ctx, partServiceInstallPartSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *partServiceClient) RemovePart(ctx context.Context, req *v1.RemovePartRequest) (*v1.RemovePartResponse, error) {
+	var res v1.RemovePartResponse
+	if err := c.client.CallUnary(ctx, partServiceRemovePartSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 type partServiceHandler struct{ svc PartServiceHandler }
 
 func (h partServiceHandler) getPart(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
@@ -263,6 +337,18 @@ func (h partServiceHandler) listStockMovements(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.ListStockMovements(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h partServiceHandler) listPartInstalls(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPartInstallsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPartInstalls(ctx, &req)
 	if err != nil {
 		return err
 	}
@@ -311,6 +397,30 @@ func (h partServiceHandler) addStockMovement(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.AddStockMovement(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h partServiceHandler) installPart(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InstallPartRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InstallPart(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h partServiceHandler) removePart(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemovePartRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemovePart(ctx, &req)
 	if err != nil {
 		return err
 	}

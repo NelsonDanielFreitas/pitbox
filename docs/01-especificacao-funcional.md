@@ -142,7 +142,10 @@ Cada peça importante tem identidade própria e contador de uso, para que motore
 - Catálogo próprio da equipa: velas, sapatas, molas de embraiagem, rolamentos, bielas, filtros, óleos (com viscosidade), combustível (% nitro)
 - Stock com quantidade mínima e alerta quando abaixo; o stock pode ficar negativo, porque o modo offline regista a realidade primeiro e a UI sinaliza o valor abaixo do mínimo
 - Peça com vida útil (ex.: vela, sapatas) pode ser "montada" num carro ou motor e passa a contar uso
-- Custo opcional por peça, para ver o custo de uma época
+- Custo opcional por peça e **preço pago em cada compra**, para ver o custo de uma época sem que um preço novo altere as épocas passadas; o piloto não vê preços
+- Perda de uma peça com motivo (partida, desgaste, perdida, fora de prazo)
+- Lista de compras da equipa: calculada a partir das peças abaixo do mínimo (sugestão até "repor até", por omissão o mínimo), com linhas manuais e quantidades ajustadas partilhadas por todos os membros; uma compra tira a peça da lista
+- As especificações de cada peça seguem o tipo (óleo com viscosidade, combustível com % de nitro e óleo, etc.; ADR 0021) e a unidade é uma de `un`, `ml`, `l`, `g`
 
 ## 5. Fichas de setup
 

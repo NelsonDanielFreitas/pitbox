@@ -52,8 +52,8 @@ DO $$ DECLARE bad text; BEGIN
   ) q;
   ASSERT bad IS NULL, 'objetos com dono errado: ' || bad;
   ASSERT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 59,
-    'esperadas 59 tabelas (hypertable incluída)';
+          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 60,
+    'esperadas 60 tabelas (hypertable incluída)';
 END $$;
 
 -- 5. Papéis: nenhum com privilégios de administração; os de grupo não fazem login.

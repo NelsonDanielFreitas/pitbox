@@ -52,6 +52,50 @@ func (ns NullGarageAssetStatus) Value() (driver.Value, error) {
 	return string(ns.GarageAssetStatus), nil
 }
 
+type GarageLossReason string
+
+const (
+	GarageLossReasonBroken  GarageLossReason = "broken"
+	GarageLossReasonWorn    GarageLossReason = "worn"
+	GarageLossReasonLost    GarageLossReason = "lost"
+	GarageLossReasonExpired GarageLossReason = "expired"
+)
+
+func (e *GarageLossReason) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = GarageLossReason(s)
+	case string:
+		*e = GarageLossReason(s)
+	default:
+		return fmt.Errorf("unsupported scan type for GarageLossReason: %T", src)
+	}
+	return nil
+}
+
+type NullGarageLossReason struct {
+	GarageLossReason GarageLossReason
+	Valid            bool // Valid is true if GarageLossReason is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullGarageLossReason) Scan(value interface{}) error {
+	if value == nil {
+		ns.GarageLossReason, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.GarageLossReason.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullGarageLossReason) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.GarageLossReason), nil
+}
+
 type GaragePartKind string
 
 const (

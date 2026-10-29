@@ -287,6 +287,63 @@ func (StockReason) EnumDescriptor() ([]byte, []int) {
 	return file_pitbox_garage_v1_garage_proto_rawDescGZIP(), []int{3}
 }
 
+// LossReason mirrors garage.loss_reason. It is required for, and only valid on, a
+// `lost` stock movement.
+type LossReason int32
+
+const (
+	LossReason_LOSS_REASON_UNSPECIFIED LossReason = 0
+	LossReason_LOSS_REASON_BROKEN      LossReason = 1
+	LossReason_LOSS_REASON_WORN        LossReason = 2
+	LossReason_LOSS_REASON_LOST        LossReason = 3
+	LossReason_LOSS_REASON_EXPIRED     LossReason = 4
+)
+
+// Enum value maps for LossReason.
+var (
+	LossReason_name = map[int32]string{
+		0: "LOSS_REASON_UNSPECIFIED",
+		1: "LOSS_REASON_BROKEN",
+		2: "LOSS_REASON_WORN",
+		3: "LOSS_REASON_LOST",
+		4: "LOSS_REASON_EXPIRED",
+	}
+	LossReason_value = map[string]int32{
+		"LOSS_REASON_UNSPECIFIED": 0,
+		"LOSS_REASON_BROKEN":      1,
+		"LOSS_REASON_WORN":        2,
+		"LOSS_REASON_LOST":        3,
+		"LOSS_REASON_EXPIRED":     4,
+	}
+)
+
+func (x LossReason) Enum() *LossReason {
+	p := new(LossReason)
+	*p = x
+	return p
+}
+
+func (x LossReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LossReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_pitbox_garage_v1_garage_proto_enumTypes[4].Descriptor()
+}
+
+func (LossReason) Type() protoreflect.EnumType {
+	return &file_pitbox_garage_v1_garage_proto_enumTypes[4]
+}
+
+func (x LossReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LossReason.Descriptor instead.
+func (LossReason) EnumDescriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_garage_proto_rawDescGZIP(), []int{4}
+}
+
 var File_pitbox_garage_v1_garage_proto protoreflect.FileDescriptor
 
 const file_pitbox_garage_v1_garage_proto_rawDesc = "" +
@@ -331,7 +388,14 @@ const file_pitbox_garage_v1_garage_proto_rawDesc = "" +
 	"\x16STOCK_REASON_INSTALLED\x10\x03\x12\x1b\n" +
 	"\x17STOCK_REASON_ADJUSTMENT\x10\x04\x12\x15\n" +
 	"\x11STOCK_REASON_LOST\x10\x05\x12\x19\n" +
-	"\x15STOCK_REASON_RETURNED\x10\x06B\xd2\x01\n" +
+	"\x15STOCK_REASON_RETURNED\x10\x06*\x86\x01\n" +
+	"\n" +
+	"LossReason\x12\x1b\n" +
+	"\x17LOSS_REASON_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12LOSS_REASON_BROKEN\x10\x01\x12\x14\n" +
+	"\x10LOSS_REASON_WORN\x10\x02\x12\x14\n" +
+	"\x10LOSS_REASON_LOST\x10\x03\x12\x17\n" +
+	"\x13LOSS_REASON_EXPIRED\x10\x04B\xd2\x01\n" +
 	"\x14com.pitbox.garage.v1B\vGarageProtoP\x01ZKgithub.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1;garagev1\xa2\x02\x03PGX\xaa\x02\x10Pitbox.Garage.V1\xca\x02\x10Pitbox\\Garage\\V1\xe2\x02\x1cPitbox\\Garage\\V1\\GPBMetadata\xea\x02\x12Pitbox::Garage::V1b\x06proto3"
 
 var (
@@ -346,12 +410,13 @@ func file_pitbox_garage_v1_garage_proto_rawDescGZIP() []byte {
 	return file_pitbox_garage_v1_garage_proto_rawDescData
 }
 
-var file_pitbox_garage_v1_garage_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_pitbox_garage_v1_garage_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
 var file_pitbox_garage_v1_garage_proto_goTypes = []any{
 	(AssetStatus)(0), // 0: pitbox.garage.v1.AssetStatus
 	(TyreStatus)(0),  // 1: pitbox.garage.v1.TyreStatus
 	(PartKind)(0),    // 2: pitbox.garage.v1.PartKind
 	(StockReason)(0), // 3: pitbox.garage.v1.StockReason
+	(LossReason)(0),  // 4: pitbox.garage.v1.LossReason
 }
 var file_pitbox_garage_v1_garage_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -371,7 +436,7 @@ func file_pitbox_garage_v1_garage_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pitbox_garage_v1_garage_proto_rawDesc), len(file_pitbox_garage_v1_garage_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      5,
 			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,

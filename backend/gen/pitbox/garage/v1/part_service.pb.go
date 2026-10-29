@@ -305,6 +305,7 @@ type Part struct {
 	BelowMin       bool                   `protobuf:"varint,13,opt,name=below_min,json=belowMin,proto3" json:"below_min,omitempty"`
 	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Version        int32                  `protobuf:"varint,15,opt,name=version,proto3" json:"version,omitempty"`
+	ReorderToCenti *int64                 `protobuf:"varint,16,opt,name=reorder_to_centi,json=reorderToCenti,proto3,oneof" json:"reorder_to_centi,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -444,6 +445,13 @@ func (x *Part) GetVersion() int32 {
 	return 0
 }
 
+func (x *Part) GetReorderToCenti() int64 {
+	if x != nil && x.ReorderToCenti != nil {
+		return *x.ReorderToCenti
+	}
+	return 0
+}
+
 type StockMovement struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -452,6 +460,9 @@ type StockMovement struct {
 	Reason        StockReason            `protobuf:"varint,4,opt,name=reason,proto3,enum=pitbox.garage.v1.StockReason" json:"reason,omitempty"`
 	Note          *string                `protobuf:"bytes,5,opt,name=note,proto3,oneof" json:"note,omitempty"`
 	OccurredAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=occurred_at,json=occurredAt,proto3" json:"occurred_at,omitempty"`
+	// Price paid per unit, only on purchases; omitted for pilots.
+	UnitCostCents *int32     `protobuf:"varint,7,opt,name=unit_cost_cents,json=unitCostCents,proto3,oneof" json:"unit_cost_cents,omitempty"`
+	LossReason    LossReason `protobuf:"varint,8,opt,name=loss_reason,json=lossReason,proto3,enum=pitbox.garage.v1.LossReason" json:"loss_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -526,6 +537,20 @@ func (x *StockMovement) GetOccurredAt() *timestamppb.Timestamp {
 		return x.OccurredAt
 	}
 	return nil
+}
+
+func (x *StockMovement) GetUnitCostCents() int32 {
+	if x != nil && x.UnitCostCents != nil {
+		return *x.UnitCostCents
+	}
+	return 0
+}
+
+func (x *StockMovement) GetLossReason() LossReason {
+	if x != nil {
+		return x.LossReason
+	}
+	return LossReason_LOSS_REASON_UNSPECIFIED
 }
 
 type GetPartRequest struct {
@@ -871,8 +896,10 @@ type CreatePartRequest struct {
 	Currency        string                 `protobuf:"bytes,11,opt,name=currency,proto3" json:"currency,omitempty"`
 	HasServiceLife  bool                   `protobuf:"varint,12,opt,name=has_service_life,json=hasServiceLife,proto3" json:"has_service_life,omitempty"`
 	InitialQtyCenti int64                  `protobuf:"varint,13,opt,name=initial_qty_centi,json=initialQtyCenti,proto3" json:"initial_qty_centi,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Restock target; must not be below min_stock_centi.
+	ReorderToCenti *int64 `protobuf:"varint,14,opt,name=reorder_to_centi,json=reorderToCenti,proto3,oneof" json:"reorder_to_centi,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreatePartRequest) Reset() {
@@ -996,6 +1023,13 @@ func (x *CreatePartRequest) GetInitialQtyCenti() int64 {
 	return 0
 }
 
+func (x *CreatePartRequest) GetReorderToCenti() int64 {
+	if x != nil && x.ReorderToCenti != nil {
+		return *x.ReorderToCenti
+	}
+	return 0
+}
+
 type CreatePartResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Part          *Part                  `protobuf:"bytes,1,opt,name=part,proto3" json:"part,omitempty"`
@@ -1057,6 +1091,7 @@ type UpdatePartRequest struct {
 	Currency       string                 `protobuf:"bytes,13,opt,name=currency,proto3" json:"currency,omitempty"`
 	HasServiceLife bool                   `protobuf:"varint,14,opt,name=has_service_life,json=hasServiceLife,proto3" json:"has_service_life,omitempty"`
 	PartId         string                 `protobuf:"bytes,15,opt,name=part_id,json=partId,proto3" json:"part_id,omitempty"`
+	ReorderToCenti *int64                 `protobuf:"varint,16,opt,name=reorder_to_centi,json=reorderToCenti,proto3,oneof" json:"reorder_to_centi,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1194,6 +1229,13 @@ func (x *UpdatePartRequest) GetPartId() string {
 		return x.PartId
 	}
 	return ""
+}
+
+func (x *UpdatePartRequest) GetReorderToCenti() int64 {
+	if x != nil && x.ReorderToCenti != nil {
+		return *x.ReorderToCenti
+	}
+	return 0
 }
 
 type UpdatePartResponse struct {
@@ -1352,6 +1394,8 @@ type AddStockMovementRequest struct {
 	QtyDeltaCenti int64                  `protobuf:"varint,4,opt,name=qty_delta_centi,json=qtyDeltaCenti,proto3" json:"qty_delta_centi,omitempty"`
 	Reason        StockReason            `protobuf:"varint,5,opt,name=reason,proto3,enum=pitbox.garage.v1.StockReason" json:"reason,omitempty"`
 	Note          *string                `protobuf:"bytes,6,opt,name=note,proto3,oneof" json:"note,omitempty"`
+	UnitCostCents *int32                 `protobuf:"varint,7,opt,name=unit_cost_cents,json=unitCostCents,proto3,oneof" json:"unit_cost_cents,omitempty"`
+	LossReason    LossReason             `protobuf:"varint,8,opt,name=loss_reason,json=lossReason,proto3,enum=pitbox.garage.v1.LossReason" json:"loss_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1426,6 +1470,20 @@ func (x *AddStockMovementRequest) GetNote() string {
 		return *x.Note
 	}
 	return ""
+}
+
+func (x *AddStockMovementRequest) GetUnitCostCents() int32 {
+	if x != nil && x.UnitCostCents != nil {
+		return *x.UnitCostCents
+	}
+	return 0
+}
+
+func (x *AddStockMovementRequest) GetLossReason() LossReason {
+	if x != nil {
+		return x.LossReason
+	}
+	return LossReason_LOSS_REASON_UNSPECIFIED
 }
 
 type AddStockMovementResponse struct {
@@ -1995,7 +2053,7 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	" \x01(\x05R\bsessions\x12\x18\n" +
 	"\aversion\x18\v \x01(\x05R\aversionB\b\n" +
 	"\x06targetB\r\n" +
-	"\v_removed_at\"\xbf\x04\n" +
+	"\v_removed_at\"\x83\x05\n" +
 	"\x04Part\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12.\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1a.pitbox.garage.v1.PartKindR\x04kind\x12\x19\n" +
@@ -2013,11 +2071,13 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\tbelow_min\x18\r \x01(\bR\bbelowMin\x129\n" +
 	"\n" +
 	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
-	"\aversion\x18\x0f \x01(\x05R\aversionB\b\n" +
+	"\aversion\x18\x0f \x01(\x05R\aversion\x12-\n" +
+	"\x10reorder_to_centi\x18\x10 \x01(\x03H\x03R\x0ereorderToCenti\x88\x01\x01B\b\n" +
 	"\x06_brandB\f\n" +
 	"\n" +
 	"_referenceB\x12\n" +
-	"\x10_unit_cost_cents\"\xf6\x01\n" +
+	"\x10_unit_cost_centsB\x13\n" +
+	"\x11_reorder_to_centi\"\xf6\x02\n" +
 	"\rStockMovement\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\apart_id\x18\x02 \x01(\tR\x06partId\x12&\n" +
@@ -2025,8 +2085,12 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\x0e2\x1d.pitbox.garage.v1.StockReasonR\x06reason\x12\x17\n" +
 	"\x04note\x18\x05 \x01(\tH\x00R\x04note\x88\x01\x01\x12;\n" +
 	"\voccurred_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"occurredAtB\a\n" +
-	"\x05_note\"V\n" +
+	"occurredAt\x12+\n" +
+	"\x0funit_cost_cents\x18\a \x01(\x05H\x01R\runitCostCents\x88\x01\x01\x12=\n" +
+	"\vloss_reason\x18\b \x01(\x0e2\x1c.pitbox.garage.v1.LossReasonR\n" +
+	"lossReasonB\a\n" +
+	"\x05_noteB\x12\n" +
+	"\x10_unit_cost_cents\"V\n" +
 	"\x0eGetPartRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12!\n" +
 	"\apart_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\"=\n" +
@@ -2050,7 +2114,7 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"page_token\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\x83\x01\n" +
 	"\x1aListStockMovementsResponse\x12=\n" +
 	"\tmovements\x18\x01 \x03(\v2\x1f.pitbox.garage.v1.StockMovementR\tmovements\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x86\x05\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe9\x05\n" +
 	"\x11CreatePartRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -2059,8 +2123,8 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\x05brand\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x18PH\x00R\x05brand\x88\x01\x01\x12*\n" +
 	"\treference\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x18PH\x01R\treference\x88\x01\x01\x12,\n" +
 	"\vdescription\x18\x06 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\vdescription\x12\x1b\n" +
-	"\x04unit\x18\a \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x04unit\x12-\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\vdescription\x12+\n" +
+	"\x04unit\x18\a \x01(\tB\x17\xbaH\x14r\x12\x18\x10R\x00R\x02unR\x02mlR\x01lR\x01gR\x04unit\x12-\n" +
 	"\x05specs\x18\b \x01(\v2\x17.google.protobuf.StructR\x05specs\x125\n" +
 	"\x0fmin_stock_centi\x18\t \x01(\x03B\r\xbaH\n" +
 	"\"\b\x18\xffǯ\xa0%(\x00R\rminStockCenti\x124\n" +
@@ -2069,13 +2133,16 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\bcurrency\x18\v \x01(\tB\a\xbaH\x04r\x02\x18\x03R\bcurrency\x12(\n" +
 	"\x10has_service_life\x18\f \x01(\bR\x0ehasServiceLife\x129\n" +
 	"\x11initial_qty_centi\x18\r \x01(\x03B\r\xbaH\n" +
-	"\"\b\x18\xffǯ\xa0%(\x00R\x0finitialQtyCentiB\b\n" +
+	"\"\b\x18\xffǯ\xa0%(\x00R\x0finitialQtyCenti\x12<\n" +
+	"\x10reorder_to_centi\x18\x0e \x01(\x03B\r\xbaH\n" +
+	"\"\b\x18\xffǯ\xa0%(\x00H\x03R\x0ereorderToCenti\x88\x01\x01B\b\n" +
 	"\x06_brandB\f\n" +
 	"\n" +
 	"_referenceB\x12\n" +
-	"\x10_unit_cost_cents\"@\n" +
+	"\x10_unit_cost_centsB\x13\n" +
+	"\x11_reorder_to_centi\"@\n" +
 	"\x12CreatePartResponse\x12*\n" +
-	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xd4\x05\n" +
+	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xb7\x06\n" +
 	"\x11UpdatePartRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -2086,8 +2153,8 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\x04kind\x18\x05 \x01(\x0e2\x1a.pitbox.garage.v1.PartKindB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04kind\x12\"\n" +
 	"\x05brand\x18\x06 \x01(\tB\a\xbaH\x04r\x02\x18PH\x00R\x05brand\x88\x01\x01\x12*\n" +
 	"\treference\x18\a \x01(\tB\a\xbaH\x04r\x02\x18PH\x01R\treference\x88\x01\x01\x12*\n" +
-	"\vdescription\x18\b \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\vdescription\x12\x1b\n" +
-	"\x04unit\x18\t \x01(\tB\a\xbaH\x04r\x02\x18\x10R\x04unit\x12-\n" +
+	"\vdescription\x18\b \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\vdescription\x12+\n" +
+	"\x04unit\x18\t \x01(\tB\x17\xbaH\x14r\x12\x18\x10R\x00R\x02unR\x02mlR\x01lR\x01gR\x04unit\x12-\n" +
 	"\x05specs\x18\n" +
 	" \x01(\v2\x17.google.protobuf.StructR\x05specs\x125\n" +
 	"\x0fmin_stock_centi\x18\v \x01(\x03B\r\xbaH\n" +
@@ -2095,11 +2162,14 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\x0funit_cost_cents\x18\f \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x02R\runitCostCents\x88\x01\x01\x12#\n" +
 	"\bcurrency\x18\r \x01(\tB\a\xbaH\x04r\x02\x18\x03R\bcurrency\x12(\n" +
 	"\x10has_service_life\x18\x0e \x01(\bR\x0ehasServiceLife\x12!\n" +
-	"\apart_id\x18\x0f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partIdB\b\n" +
+	"\apart_id\x18\x0f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12<\n" +
+	"\x10reorder_to_centi\x18\x10 \x01(\x03B\r\xbaH\n" +
+	"\"\b\x18\xffǯ\xa0%(\x00H\x03R\x0ereorderToCenti\x88\x01\x01B\b\n" +
 	"\x06_brandB\f\n" +
 	"\n" +
 	"_referenceB\x12\n" +
-	"\x10_unit_cost_cents\"@\n" +
+	"\x10_unit_cost_centsB\x13\n" +
+	"\x11_reorder_to_centi\"@\n" +
 	"\x12UpdatePartResponse\x12*\n" +
 	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\"\xa5\x01\n" +
 	"\x11DeletePartRequest\x12!\n" +
@@ -2108,7 +2178,7 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12!\n" +
 	"\apart_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12!\n" +
 	"\aversion\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\aversion\"\x14\n" +
-	"\x12DeletePartResponse\"\xb5\x02\n" +
+	"\x12DeletePartResponse\"\xdd\x05\n" +
 	"\x17AddStockMovementRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -2116,8 +2186,14 @@ const file_pitbox_garage_v1_part_service_proto_rawDesc = "" +
 	"\apart_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06partId\x12>\n" +
 	"\x0fqty_delta_centi\x18\x04 \x01(\x03B\x16\xbaH\x13\"\x11\x18\xffǯ\xa0%(\x81\xb8\xd0\xdf\xda\xff\xff\xff\xff\x01R\rqtyDeltaCenti\x12?\n" +
 	"\x06reason\x18\x05 \x01(\x0e2\x1d.pitbox.garage.v1.StockReasonB\b\xbaH\x05\x82\x01\x02\x10\x01R\x06reason\x12!\n" +
-	"\x04note\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\x04note\x88\x01\x01B\a\n" +
-	"\x05_note\"\x83\x01\n" +
+	"\x04note\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\x04note\x88\x01\x01\x124\n" +
+	"\x0funit_cost_cents\x18\a \x01(\x05B\a\xbaH\x04\x1a\x02(\x00H\x01R\runitCostCents\x88\x01\x01\x12G\n" +
+	"\vloss_reason\x18\b \x01(\x0e2\x1c.pitbox.garage.v1.LossReasonB\b\xbaH\x05\x82\x01\x02\x10\x01R\n" +
+	"lossReason:\x92\x02\xbaH\x8e\x02\x1au\n" +
+	"\x18stock_movement.unit_cost\x12)a unit cost is only allowed on a purchase\x1a.!has(this.unit_cost_cents) || this.reason == 1\x1a\x94\x01\n" +
+	"\x1astock_movement.loss_reason\x12Ga loss reason is required for a lost movement and not allowed otherwise\x1a-(this.reason == 5) == (this.loss_reason != 0)B\a\n" +
+	"\x05_noteB\x12\n" +
+	"\x10_unit_cost_cents\"\x83\x01\n" +
 	"\x18AddStockMovementResponse\x12*\n" +
 	"\x04part\x18\x01 \x01(\v2\x16.pitbox.garage.v1.PartR\x04part\x12;\n" +
 	"\bmovement\x18\x02 \x01(\v2\x1f.pitbox.garage.v1.StockMovementR\bmovement\"\xeb\x02\n" +
@@ -2236,7 +2312,8 @@ var file_pitbox_garage_v1_part_service_proto_goTypes = []any{
 	(PartKind)(0),                      // 26: pitbox.garage.v1.PartKind
 	(*structpb.Struct)(nil),            // 27: google.protobuf.Struct
 	(StockReason)(0),                   // 28: pitbox.garage.v1.StockReason
-	(*fieldmaskpb.FieldMask)(nil),      // 29: google.protobuf.FieldMask
+	(LossReason)(0),                    // 29: pitbox.garage.v1.LossReason
+	(*fieldmaskpb.FieldMask)(nil),      // 30: google.protobuf.FieldMask
 }
 var file_pitbox_garage_v1_part_service_proto_depIdxs = []int32{
 	25, // 0: pitbox.garage.v1.PartInstall.installed_at:type_name -> google.protobuf.Timestamp
@@ -2248,52 +2325,54 @@ var file_pitbox_garage_v1_part_service_proto_depIdxs = []int32{
 	25, // 6: pitbox.garage.v1.Part.created_at:type_name -> google.protobuf.Timestamp
 	28, // 7: pitbox.garage.v1.StockMovement.reason:type_name -> pitbox.garage.v1.StockReason
 	25, // 8: pitbox.garage.v1.StockMovement.occurred_at:type_name -> google.protobuf.Timestamp
-	3,  // 9: pitbox.garage.v1.GetPartResponse.part:type_name -> pitbox.garage.v1.Part
-	3,  // 10: pitbox.garage.v1.ListPartsResponse.parts:type_name -> pitbox.garage.v1.Part
-	4,  // 11: pitbox.garage.v1.ListStockMovementsResponse.movements:type_name -> pitbox.garage.v1.StockMovement
-	26, // 12: pitbox.garage.v1.CreatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
-	27, // 13: pitbox.garage.v1.CreatePartRequest.specs:type_name -> google.protobuf.Struct
-	3,  // 14: pitbox.garage.v1.CreatePartResponse.part:type_name -> pitbox.garage.v1.Part
-	29, // 15: pitbox.garage.v1.UpdatePartRequest.update_mask:type_name -> google.protobuf.FieldMask
-	26, // 16: pitbox.garage.v1.UpdatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
-	27, // 17: pitbox.garage.v1.UpdatePartRequest.specs:type_name -> google.protobuf.Struct
-	3,  // 18: pitbox.garage.v1.UpdatePartResponse.part:type_name -> pitbox.garage.v1.Part
-	28, // 19: pitbox.garage.v1.AddStockMovementRequest.reason:type_name -> pitbox.garage.v1.StockReason
-	3,  // 20: pitbox.garage.v1.AddStockMovementResponse.part:type_name -> pitbox.garage.v1.Part
-	4,  // 21: pitbox.garage.v1.AddStockMovementResponse.movement:type_name -> pitbox.garage.v1.StockMovement
-	25, // 22: pitbox.garage.v1.InstallPartRequest.installed_at:type_name -> google.protobuf.Timestamp
-	2,  // 23: pitbox.garage.v1.InstallPartResponse.install:type_name -> pitbox.garage.v1.PartInstall
-	3,  // 24: pitbox.garage.v1.InstallPartResponse.part:type_name -> pitbox.garage.v1.Part
-	0,  // 25: pitbox.garage.v1.RemovePartRequest.destination:type_name -> pitbox.garage.v1.RemovalDestination
-	1,  // 26: pitbox.garage.v1.RemovePartRequest.reason:type_name -> pitbox.garage.v1.RemovalReason
-	2,  // 27: pitbox.garage.v1.RemovePartResponse.install:type_name -> pitbox.garage.v1.PartInstall
-	3,  // 28: pitbox.garage.v1.RemovePartResponse.part:type_name -> pitbox.garage.v1.Part
-	2,  // 29: pitbox.garage.v1.ListPartInstallsResponse.installs:type_name -> pitbox.garage.v1.PartInstall
-	5,  // 30: pitbox.garage.v1.PartService.GetPart:input_type -> pitbox.garage.v1.GetPartRequest
-	7,  // 31: pitbox.garage.v1.PartService.ListParts:input_type -> pitbox.garage.v1.ListPartsRequest
-	9,  // 32: pitbox.garage.v1.PartService.ListStockMovements:input_type -> pitbox.garage.v1.ListStockMovementsRequest
-	23, // 33: pitbox.garage.v1.PartService.ListPartInstalls:input_type -> pitbox.garage.v1.ListPartInstallsRequest
-	11, // 34: pitbox.garage.v1.PartService.CreatePart:input_type -> pitbox.garage.v1.CreatePartRequest
-	13, // 35: pitbox.garage.v1.PartService.UpdatePart:input_type -> pitbox.garage.v1.UpdatePartRequest
-	15, // 36: pitbox.garage.v1.PartService.DeletePart:input_type -> pitbox.garage.v1.DeletePartRequest
-	17, // 37: pitbox.garage.v1.PartService.AddStockMovement:input_type -> pitbox.garage.v1.AddStockMovementRequest
-	19, // 38: pitbox.garage.v1.PartService.InstallPart:input_type -> pitbox.garage.v1.InstallPartRequest
-	21, // 39: pitbox.garage.v1.PartService.RemovePart:input_type -> pitbox.garage.v1.RemovePartRequest
-	6,  // 40: pitbox.garage.v1.PartService.GetPart:output_type -> pitbox.garage.v1.GetPartResponse
-	8,  // 41: pitbox.garage.v1.PartService.ListParts:output_type -> pitbox.garage.v1.ListPartsResponse
-	10, // 42: pitbox.garage.v1.PartService.ListStockMovements:output_type -> pitbox.garage.v1.ListStockMovementsResponse
-	24, // 43: pitbox.garage.v1.PartService.ListPartInstalls:output_type -> pitbox.garage.v1.ListPartInstallsResponse
-	12, // 44: pitbox.garage.v1.PartService.CreatePart:output_type -> pitbox.garage.v1.CreatePartResponse
-	14, // 45: pitbox.garage.v1.PartService.UpdatePart:output_type -> pitbox.garage.v1.UpdatePartResponse
-	16, // 46: pitbox.garage.v1.PartService.DeletePart:output_type -> pitbox.garage.v1.DeletePartResponse
-	18, // 47: pitbox.garage.v1.PartService.AddStockMovement:output_type -> pitbox.garage.v1.AddStockMovementResponse
-	20, // 48: pitbox.garage.v1.PartService.InstallPart:output_type -> pitbox.garage.v1.InstallPartResponse
-	22, // 49: pitbox.garage.v1.PartService.RemovePart:output_type -> pitbox.garage.v1.RemovePartResponse
-	40, // [40:50] is the sub-list for method output_type
-	30, // [30:40] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	29, // 9: pitbox.garage.v1.StockMovement.loss_reason:type_name -> pitbox.garage.v1.LossReason
+	3,  // 10: pitbox.garage.v1.GetPartResponse.part:type_name -> pitbox.garage.v1.Part
+	3,  // 11: pitbox.garage.v1.ListPartsResponse.parts:type_name -> pitbox.garage.v1.Part
+	4,  // 12: pitbox.garage.v1.ListStockMovementsResponse.movements:type_name -> pitbox.garage.v1.StockMovement
+	26, // 13: pitbox.garage.v1.CreatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
+	27, // 14: pitbox.garage.v1.CreatePartRequest.specs:type_name -> google.protobuf.Struct
+	3,  // 15: pitbox.garage.v1.CreatePartResponse.part:type_name -> pitbox.garage.v1.Part
+	30, // 16: pitbox.garage.v1.UpdatePartRequest.update_mask:type_name -> google.protobuf.FieldMask
+	26, // 17: pitbox.garage.v1.UpdatePartRequest.kind:type_name -> pitbox.garage.v1.PartKind
+	27, // 18: pitbox.garage.v1.UpdatePartRequest.specs:type_name -> google.protobuf.Struct
+	3,  // 19: pitbox.garage.v1.UpdatePartResponse.part:type_name -> pitbox.garage.v1.Part
+	28, // 20: pitbox.garage.v1.AddStockMovementRequest.reason:type_name -> pitbox.garage.v1.StockReason
+	29, // 21: pitbox.garage.v1.AddStockMovementRequest.loss_reason:type_name -> pitbox.garage.v1.LossReason
+	3,  // 22: pitbox.garage.v1.AddStockMovementResponse.part:type_name -> pitbox.garage.v1.Part
+	4,  // 23: pitbox.garage.v1.AddStockMovementResponse.movement:type_name -> pitbox.garage.v1.StockMovement
+	25, // 24: pitbox.garage.v1.InstallPartRequest.installed_at:type_name -> google.protobuf.Timestamp
+	2,  // 25: pitbox.garage.v1.InstallPartResponse.install:type_name -> pitbox.garage.v1.PartInstall
+	3,  // 26: pitbox.garage.v1.InstallPartResponse.part:type_name -> pitbox.garage.v1.Part
+	0,  // 27: pitbox.garage.v1.RemovePartRequest.destination:type_name -> pitbox.garage.v1.RemovalDestination
+	1,  // 28: pitbox.garage.v1.RemovePartRequest.reason:type_name -> pitbox.garage.v1.RemovalReason
+	2,  // 29: pitbox.garage.v1.RemovePartResponse.install:type_name -> pitbox.garage.v1.PartInstall
+	3,  // 30: pitbox.garage.v1.RemovePartResponse.part:type_name -> pitbox.garage.v1.Part
+	2,  // 31: pitbox.garage.v1.ListPartInstallsResponse.installs:type_name -> pitbox.garage.v1.PartInstall
+	5,  // 32: pitbox.garage.v1.PartService.GetPart:input_type -> pitbox.garage.v1.GetPartRequest
+	7,  // 33: pitbox.garage.v1.PartService.ListParts:input_type -> pitbox.garage.v1.ListPartsRequest
+	9,  // 34: pitbox.garage.v1.PartService.ListStockMovements:input_type -> pitbox.garage.v1.ListStockMovementsRequest
+	23, // 35: pitbox.garage.v1.PartService.ListPartInstalls:input_type -> pitbox.garage.v1.ListPartInstallsRequest
+	11, // 36: pitbox.garage.v1.PartService.CreatePart:input_type -> pitbox.garage.v1.CreatePartRequest
+	13, // 37: pitbox.garage.v1.PartService.UpdatePart:input_type -> pitbox.garage.v1.UpdatePartRequest
+	15, // 38: pitbox.garage.v1.PartService.DeletePart:input_type -> pitbox.garage.v1.DeletePartRequest
+	17, // 39: pitbox.garage.v1.PartService.AddStockMovement:input_type -> pitbox.garage.v1.AddStockMovementRequest
+	19, // 40: pitbox.garage.v1.PartService.InstallPart:input_type -> pitbox.garage.v1.InstallPartRequest
+	21, // 41: pitbox.garage.v1.PartService.RemovePart:input_type -> pitbox.garage.v1.RemovePartRequest
+	6,  // 42: pitbox.garage.v1.PartService.GetPart:output_type -> pitbox.garage.v1.GetPartResponse
+	8,  // 43: pitbox.garage.v1.PartService.ListParts:output_type -> pitbox.garage.v1.ListPartsResponse
+	10, // 44: pitbox.garage.v1.PartService.ListStockMovements:output_type -> pitbox.garage.v1.ListStockMovementsResponse
+	24, // 45: pitbox.garage.v1.PartService.ListPartInstalls:output_type -> pitbox.garage.v1.ListPartInstallsResponse
+	12, // 46: pitbox.garage.v1.PartService.CreatePart:output_type -> pitbox.garage.v1.CreatePartResponse
+	14, // 47: pitbox.garage.v1.PartService.UpdatePart:output_type -> pitbox.garage.v1.UpdatePartResponse
+	16, // 48: pitbox.garage.v1.PartService.DeletePart:output_type -> pitbox.garage.v1.DeletePartResponse
+	18, // 49: pitbox.garage.v1.PartService.AddStockMovement:output_type -> pitbox.garage.v1.AddStockMovementResponse
+	20, // 50: pitbox.garage.v1.PartService.InstallPart:output_type -> pitbox.garage.v1.InstallPartResponse
+	22, // 51: pitbox.garage.v1.PartService.RemovePart:output_type -> pitbox.garage.v1.RemovePartResponse
+	42, // [42:52] is the sub-list for method output_type
+	32, // [32:42] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_pitbox_garage_v1_part_service_proto_init() }

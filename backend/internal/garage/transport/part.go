@@ -31,7 +31,7 @@ func (h *Parts) CreatePart(ctx context.Context, req *garagev1.CreatePartRequest)
 		Description: req.GetDescription(), Unit: req.GetUnit(), Specs: specsFromProto(req.GetSpecs()),
 		MinStockCenti: req.GetMinStockCenti(), UnitCostCents: req.UnitCostCents,
 		Currency: req.GetCurrency(), HasServiceLife: req.GetHasServiceLife(),
-		InitialQtyCenti: req.GetInitialQtyCenti(),
+		InitialQtyCenti: req.GetInitialQtyCenti(), ReorderToCenti: req.ReorderToCenti,
 	})
 	if err != nil {
 		return nil, err
@@ -121,9 +121,13 @@ func (h *Parts) AddStockMovement(ctx context.Context, req *garagev1.AddStockMove
 	if err != nil {
 		return nil, err
 	}
+	loss, err := lossReasonFromProto(req.GetLossReason())
+	if err != nil {
+		return nil, err
+	}
 	p, m, err := h.svc.AddStockMovement(ctx, user, team, app.AddStockMovementInput{
 		RequestID: requestID, PartID: partID, QtyDeltaCenti: req.GetQtyDeltaCenti(),
-		Reason: reason, Note: req.Note,
+		Reason: reason, Note: req.Note, UnitCostCents: req.UnitCostCents, LossReason: loss,
 	})
 	if err != nil {
 		return nil, err
@@ -153,7 +157,7 @@ func partToProto(p domain.Part) *garagev1.Part {
 		Description: p.Description, Unit: p.Unit, Specs: specsToProto(p.Specs),
 		MinStockCenti: p.MinStockCenti, UnitCostCents: p.UnitCostCents, Currency: p.Currency,
 		HasServiceLife: p.HasServiceLife, QtyCenti: p.QtyCenti, BelowMin: p.BelowMin,
-		CreatedAt: timestamp(p.CreatedAt), Version: p.Version,
+		CreatedAt: timestamp(p.CreatedAt), Version: p.Version, ReorderToCenti: p.ReorderToCenti,
 	}
 }
 
@@ -161,6 +165,7 @@ func movementToProto(m domain.StockMovement) *garagev1.StockMovement {
 	return &garagev1.StockMovement{
 		Id: m.ID.String(), PartId: m.PartID.String(), QtyDeltaCenti: m.QtyDeltaCenti,
 		Reason: stockReasonToProto(m.Reason), Note: m.Note, OccurredAt: timestamp(m.OccurredAt),
+		UnitCostCents: m.UnitCostCents, LossReason: lossReasonToProto(m.LossReason),
 	}
 }
 
@@ -195,6 +200,9 @@ func partUpdateFromProto(req *garagev1.UpdatePartRequest) (domain.PartUpdate, er
 		case "unit_cost_cents":
 			u.CostSet = true
 			u.UnitCostCents = req.UnitCostCents
+		case "reorder_to_centi":
+			u.ReorderSet = true
+			u.ReorderTo = req.ReorderToCenti
 		case "currency":
 			v := req.GetCurrency()
 			u.Currency = &v

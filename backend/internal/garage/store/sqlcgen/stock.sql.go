@@ -10,24 +10,28 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createStockMovement = `-- name: CreateStockMovement :one
 INSERT INTO garage.stock_movement (
-  team_id, part_id, qty_delta, reason, note, occurred_at, created_by
+  team_id, part_id, qty_delta, reason, note, occurred_at, created_by, unit_cost_cents, loss_reason
 )
-VALUES ($1, $2, ($3::bigint::numeric / 100), $4::garage.stock_reason, $5, now(), $6)
+VALUES ($1, $2, ($3::bigint::numeric / 100), $4::garage.stock_reason, $5, now(), $6,
+        $7::integer, $8::garage.loss_reason)
 RETURNING id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
-          reason::text AS reason, note, occurred_at
+          reason::text AS reason, note, occurred_at, unit_cost_cents, COALESCE(loss_reason::text, '')::text AS loss_reason
 `
 
 type CreateStockMovementParams struct {
-	TeamID    uuid.UUID
-	PartID    uuid.UUID
-	Column3   int64
-	Column4   GarageStockReason
-	Note      *string
-	CreatedBy *uuid.UUID
+	TeamID        uuid.UUID
+	PartID        uuid.UUID
+	Column3       int64
+	Column4       GarageStockReason
+	Note          *string
+	CreatedBy     *uuid.UUID
+	UnitCostCents pgtype.Int4
+	LossReason    NullGarageLossReason
 }
 
 type CreateStockMovementRow struct {
@@ -37,6 +41,8 @@ type CreateStockMovementRow struct {
 	Reason        string
 	Note          *string
 	OccurredAt    time.Time
+	UnitCostCents pgtype.Int4
+	LossReason    string
 }
 
 // occurred_at uses the database clock so movements created by different API instances
@@ -49,6 +55,8 @@ func (q *Queries) CreateStockMovement(ctx context.Context, arg CreateStockMoveme
 		arg.Column4,
 		arg.Note,
 		arg.CreatedBy,
+		arg.UnitCostCents,
+		arg.LossReason,
 	)
 	var i CreateStockMovementRow
 	err := row.Scan(
@@ -58,6 +66,8 @@ func (q *Queries) CreateStockMovement(ctx context.Context, arg CreateStockMoveme
 		&i.Reason,
 		&i.Note,
 		&i.OccurredAt,
+		&i.UnitCostCents,
+		&i.LossReason,
 	)
 	return i, err
 }
@@ -82,7 +92,7 @@ func (q *Queries) GetPartStockCenti(ctx context.Context, arg GetPartStockCentiPa
 
 const getStockMovement = `-- name: GetStockMovement :one
 SELECT id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
-       reason::text AS reason, note, occurred_at
+       reason::text AS reason, note, occurred_at, unit_cost_cents, COALESCE(loss_reason::text, '')::text AS loss_reason
 FROM garage.stock_movement
 WHERE team_id = $1 AND id = $2
 `
@@ -99,6 +109,8 @@ type GetStockMovementRow struct {
 	Reason        string
 	Note          *string
 	OccurredAt    time.Time
+	UnitCostCents pgtype.Int4
+	LossReason    string
 }
 
 func (q *Queries) GetStockMovement(ctx context.Context, arg GetStockMovementParams) (GetStockMovementRow, error) {
@@ -111,13 +123,15 @@ func (q *Queries) GetStockMovement(ctx context.Context, arg GetStockMovementPara
 		&i.Reason,
 		&i.Note,
 		&i.OccurredAt,
+		&i.UnitCostCents,
+		&i.LossReason,
 	)
 	return i, err
 }
 
 const listStockMovements = `-- name: ListStockMovements :many
 SELECT id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
-       reason::text AS reason, note, occurred_at
+       reason::text AS reason, note, occurred_at, unit_cost_cents, COALESCE(loss_reason::text, '')::text AS loss_reason
 FROM garage.stock_movement
 WHERE team_id = $1 AND part_id = $2 AND id < $3
 ORDER BY id DESC
@@ -138,6 +152,8 @@ type ListStockMovementsRow struct {
 	Reason        string
 	Note          *string
 	OccurredAt    time.Time
+	UnitCostCents pgtype.Int4
+	LossReason    string
 }
 
 func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovementsParams) ([]ListStockMovementsRow, error) {
@@ -161,6 +177,8 @@ func (q *Queries) ListStockMovements(ctx context.Context, arg ListStockMovements
 			&i.Reason,
 			&i.Note,
 			&i.OccurredAt,
+			&i.UnitCostCents,
+			&i.LossReason,
 		); err != nil {
 			return nil, err
 		}

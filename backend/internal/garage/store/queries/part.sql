@@ -1,15 +1,17 @@
+-- reorder_to_centi is -1 when the part has no restock target (the column is NULL).
 -- name: CreatePart :one
 INSERT INTO garage.part (
   team_id, kind, brand, reference, description, unit, specs, min_stock,
-  unit_cost_cents, currency, has_service_life, created_by
+  unit_cost_cents, currency, has_service_life, created_by, reorder_to
 )
 VALUES (
   $1, $2::garage.part_kind, $3, $4, $5, $6, $7::jsonb,
-  ($8::bigint::numeric / 100), $9, $10, $11, $12
+  ($8::bigint::numeric / 100), $9, $10, $11, $12,
+  (sqlc.narg('reorder_to_centi')::bigint::numeric / 100)
 )
 RETURNING id, kind::text AS kind, brand, reference, description, unit, specs::text AS specs,
           (min_stock * 100)::bigint AS min_stock_centi, unit_cost_cents, currency,
-          has_service_life, created_at, version;
+          has_service_life, COALESCE((reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, created_at, version;
 
 -- name: GetPart :one
 SELECT p.id, p.kind::text AS kind, p.brand, p.reference, p.description, p.unit,
@@ -17,7 +19,7 @@ SELECT p.id, p.kind::text AS kind, p.brand, p.reference, p.description, p.unit,
        p.unit_cost_cents, p.currency, p.has_service_life,
        (COALESCE(sl.qty, 0) * 100)::bigint AS qty_centi,
        COALESCE(sl.below_min, false) AS below_min,
-       p.created_at, p.version
+       COALESCE((p.reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, p.created_at, p.version
 FROM garage.part p
 LEFT JOIN garage.stock_level sl ON sl.team_id = p.team_id AND sl.part_id = p.id
 WHERE p.team_id = $1 AND p.id = $2 AND p.deleted_at IS NULL;
@@ -28,7 +30,7 @@ SELECT p.id, p.kind::text AS kind, p.brand, p.reference, p.description, p.unit,
        p.unit_cost_cents, p.currency, p.has_service_life,
        (COALESCE(sl.qty, 0) * 100)::bigint AS qty_centi,
        COALESCE(sl.below_min, false) AS below_min,
-       p.created_at, p.version
+       COALESCE((p.reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, p.created_at, p.version
 FROM garage.part p
 LEFT JOIN garage.stock_level sl ON sl.team_id = p.team_id AND sl.part_id = p.id
 WHERE p.team_id = $1 AND p.deleted_at IS NULL AND p.id > $2
@@ -39,11 +41,12 @@ LIMIT $3;
 UPDATE garage.part
 SET kind = $1::garage.part_kind, brand = $2, reference = $3, description = $4,
     unit = $5, specs = $6::jsonb, min_stock = ($7::bigint::numeric / 100),
-    unit_cost_cents = $8, currency = $9, has_service_life = $10
+    unit_cost_cents = $8, currency = $9, has_service_life = $10,
+    reorder_to = (sqlc.narg('reorder_to_centi')::bigint::numeric / 100)
 WHERE team_id = $11 AND id = $12 AND version = $13 AND deleted_at IS NULL
 RETURNING id, kind::text AS kind, brand, reference, description, unit, specs::text AS specs,
           (min_stock * 100)::bigint AS min_stock_centi, unit_cost_cents, currency,
-          has_service_life, created_at, version;
+          has_service_life, COALESCE((reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, created_at, version;
 
 -- name: SoftDeletePart :one
 UPDATE garage.part

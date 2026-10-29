@@ -213,3 +213,74 @@ func TestPartInstallContract(t *testing.T) {
 		}
 	}
 }
+
+func TestPriceLossReasonAndUnitContract(t *testing.T) {
+	v, err := protovalidate.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const team, part = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61", "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d62"
+	movement := func(mutate func(*garagev1.AddStockMovementRequest)) *garagev1.AddStockMovementRequest {
+		r := &garagev1.AddStockMovementRequest{
+			TeamId: team, RequestId: validRequestID, PartId: part, QtyDeltaCenti: 100,
+			Reason: garagev1.StockReason_STOCK_REASON_PURCHASE,
+		}
+		mutate(r)
+		return r
+	}
+	lost := func(r *garagev1.AddStockMovementRequest) {
+		r.Reason, r.QtyDeltaCenti = garagev1.StockReason_STOCK_REASON_LOST, -100
+	}
+	createPart := func(mutate func(*garagev1.CreatePartRequest)) *garagev1.CreatePartRequest {
+		r := &garagev1.CreatePartRequest{
+			TeamId: team, RequestId: validRequestID, Kind: garagev1.PartKind_PART_KIND_FUEL, Description: "Combustível", Unit: "l",
+		}
+		mutate(r)
+		return r
+	}
+	valid := map[string]proto.Message{
+		"purchase with price": movement(func(r *garagev1.AddStockMovementRequest) { r.UnitCostCents = proto.Int32(950) }),
+		"purchase free":       movement(func(r *garagev1.AddStockMovementRequest) { r.UnitCostCents = proto.Int32(0) }),
+		"lost with reason": movement(func(r *garagev1.AddStockMovementRequest) {
+			lost(r)
+			r.LossReason = garagev1.LossReason_LOSS_REASON_EXPIRED
+		}),
+		"unit g":          createPart(func(r *garagev1.CreatePartRequest) { r.Unit = "g" }),
+		"unit default":    createPart(func(r *garagev1.CreatePartRequest) { r.Unit = "" }),
+		"reorder_to":      createPart(func(r *garagev1.CreatePartRequest) { r.ReorderToCenti = proto.Int64(2500) }),
+		"list":            &garagev1.ListShoppingListRequest{TeamId: team, PageSize: 200},
+		"set line":        &garagev1.SetShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: part, QtyCenti: proto.Int64(400)},
+		"set line update": &garagev1.SetShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: part, ExpectedVersion: 2},
+		"remove line":     &garagev1.RemoveShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: part},
+	}
+	for name, msg := range valid {
+		if err := v.Validate(msg); err != nil {
+			t.Errorf("%s refused: %v", name, err)
+		}
+	}
+	invalid := map[string]proto.Message{
+		"price on a consumption": movement(func(r *garagev1.AddStockMovementRequest) {
+			r.Reason, r.QtyDeltaCenti, r.UnitCostCents = garagev1.StockReason_STOCK_REASON_CONSUMED, -100, proto.Int32(950)
+		}),
+		"negative price":         movement(func(r *garagev1.AddStockMovementRequest) { r.UnitCostCents = proto.Int32(-1) }),
+		"lost without reason":    movement(lost),
+		"reason on a purchase":   movement(func(r *garagev1.AddStockMovementRequest) { r.LossReason = garagev1.LossReason_LOSS_REASON_BROKEN }),
+		"unknown loss reason":    movement(func(r *garagev1.AddStockMovementRequest) { lost(r); r.LossReason = 99 }),
+		"unit kg":                createPart(func(r *garagev1.CreatePartRequest) { r.Unit = "kg" }),
+		"unit upper case":        createPart(func(r *garagev1.CreatePartRequest) { r.Unit = "L" }),
+		"reorder_to negative":    createPart(func(r *garagev1.CreatePartRequest) { r.ReorderToCenti = proto.Int64(-1) }),
+		"reorder_to too large":   createPart(func(r *garagev1.CreatePartRequest) { r.ReorderToCenti = proto.Int64(10_000_000_000) }),
+		"list page too large":    &garagev1.ListShoppingListRequest{TeamId: team, PageSize: 201},
+		"list without team":      &garagev1.ListShoppingListRequest{},
+		"set line zero quantity": &garagev1.SetShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: part, QtyCenti: proto.Int64(0)},
+		"set line long note":     &garagev1.SetShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: part, Note: proto.String(strings.Repeat("a", 501))},
+		"set line bad version":   &garagev1.SetShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: part, ExpectedVersion: -1},
+		"set line no request":    &garagev1.SetShoppingItemRequest{TeamId: team, PartId: part},
+		"remove line bad part":   &garagev1.RemoveShoppingItemRequest{TeamId: team, RequestId: validRequestID, PartId: "x"},
+	}
+	for name, msg := range invalid {
+		if v.Validate(msg) == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package pitbox.garage.v1;
+
+import "buf/validate/validate.proto";
+
+// ShoppingService manages the team's shopping list. The list is computed: every part
+// below its minimum is on it with a suggested quantity up to reorder_to (default: the
+// minimum), plus the manual lines. Only the exceptions are stored (manual lines, adjusted
+// quantities and automatic lines the mechanic hid). A purchase of a part removes its line
+// in the same transaction; a hidden line comes back once the stock is at the minimum again.
+// Estimated costs are omitted for pilots, who can read the list but not change it.
+service ShoppingService {
+  rpc ListShoppingList(ListShoppingListRequest) returns (ListShoppingListResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SetShoppingItem(SetShoppingItemRequest) returns (SetShoppingItemResponse);
+  rpc RemoveShoppingItem(RemoveShoppingItemRequest) returns (RemoveShoppingItemResponse);
+}
+
+message ShoppingLine {
+  string part_id = 1;
+  // Quantity to buy in hundredths of the part's unit: the stored quantity, else the suggestion.
+  int64 qty_centi = 2;
+  int64 suggested_qty_centi = 3;
+  // True when the part is below its minimum (an automatic line); false for a manual one.
+  bool below_min = 4;
+  optional string note = 5;
+  // Version of the stored line; 0 when the line is purely automatic (nothing stored).
+  int32 item_version = 6;
+  // qty * unit cost, omitted for pilots and when the part has no unit cost.
+  optional int64 estimated_cost_cents = 7;
+}
+
+message ListShoppingListRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListShoppingListResponse {
+  repeated ShoppingLine lines = 1;
+  string next_page_token = 2;
+}
+
+// SetShoppingItem adds a manual line, adjusts the quantity or note of a line, or brings
+// back a hidden one. It replaces the stored quantity and note: no qty_centi means "use the
+// suggestion". expected_version is 0 when no line is stored yet, else the line's
+// item_version; a mismatch is a conflict. A manual line needs a quantity.
+message SetShoppingItemRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string part_id = 3 [(buf.validate.field).string.uuid = true];
+  optional int64 qty_centi = 4 [(buf.validate.field).int64 = {
+    gt: 0
+    lte: 9999999999
+  }];
+  optional string note = 5 [(buf.validate.field).string.max_len = 500];
+  int32 expected_version = 6 [(buf.validate.field).int32.gte = 0];
+}
+
+message SetShoppingItemResponse {
+  ShoppingLine line = 1;
+}
+
+// RemoveShoppingItem deletes a manual line, or hides an automatic one until the stock is
+// back at the minimum. A line that is not on the list is NOT_FOUND.
+message RemoveShoppingItemRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string part_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message RemoveShoppingItemResponse {}

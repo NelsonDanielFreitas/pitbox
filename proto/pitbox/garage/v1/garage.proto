@@ -51,3 +51,13 @@ enum StockReason {
   STOCK_REASON_LOST = 5;
   STOCK_REASON_RETURNED = 6;
 }
+
+// LossReason mirrors garage.loss_reason. It is required for, and only valid on, a
+// `lost` stock movement.
+enum LossReason {
+  LOSS_REASON_UNSPECIFIED = 0;
+  LOSS_REASON_BROKEN = 1;
+  LOSS_REASON_WORN = 2;
+  LOSS_REASON_LOST = 3;
+  LOSS_REASON_EXPIRED = 4;
+}

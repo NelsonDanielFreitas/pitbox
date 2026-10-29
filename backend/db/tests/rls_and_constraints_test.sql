@@ -176,6 +176,63 @@ DO $$ BEGIN
   WHERE id = '01900000-0000-7000-8000-0000000000f2';
 END $$;
 
+-- Preço, motivo de perda, "repor até", unidade e lista de compras (F1-07c)
+DO $$ BEGIN
+  INSERT INTO garage.stock_movement (team_id, part_id, qty_delta, reason, unit_cost_cents)
+  VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', 4, 'purchase', 950);
+  INSERT INTO garage.stock_movement (team_id, part_id, qty_delta, reason, loss_reason)
+  VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', -1, 'lost', 'expired');
+  BEGIN
+    INSERT INTO garage.stock_movement (team_id, part_id, qty_delta, reason, unit_cost_cents)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', -1, 'consumed', 950);
+    RAISE EXCEPTION 'FALHOU: preço fora de uma compra';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO garage.stock_movement (team_id, part_id, qty_delta, reason, unit_cost_cents)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', 1, 'purchase', -1);
+    RAISE EXCEPTION 'FALHOU: preço negativo';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO garage.stock_movement (team_id, part_id, qty_delta, reason, loss_reason)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', 1, 'purchase', 'broken');
+    RAISE EXCEPTION 'FALHOU: motivo de perda fora de uma perda';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.stock_movement SET unit_cost_cents = 1 WHERE unit_cost_cents = 950;
+    RAISE EXCEPTION 'FALHOU: movimento alterado';
+  EXCEPTION WHEN OTHERS THEN IF SQLERRM LIKE 'FALHOU%' THEN RAISE; END IF; END;
+  BEGIN
+    UPDATE garage.part SET min_stock = 5, reorder_to = 4 WHERE id = '01900000-0000-7000-8000-0000000000f1';
+    RAISE EXCEPTION 'FALHOU: reorder_to abaixo do mínimo';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.part SET unit = 'kg' WHERE id = '01900000-0000-7000-8000-0000000000f1';
+    RAISE EXCEPTION 'FALHOU: unidade desconhecida';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  UPDATE garage.part SET min_stock = 2, reorder_to = 6, unit = 'l' WHERE id = '01900000-0000-7000-8000-0000000000f1';
+  UPDATE garage.part SET unit = 'un' WHERE id = '01900000-0000-7000-8000-0000000000f1';
+END $$;
+
+INSERT INTO garage.shopping_item (id, team_id, part_id, qty)
+VALUES ('01900000-0000-7000-8000-0000000000f3', app.current_team_id(), '01900000-0000-7000-8000-0000000000f1', 3);
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO garage.shopping_item (team_id, part_id) VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1');
+    RAISE EXCEPTION 'FALHOU: duas linhas para a mesma peça';
+  EXCEPTION WHEN unique_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.shopping_item SET qty = 0 WHERE id = '01900000-0000-7000-8000-0000000000f3';
+    RAISE EXCEPTION 'FALHOU: quantidade zero';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    UPDATE garage.shopping_item SET note = repeat('x', 501) WHERE id = '01900000-0000-7000-8000-0000000000f3';
+    RAISE EXCEPTION 'FALHOU: nota enorme';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  UPDATE garage.shopping_item SET qty = NULL, dismissed = true WHERE id = '01900000-0000-7000-8000-0000000000f3';
+  ASSERT (SELECT version FROM garage.shopping_item WHERE id = '01900000-0000-7000-8000-0000000000f3') = 2, 'touch incrementa a versão';
+  ASSERT (SELECT count(*) FROM sync.change_log WHERE entity = 'garage.shopping_item') = 2, 'shopping_item entra no change log';
+END $$;
+
 -- Vistas
 DO $$ BEGIN
   ASSERT (SELECT best_lap_ms FROM events.session_lap_stats) = 41000, 'melhor volta';
@@ -200,6 +257,7 @@ DO $$ BEGIN
   ASSERT (SELECT count(*) FROM identity.team) = 1,        'RLS: B só vê a sua equipa';
   ASSERT (SELECT count(*) FROM identity.user_account) = 1,'RLS: B não vê utilizadores de A';
   ASSERT (SELECT count(*) FROM sync.change_log) = 0,      'RLS: change log isolado';
+  ASSERT (SELECT count(*) FROM garage.shopping_item) = 0, 'RLS: B não vê a lista de compras de A';
 END $$;
 
 -- B não consegue escrever com o team_id de A
@@ -219,7 +277,22 @@ DO $$ BEGIN
   EXCEPTION WHEN foreign_key_violation THEN NULL; END;
 END $$;
 
+-- B não consegue pôr na sua lista uma peça de A (FK composta) nem escrever com o team_id de A
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO garage.shopping_item (team_id, part_id)
+    VALUES (app.current_team_id(), '01900000-0000-7000-8000-0000000000f1');
+    RAISE EXCEPTION 'FALHOU: lista com peça de outra equipa';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO garage.shopping_item (team_id, part_id)
+    VALUES ('01900000-0000-7000-8000-0000000000a1', '01900000-0000-7000-8000-0000000000f1');
+    RAISE EXCEPTION 'FALHOU: linha da lista noutra equipa';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
 -- UPDATE/DELETE em massa não tocam em A
+UPDATE garage.shopping_item SET dismissed = false;
 UPDATE garage.car SET notes = 'x';
 DELETE FROM events.lap;
 

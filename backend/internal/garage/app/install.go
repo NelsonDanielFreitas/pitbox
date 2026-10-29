@@ -45,7 +45,7 @@ func (s *Service) InstallPart(ctx context.Context, user db.UserID, team db.TeamI
 	if err != nil {
 		return domain.PartInstall{}, domain.Part{}, err
 	}
-	movement, err := domain.NewStockMovement(in.PartID, -domain.UnitCenti, domain.StockInstalled, in.Note, s.now())
+	movement, err := domain.NewStockMovement(in.PartID, -domain.UnitCenti, domain.StockInstalled, in.Note, s.now(), domain.MovementDetails{})
 	if err != nil {
 		return domain.PartInstall{}, domain.Part{}, err
 	}
@@ -105,6 +105,9 @@ func (s *Service) InstallPart(ctx context.Context, user db.UserID, team db.TeamI
 				return err
 			}
 		}
+		if err := s.afterStockChange(ctx, tx, uuid.UUID(team), part, false); err != nil {
+			return err
+		}
 		result = installResult{Install: created, Part: part}
 		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, result); err != nil {
 			return err
@@ -123,7 +126,7 @@ func (s *Service) RemovePart(ctx context.Context, user db.UserID, team db.TeamID
 	if err != nil {
 		return domain.PartInstall{}, domain.Part{}, err
 	}
-	if _, err := domain.NewStockMovement(uuid.New(), domain.UnitCenti, domain.StockReturned, in.Note, s.now()); err != nil {
+	if _, err := domain.NewStockMovement(uuid.New(), domain.UnitCenti, domain.StockReturned, in.Note, s.now(), domain.MovementDetails{}); err != nil {
 		return domain.PartInstall{}, domain.Part{}, err
 	}
 	hash, err := hashInput(uuid.UUID(team), in)
@@ -164,7 +167,7 @@ func (s *Service) RemovePart(ctx context.Context, user db.UserID, team db.TeamID
 		}
 		after := installAudit(closed)
 		if removal.Destination == domain.RemovalStock {
-			movement, err := domain.NewStockMovement(current.PartID, domain.UnitCenti, domain.StockReturned, in.Note, s.now())
+			movement, err := domain.NewStockMovement(current.PartID, domain.UnitCenti, domain.StockReturned, in.Note, s.now(), domain.MovementDetails{})
 			if err != nil {
 				return err
 			}
@@ -176,6 +179,9 @@ func (s *Service) RemovePart(ctx context.Context, user db.UserID, team db.TeamID
 		}
 		part, err := s.store.GetPart(ctx, tx, uuid.UUID(team), current.PartID)
 		if err != nil {
+			return err
+		}
+		if err := s.afterStockChange(ctx, tx, uuid.UUID(team), part, false); err != nil {
 			return err
 		}
 		result = installResult{Install: closed, Part: part}

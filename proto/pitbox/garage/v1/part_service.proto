@@ -11,7 +11,9 @@ import "pitbox/garage/v1/garage.proto";
 // PartService manages the parts catalogue and its append-only stock movements.
 // Quantities are hundredths of the part's unit (qty_centi); costs are cents.
 // The unit cost is omitted for pilots. A movement that crosses the minimum
-// writes one garage.stock_low event. A part with a service life can be installed
+// writes one garage.stock_low event. A purchase records the price paid per unit
+// (omitted for pilots, like the part's unit cost); a `lost` movement records why.
+// reorder_to_centi is the level a purchase should restock to (default: the minimum). A part with a service life can be installed
 // in a car or an engine (each installation is one unit); installing writes an
 // `installed` movement (-1) and removing to stock writes a `returned` one (+1),
 // in the same transaction as the installation row.
@@ -87,6 +89,7 @@ message Part {
   bool below_min = 13;
   google.protobuf.Timestamp created_at = 14;
   int32 version = 15;
+  optional int64 reorder_to_centi = 16;
 }
 
 message StockMovement {
@@ -96,6 +99,9 @@ message StockMovement {
   StockReason reason = 4;
   optional string note = 5;
   google.protobuf.Timestamp occurred_at = 6;
+  // Price paid per unit, only on purchases; omitted for pilots.
+  optional int32 unit_cost_cents = 7;
+  LossReason loss_reason = 8;
 }
 
 message GetPartRequest {
@@ -146,7 +152,16 @@ message CreatePartRequest {
     min_len: 1
     max_len: 200
   }];
-  string unit = 7 [(buf.validate.field).string.max_len = 16];
+  string unit = 7 [(buf.validate.field).string = {
+    max_len: 16
+    in: [
+      "",
+      "un",
+      "ml",
+      "l",
+      "g"
+    ]
+  }];
   google.protobuf.Struct specs = 8;
   int64 min_stock_centi = 9 [(buf.validate.field).int64 = {
     gte: 0
@@ -156,6 +171,11 @@ message CreatePartRequest {
   string currency = 11 [(buf.validate.field).string.max_len = 3];
   bool has_service_life = 12;
   int64 initial_qty_centi = 13 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 9999999999
+  }];
+  // Restock target; must not be below min_stock_centi.
+  optional int64 reorder_to_centi = 14 [(buf.validate.field).int64 = {
     gte: 0
     lte: 9999999999
   }];
@@ -174,7 +194,16 @@ message UpdatePartRequest {
   optional string brand = 6 [(buf.validate.field).string.max_len = 80];
   optional string reference = 7 [(buf.validate.field).string.max_len = 80];
   string description = 8 [(buf.validate.field).string.max_len = 200];
-  string unit = 9 [(buf.validate.field).string.max_len = 16];
+  string unit = 9 [(buf.validate.field).string = {
+    max_len: 16
+    in: [
+      "",
+      "un",
+      "ml",
+      "l",
+      "g"
+    ]
+  }];
   google.protobuf.Struct specs = 10;
   int64 min_stock_centi = 11 [(buf.validate.field).int64 = {
     gte: 0
@@ -184,6 +213,10 @@ message UpdatePartRequest {
   string currency = 13 [(buf.validate.field).string.max_len = 3];
   bool has_service_life = 14;
   string part_id = 15 [(buf.validate.field).string.uuid = true];
+  optional int64 reorder_to_centi = 16 [(buf.validate.field).int64 = {
+    gte: 0
+    lte: 9999999999
+  }];
 }
 
 message UpdatePartResponse {
@@ -200,6 +233,16 @@ message DeletePartRequest {
 message DeletePartResponse {}
 
 message AddStockMovementRequest {
+  option (buf.validate.message).cel = {
+    id: "stock_movement.unit_cost"
+    message: "a unit cost is only allowed on a purchase"
+    expression: "!has(this.unit_cost_cents) || this.reason == 1"
+  };
+  option (buf.validate.message).cel = {
+    id: "stock_movement.loss_reason"
+    message: "a loss reason is required for a lost movement and not allowed otherwise"
+    expression: "(this.reason == 5) == (this.loss_reason != 0)"
+  };
   string team_id = 1 [(buf.validate.field).string.uuid = true];
   string request_id = 2 [(buf.validate.field).string.uuid = true];
   string part_id = 3 [(buf.validate.field).string.uuid = true];
@@ -209,6 +252,8 @@ message AddStockMovementRequest {
   }];
   StockReason reason = 5 [(buf.validate.field).enum.defined_only = true];
   optional string note = 6 [(buf.validate.field).string.max_len = 500];
+  optional int32 unit_cost_cents = 7 [(buf.validate.field).int32.gte = 0];
+  LossReason loss_reason = 8 [(buf.validate.field).enum.defined_only = true];
 }
 
 message AddStockMovementResponse {

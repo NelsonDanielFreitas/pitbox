@@ -10,23 +10,23 @@ import (
 
 func TestPartQuantityLimits(t *testing.T) {
 	t.Parallel()
-	part, err := NewPart(PartGlowPlug, nil, nil, "Vela", "un", nil, MaxStockCenti, nil, "EUR", false)
+	part, err := NewPart(PartGlowPlug, nil, nil, "Vela", "un", nil, MaxStockCenti, nil, "EUR", false, nil)
 	if err != nil || part.MinStockCenti != MaxStockCenti {
 		t.Fatalf("max min_stock: %+v, %v", part, err)
 	}
-	if _, err := NewPart(PartGlowPlug, nil, nil, "Vela", "un", nil, MaxStockCenti+1, nil, "EUR", false); !errors.Is(err, ErrInvalid) {
+	if _, err := NewPart(PartGlowPlug, nil, nil, "Vela", "un", nil, MaxStockCenti+1, nil, "EUR", false, nil); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("min_stock above max = %v", err)
 	}
-	if _, err := NewStockMovement(uuid.New(), MaxStockCenti, StockPurchase, nil, partTime()); err != nil {
+	if _, err := NewStockMovement(uuid.New(), MaxStockCenti, StockPurchase, nil, partTime(), MovementDetails{}); err != nil {
 		t.Fatalf("max purchase: %v", err)
 	}
-	if _, err := NewStockMovement(uuid.New(), MaxStockCenti+1, StockPurchase, nil, partTime()); !errors.Is(err, ErrInvalid) {
+	if _, err := NewStockMovement(uuid.New(), MaxStockCenti+1, StockPurchase, nil, partTime(), MovementDetails{}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("purchase above max = %v", err)
 	}
-	if _, err := NewStockMovement(uuid.New(), -MaxStockCenti, StockConsumed, nil, partTime()); err != nil {
+	if _, err := NewStockMovement(uuid.New(), -MaxStockCenti, StockConsumed, nil, partTime(), MovementDetails{}); err != nil {
 		t.Fatalf("max consumption: %v", err)
 	}
-	if _, err := NewStockMovement(uuid.New(), -MaxStockCenti-1, StockConsumed, nil, partTime()); !errors.Is(err, ErrInvalid) {
+	if _, err := NewStockMovement(uuid.New(), -MaxStockCenti-1, StockConsumed, nil, partTime(), MovementDetails{}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("consumption below min = %v", err)
 	}
 }

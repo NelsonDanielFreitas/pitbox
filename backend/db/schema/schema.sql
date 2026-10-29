@@ -113,6 +113,7 @@ CREATE TYPE garage.part_kind          AS ENUM (
   'piston_sleeve', 'air_filter', 'shock_oil', 'diff_oil', 'fuel', 'spring', 'tyre',
   'insert', 'body', 'wing', 'other');
 CREATE TYPE garage.stock_reason       AS ENUM ('purchase', 'consumed', 'installed', 'adjustment', 'lost', 'returned');
+CREATE TYPE garage.loss_reason        AS ENUM ('broken', 'worn', 'lost', 'expired');
 CREATE TYPE garage.powertrain_family  AS ENUM ('combustion', 'electric');
 
 CREATE TYPE setup.field_type          AS ENUM ('number', 'integer', 'text', 'enum', 'boolean');
@@ -446,8 +447,11 @@ CREATE TABLE garage.part (
   updated_at          timestamptz NOT NULL DEFAULT now(),
   version             integer     NOT NULL DEFAULT 1,
   deleted_at          timestamptz,
+  reorder_to          numeric(10,2),                          -- "repor até"; NULL = repor até min_stock
   UNIQUE (team_id, id),
-  CHECK (jsonb_typeof(specs) = 'object')
+  CHECK (jsonb_typeof(specs) = 'object'),
+  CONSTRAINT part_reorder_to_ck CHECK (reorder_to IS NULL OR reorder_to >= min_stock),
+  CONSTRAINT part_unit_ck CHECK (unit IN ('un', 'ml', 'l', 'g'))
 );
 CREATE INDEX part_team_kind_idx ON garage.part (team_id, kind) WHERE deleted_at IS NULL;
 
@@ -463,7 +467,12 @@ CREATE TABLE garage.stock_movement (
   occurred_at         timestamptz NOT NULL DEFAULT now(),
   created_by          uuid        REFERENCES identity.user_account (id),
   created_at          timestamptz NOT NULL DEFAULT now(),
-  FOREIGN KEY (team_id, part_id) REFERENCES garage.part (team_id, id) ON DELETE CASCADE
+  unit_cost_cents     integer,                                -- preço pago, só em compras
+  loss_reason         garage.loss_reason,                     -- só em perdas
+  FOREIGN KEY (team_id, part_id) REFERENCES garage.part (team_id, id) ON DELETE CASCADE,
+  CONSTRAINT stock_movement_unit_cost_ck CHECK (unit_cost_cents IS NULL OR unit_cost_cents >= 0),
+  CONSTRAINT stock_movement_unit_cost_reason_ck CHECK (unit_cost_cents IS NULL OR reason = 'purchase'),
+  CONSTRAINT stock_movement_loss_reason_ck CHECK (loss_reason IS NULL OR reason = 'lost')
 );
 CREATE INDEX stock_movement_part_idx ON garage.stock_movement (team_id, part_id, occurred_at);
 
@@ -499,6 +508,24 @@ CREATE TABLE garage.part_install (
   )
 );
 CREATE INDEX part_install_active_idx ON garage.part_install (team_id, part_id) WHERE removed_at IS NULL;
+
+-- Lista de compras de equipa: só as exceções à lista calculada (manuais, quantidade ajustada,
+-- automáticas escondidas). Uma linha por peça.
+CREATE TABLE garage.shopping_item (
+  id                  uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
+  team_id             uuid        NOT NULL REFERENCES identity.team (id) ON DELETE CASCADE,
+  part_id             uuid        NOT NULL,
+  qty                 numeric(10,2) CHECK (qty IS NULL OR qty > 0),   -- NULL = usar a sugestão
+  dismissed           boolean     NOT NULL DEFAULT false,
+  note                text        CHECK (note IS NULL OR char_length(note) <= 500),
+  created_by          uuid        REFERENCES identity.user_account (id),
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  version             integer     NOT NULL DEFAULT 1,
+  UNIQUE (team_id, id),
+  UNIQUE (team_id, part_id),
+  FOREIGN KEY (team_id, part_id) REFERENCES garage.part (team_id, id) ON DELETE CASCADE
+);
 
 -- =============================================================================
 -- setup
@@ -1421,7 +1448,7 @@ BEGIN
   FOREACH t SLICE 1 IN ARRAY ARRAY[
     ['garage','car','id'], ['garage','engine','id'], ['garage','engine_mount','id'],
     ['garage','tyre_set','id'], ['garage','part','id'], ['garage','stock_movement','id'],
-    ['garage','part_install','id'],
+    ['garage','part_install','id'], ['garage','shopping_item','id'],
     ['setup','field_definition','id'], ['setup','setup','id'], ['setup','setup_version','setup_id'],
     ['setup','favorite','setup_id'],
     ['events','track','id'], ['events','championship','id'], ['events','event','id'],

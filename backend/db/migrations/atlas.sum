@@ -1,4 +1,4 @@
-h1:ap6Udnl7kKqvTVuCAU07YQRKLp1DYQSQcXN9gpfLadA=
+h1:jjkYRoYWszQF0NzTps7Lawg0iE54tW4enlQJqBMYFpQ=
 20261012181718_initial.sql h1:Tiv1ABbDQmkD6Y/HZoE8Z7u2and+3cHSOASf5Ogdb20=
 20261013194110_resolve_login.sql h1:nx80NCYa8Lts3HZCs9dUb7AxcEm9oXjjk1T1UPCW4bY=
 20261017121627_is_owner_function.sql h1:hKUyQprD/UjKM6c29rubP068LbtDWgQMzJxrEA9Ss3Y=
@@ -12,3 +12,4 @@ h1:ap6Udnl7kKqvTVuCAU07YQRKLp1DYQSQcXN9gpfLadA=
 20261024194220_f1-03d-recovery-code-hmac.sql h1:pj/1HrEmYqTl3aysyPnYbR3PpGHS+jOSDaYopLgrFAw=
 20261025155159_f1-08-share-links.sql h1:48I+hxzwjwQBOk1k749gkR1EBZhAOo3EskcPuP3TeZ0=
 20261028230011_f1-07b-part-install-removal.sql h1:E9674GiWR85sp9juRucFsD2A8o+ulEQ1PyU2v6VaB8M=
+20261029002148_f1-07c-price-shopping.sql h1:RVbrBz4LB2i9GMy4RhQJUKlsRJo8nB9BwwdsabfSVGw=

@@ -27,6 +27,7 @@ type Module struct {
 	engines *transport.Engines
 	tyres   *transport.Tyres
 	parts   *transport.Parts
+	shop    *transport.Shopping
 }
 
 func New(d Deps) (*Module, error) {
@@ -39,7 +40,7 @@ func New(d Deps) (*Module, error) {
 	}
 	return &Module{
 		cars: transport.NewCars(svc), engines: transport.NewEngines(svc),
-		tyres: transport.NewTyres(svc), parts: transport.NewParts(svc),
+		tyres: transport.NewTyres(svc), parts: transport.NewParts(svc), shop: transport.NewShopping(svc),
 	}, nil
 }
 
@@ -48,4 +49,5 @@ func (m *Module) Register(server *connect.Server) {
 	garagev1connect.RegisterEngineServiceHandler(server, m.engines)
 	garagev1connect.RegisterTyreServiceHandler(server, m.tyres)
 	garagev1connect.RegisterPartServiceHandler(server, m.parts)
+	garagev1connect.RegisterShoppingServiceHandler(server, m.shop)
 }

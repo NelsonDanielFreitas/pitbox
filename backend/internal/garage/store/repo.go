@@ -298,7 +298,7 @@ func (Repo) CreatePart(ctx context.Context, tx db.DBTX, team, user uuid.UUID, p 
 		TeamID: team, Column2: sqlcgen.GaragePartKind(p.Kind), Brand: p.Brand, Reference: p.Reference,
 		Description: p.Description, Unit: p.Unit, Column7: specs, Column8: p.MinStockCenti,
 		UnitCostCents: int4(p.UnitCostCents), Currency: p.Currency, HasServiceLife: p.HasServiceLife,
-		CreatedBy: &user,
+		CreatedBy: &user, ReorderToCenti: int8p(p.ReorderToCenti),
 	})
 	if err != nil {
 		return domain.Part{}, mapError("create part", err)
@@ -342,7 +342,7 @@ func (Repo) UpdatePart(ctx context.Context, tx db.DBTX, team uuid.UUID, p domain
 		Column1: sqlcgen.GaragePartKind(p.Kind), Brand: p.Brand, Reference: p.Reference,
 		Description: p.Description, Unit: p.Unit, Column6: specs, Column7: p.MinStockCenti,
 		UnitCostCents: int4(p.UnitCostCents), Currency: p.Currency, HasServiceLife: p.HasServiceLife,
-		TeamID: team, ID: p.ID, Version: p.Version,
+		TeamID: team, ID: p.ID, Version: p.Version, ReorderToCenti: int8p(p.ReorderToCenti),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Part{}, domain.ErrConflict
@@ -387,6 +387,7 @@ func (Repo) CreateStockMovement(ctx context.Context, tx db.DBTX, team, user uuid
 	row, err := sqlcgen.New(tx).CreateStockMovement(ctx, sqlcgen.CreateStockMovementParams{
 		TeamID: team, PartID: m.PartID, Column3: m.QtyDeltaCenti,
 		Column4: sqlcgen.GarageStockReason(m.Reason), Note: m.Note, CreatedBy: &user,
+		UnitCostCents: int4(m.UnitCostCents), LossReason: lossReason(m.LossReason),
 	})
 	if err != nil {
 		return domain.StockMovement{}, mapError("create stock movement", err)
@@ -562,6 +563,28 @@ func ptrInt2(v pgtype.Int2) *int32 {
 	return &n
 }
 
+func int8p(v *int64) pgtype.Int8 {
+	if v == nil {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *v, Valid: true}
+}
+
+// optionalCenti maps the -1 the queries use for a NULL quantity back to nil.
+func optionalCenti(v int64) *int64 {
+	if v < 0 {
+		return nil
+	}
+	return &v
+}
+
+func lossReason(v string) sqlcgen.NullGarageLossReason {
+	if v == "" {
+		return sqlcgen.NullGarageLossReason{}
+	}
+	return sqlcgen.NullGarageLossReason{GarageLossReason: sqlcgen.GarageLossReason(v), Valid: true}
+}
+
 func int4(v *int32) pgtype.Int4 {
 	if v == nil {
 		return pgtype.Int4{}
@@ -666,41 +689,44 @@ func tyreSet(id uuid.UUID, label, make, model string, compound, insert *string, 
 
 func partFromCreate(r sqlcgen.CreatePartRow) domain.Part {
 	return part(r.ID, r.Kind, r.Brand, r.Reference, r.Description, r.Unit, r.Specs, r.MinStockCenti,
-		r.UnitCostCents, r.Currency, r.HasServiceLife, 0, false, r.CreatedAt, r.Version)
+		r.UnitCostCents, r.Currency, r.HasServiceLife, 0, false, r.ReorderToCenti, r.CreatedAt, r.Version)
 }
 func partFromGet(r sqlcgen.GetPartRow) (domain.Part, error) {
 	return partWithError(r.ID, r.Kind, r.Brand, r.Reference, r.Description, r.Unit, r.Specs, r.MinStockCenti,
-		r.UnitCostCents, r.Currency, r.HasServiceLife, r.QtyCenti, r.BelowMin, r.CreatedAt, r.Version)
+		r.UnitCostCents, r.Currency, r.HasServiceLife, r.QtyCenti, r.BelowMin, r.ReorderToCenti, r.CreatedAt, r.Version)
 }
 func partFromList(r sqlcgen.ListPartsRow) (domain.Part, error) {
 	return partWithError(r.ID, r.Kind, r.Brand, r.Reference, r.Description, r.Unit, r.Specs, r.MinStockCenti,
-		r.UnitCostCents, r.Currency, r.HasServiceLife, r.QtyCenti, r.BelowMin, r.CreatedAt, r.Version)
+		r.UnitCostCents, r.Currency, r.HasServiceLife, r.QtyCenti, r.BelowMin, r.ReorderToCenti, r.CreatedAt, r.Version)
 }
 func partFromUpdate(r sqlcgen.UpdatePartRow) (domain.Part, error) {
 	return partWithError(r.ID, r.Kind, r.Brand, r.Reference, r.Description, r.Unit, r.Specs, r.MinStockCenti,
-		r.UnitCostCents, r.Currency, r.HasServiceLife, 0, false, r.CreatedAt, r.Version)
+		r.UnitCostCents, r.Currency, r.HasServiceLife, 0, false, r.ReorderToCenti, r.CreatedAt, r.Version)
 }
 func part(id uuid.UUID, kind string, brand, ref *string, description, unit, specs string, min int64,
-	cost pgtype.Int4, currency string, service bool, qty int64, below bool, created time.Time, version int32) domain.Part {
-	p, _ := partWithError(id, kind, brand, ref, description, unit, specs, min, cost, currency, service, qty, below, created, version)
+	cost pgtype.Int4, currency string, service bool, qty int64, below bool, reorder int64, created time.Time, version int32) domain.Part {
+	p, _ := partWithError(id, kind, brand, ref, description, unit, specs, min, cost, currency, service, qty, below, reorder, created, version)
 	return p
 }
 func partWithError(id uuid.UUID, kind string, brand, ref *string, description, unit, specs string, min int64,
-	cost pgtype.Int4, currency string, service bool, qty int64, below bool, created time.Time, version int32) (domain.Part, error) {
+	cost pgtype.Int4, currency string, service bool, qty int64, below bool, reorder int64, created time.Time, version int32) (domain.Part, error) {
 	var values map[string]any
 	if err := json.Unmarshal([]byte(specs), &values); err != nil {
 		return domain.Part{}, fmt.Errorf("decode part specs: %w", err)
 	}
 	return domain.Part{ID: id, Kind: kind, Brand: brand, Reference: ref, Description: description, Unit: unit,
 		Specs: values, MinStockCenti: min, UnitCostCents: ptrInt4(cost), Currency: currency,
-		HasServiceLife: service, QtyCenti: qty, BelowMin: below, CreatedAt: created, Version: version}, nil
+		HasServiceLife: service, QtyCenti: qty, BelowMin: below, ReorderToCenti: optionalCenti(reorder),
+		CreatedAt: created, Version: version}, nil
 }
 
 func movementFromCreate(r sqlcgen.CreateStockMovementRow) domain.StockMovement {
-	return domain.StockMovement{ID: r.ID, PartID: r.PartID, QtyDeltaCenti: r.QtyDeltaCenti, Reason: r.Reason, Note: r.Note, OccurredAt: r.OccurredAt}
+	return domain.StockMovement{ID: r.ID, PartID: r.PartID, QtyDeltaCenti: r.QtyDeltaCenti, Reason: r.Reason, Note: r.Note,
+		OccurredAt: r.OccurredAt, UnitCostCents: ptrInt4(r.UnitCostCents), LossReason: r.LossReason}
 }
 func movementFromList(r sqlcgen.ListStockMovementsRow) domain.StockMovement {
-	return domain.StockMovement{ID: r.ID, PartID: r.PartID, QtyDeltaCenti: r.QtyDeltaCenti, Reason: r.Reason, Note: r.Note, OccurredAt: r.OccurredAt}
+	return domain.StockMovement{ID: r.ID, PartID: r.PartID, QtyDeltaCenti: r.QtyDeltaCenti, Reason: r.Reason, Note: r.Note,
+		OccurredAt: r.OccurredAt, UnitCostCents: ptrInt4(r.UnitCostCents), LossReason: r.LossReason}
 }
 
 func mountFromCreate(r sqlcgen.CreateMountRow) domain.EngineMount {
@@ -744,6 +770,11 @@ func mapError(op string, err error) error {
 		case "23P01":
 			return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
 		case "23514":
+			switch pgErr.ConstraintName {
+			case "stock_movement_unit_cost_ck", "stock_movement_unit_cost_reason_ck", "stock_movement_loss_reason_ck",
+				"part_reorder_to_ck", "part_unit_ck":
+				return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
+			}
 			if pgErr.ConstraintName == "part_install_removal_ck" {
 				return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
 			}

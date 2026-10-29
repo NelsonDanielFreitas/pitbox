@@ -34,6 +34,7 @@ type CreatePartInput struct {
 	Currency        string
 	HasServiceLife  bool
 	InitialQtyCenti int64
+	ReorderToCenti  *int64
 }
 
 type UpdatePartInput struct {
@@ -49,6 +50,8 @@ type AddStockMovementInput struct {
 	QtyDeltaCenti int64
 	Reason        string
 	Note          *string
+	UnitCostCents *int32
+	LossReason    string
 }
 
 type stockResult struct {
@@ -58,7 +61,7 @@ type stockResult struct {
 
 func (s *Service) CreatePart(ctx context.Context, user db.UserID, team db.TeamID, in CreatePartInput) (domain.Part, error) {
 	p, err := domain.NewPart(in.Kind, in.Brand, in.Reference, in.Description, in.Unit, in.Specs,
-		in.MinStockCenti, in.UnitCostCents, in.Currency, in.HasServiceLife)
+		in.MinStockCenti, in.UnitCostCents, in.Currency, in.HasServiceLife, in.ReorderToCenti)
 	if err != nil {
 		return domain.Part{}, err
 	}
@@ -93,7 +96,9 @@ func (s *Service) CreatePart(ctx context.Context, user db.UserID, team db.TeamID
 		}
 		var initialMovementID uuid.UUID
 		if in.InitialQtyCenti > 0 {
-			movement, err := domain.NewStockMovement(created.ID, in.InitialQtyCenti, domain.StockPurchase, nil, s.now())
+			// The initial stock was bought at the unit cost given for the part.
+			movement, err := domain.NewStockMovement(created.ID, in.InitialQtyCenti, domain.StockPurchase, nil, s.now(),
+				domain.MovementDetails{UnitCostCents: in.UnitCostCents})
 			if err != nil {
 				return err
 			}
@@ -213,6 +218,10 @@ func (s *Service) UpdatePart(ctx context.Context, user db.UserID, team db.TeamID
 				return err
 			}
 		}
+		// A lower minimum can put the part back above it: a hidden line must not stay hidden.
+		if err := s.afterStockChange(ctx, tx, uuid.UUID(team), updated, false); err != nil {
+			return err
+		}
 		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, updated); err != nil {
 			return err
 		}
@@ -258,6 +267,10 @@ func (s *Service) DeletePart(ctx context.Context, user db.UserID, team db.TeamID
 		if err := s.store.SoftDeletePart(ctx, tx, uuid.UUID(team), id, version); err != nil {
 			return err
 		}
+		// The soft delete never fires the foreign key cascade, so the line goes explicitly.
+		if _, err := s.store.DeleteShoppingItemForPart(ctx, tx, uuid.UUID(team), id); err != nil {
+			return err
+		}
 		if err := s.idempotency.Save(ctx, tx, uuid.UUID(user), requestID, nil); err != nil {
 			return err
 		}
@@ -266,7 +279,8 @@ func (s *Service) DeletePart(ctx context.Context, user db.UserID, team db.TeamID
 }
 
 func (s *Service) AddStockMovement(ctx context.Context, user db.UserID, team db.TeamID, in AddStockMovementInput) (domain.Part, domain.StockMovement, error) {
-	movement, err := domain.NewStockMovement(in.PartID, in.QtyDeltaCenti, in.Reason, in.Note, s.now())
+	movement, err := domain.NewStockMovement(in.PartID, in.QtyDeltaCenti, in.Reason, in.Note, s.now(),
+		domain.MovementDetails{UnitCostCents: in.UnitCostCents, LossReason: in.LossReason})
 	if err != nil {
 		return domain.Part{}, domain.StockMovement{}, err
 	}
@@ -312,6 +326,9 @@ func (s *Service) AddStockMovement(ctx context.Context, user db.UserID, team db.
 				return err
 			}
 		}
+		if err := s.afterStockChange(ctx, tx, uuid.UUID(team), part, in.Reason == domain.StockPurchase); err != nil {
+			return err
+		}
 		result = stockResult{Part: part, Movement: created}
 		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, result); err != nil {
 			return err
@@ -336,12 +353,17 @@ func (s *Service) ListStockMovements(ctx context.Context, user db.UserID, team d
 		after = maxCursorUUID
 	}
 	var out []domain.StockMovement
-	err := s.withMemberReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, _ string) error {
+	err := s.withMemberReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, role string) error {
 		if _, err := s.store.GetPart(ctx, tx, uuid.UUID(team), partID); err != nil {
 			return err
 		}
 		var err error
 		out, err = s.store.ListStockMovements(ctx, tx, uuid.UUID(team), partID, after, limit+1)
+		if err == nil && role != "owner" && role != "mechanic" {
+			for i := range out {
+				out[i].UnitCostCents = nil // the price paid is not for pilots
+			}
+		}
 		return err
 	})
 	if err != nil {
@@ -353,6 +375,22 @@ func (s *Service) ListStockMovements(ctx context.Context, user db.UserID, team d
 		next = cursor.Encode(idCursor{ID: out[len(out)-1].ID})
 	}
 	return out, next, nil
+}
+
+// afterStockChange keeps the shopping list in step with the stock inside the same
+// transaction: a purchase removes the part's line, and a hidden line is dropped once the
+// part is back at its minimum so the alert works again next time.
+func (s *Service) afterStockChange(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain.Part, purchase bool) error {
+	if purchase {
+		if _, err := s.store.DeleteShoppingItemForPart(ctx, tx, team, part.ID); err != nil {
+			return err
+		}
+		return nil
+	}
+	if !part.BelowMin {
+		return s.store.ClearDismissedShoppingItem(ctx, tx, team, part.ID)
+	}
+	return nil
 }
 
 func recordStockLow(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain.Part, movementID uuid.UUID) error {

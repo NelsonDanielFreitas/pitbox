@@ -16,15 +16,16 @@ import (
 const createPart = `-- name: CreatePart :one
 INSERT INTO garage.part (
   team_id, kind, brand, reference, description, unit, specs, min_stock,
-  unit_cost_cents, currency, has_service_life, created_by
+  unit_cost_cents, currency, has_service_life, created_by, reorder_to
 )
 VALUES (
   $1, $2::garage.part_kind, $3, $4, $5, $6, $7::jsonb,
-  ($8::bigint::numeric / 100), $9, $10, $11, $12
+  ($8::bigint::numeric / 100), $9, $10, $11, $12,
+  ($13::bigint::numeric / 100)
 )
 RETURNING id, kind::text AS kind, brand, reference, description, unit, specs::text AS specs,
           (min_stock * 100)::bigint AS min_stock_centi, unit_cost_cents, currency,
-          has_service_life, created_at, version
+          has_service_life, COALESCE((reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, created_at, version
 `
 
 type CreatePartParams struct {
@@ -40,6 +41,7 @@ type CreatePartParams struct {
 	Currency       string
 	HasServiceLife bool
 	CreatedBy      *uuid.UUID
+	ReorderToCenti pgtype.Int8
 }
 
 type CreatePartRow struct {
@@ -54,10 +56,12 @@ type CreatePartRow struct {
 	UnitCostCents  pgtype.Int4
 	Currency       string
 	HasServiceLife bool
+	ReorderToCenti int64
 	CreatedAt      time.Time
 	Version        int32
 }
 
+// reorder_to_centi is -1 when the part has no restock target (the column is NULL).
 func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (CreatePartRow, error) {
 	row := q.db.QueryRow(ctx, createPart,
 		arg.TeamID,
@@ -72,6 +76,7 @@ func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (CreateP
 		arg.Currency,
 		arg.HasServiceLife,
 		arg.CreatedBy,
+		arg.ReorderToCenti,
 	)
 	var i CreatePartRow
 	err := row.Scan(
@@ -86,6 +91,7 @@ func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (CreateP
 		&i.UnitCostCents,
 		&i.Currency,
 		&i.HasServiceLife,
+		&i.ReorderToCenti,
 		&i.CreatedAt,
 		&i.Version,
 	)
@@ -98,7 +104,7 @@ SELECT p.id, p.kind::text AS kind, p.brand, p.reference, p.description, p.unit,
        p.unit_cost_cents, p.currency, p.has_service_life,
        (COALESCE(sl.qty, 0) * 100)::bigint AS qty_centi,
        COALESCE(sl.below_min, false) AS below_min,
-       p.created_at, p.version
+       COALESCE((p.reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, p.created_at, p.version
 FROM garage.part p
 LEFT JOIN garage.stock_level sl ON sl.team_id = p.team_id AND sl.part_id = p.id
 WHERE p.team_id = $1 AND p.id = $2 AND p.deleted_at IS NULL
@@ -123,6 +129,7 @@ type GetPartRow struct {
 	HasServiceLife bool
 	QtyCenti       int64
 	BelowMin       bool
+	ReorderToCenti int64
 	CreatedAt      time.Time
 	Version        int32
 }
@@ -144,6 +151,7 @@ func (q *Queries) GetPart(ctx context.Context, arg GetPartParams) (GetPartRow, e
 		&i.HasServiceLife,
 		&i.QtyCenti,
 		&i.BelowMin,
+		&i.ReorderToCenti,
 		&i.CreatedAt,
 		&i.Version,
 	)
@@ -156,7 +164,7 @@ SELECT p.id, p.kind::text AS kind, p.brand, p.reference, p.description, p.unit,
        p.unit_cost_cents, p.currency, p.has_service_life,
        (COALESCE(sl.qty, 0) * 100)::bigint AS qty_centi,
        COALESCE(sl.below_min, false) AS below_min,
-       p.created_at, p.version
+       COALESCE((p.reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, p.created_at, p.version
 FROM garage.part p
 LEFT JOIN garage.stock_level sl ON sl.team_id = p.team_id AND sl.part_id = p.id
 WHERE p.team_id = $1 AND p.deleted_at IS NULL AND p.id > $2
@@ -184,6 +192,7 @@ type ListPartsRow struct {
 	HasServiceLife bool
 	QtyCenti       int64
 	BelowMin       bool
+	ReorderToCenti int64
 	CreatedAt      time.Time
 	Version        int32
 }
@@ -211,6 +220,7 @@ func (q *Queries) ListParts(ctx context.Context, arg ListPartsParams) ([]ListPar
 			&i.HasServiceLife,
 			&i.QtyCenti,
 			&i.BelowMin,
+			&i.ReorderToCenti,
 			&i.CreatedAt,
 			&i.Version,
 		); err != nil {
@@ -248,11 +258,12 @@ const updatePart = `-- name: UpdatePart :one
 UPDATE garage.part
 SET kind = $1::garage.part_kind, brand = $2, reference = $3, description = $4,
     unit = $5, specs = $6::jsonb, min_stock = ($7::bigint::numeric / 100),
-    unit_cost_cents = $8, currency = $9, has_service_life = $10
+    unit_cost_cents = $8, currency = $9, has_service_life = $10,
+    reorder_to = ($14::bigint::numeric / 100)
 WHERE team_id = $11 AND id = $12 AND version = $13 AND deleted_at IS NULL
 RETURNING id, kind::text AS kind, brand, reference, description, unit, specs::text AS specs,
           (min_stock * 100)::bigint AS min_stock_centi, unit_cost_cents, currency,
-          has_service_life, created_at, version
+          has_service_life, COALESCE((reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, created_at, version
 `
 
 type UpdatePartParams struct {
@@ -269,6 +280,7 @@ type UpdatePartParams struct {
 	TeamID         uuid.UUID
 	ID             uuid.UUID
 	Version        int32
+	ReorderToCenti pgtype.Int8
 }
 
 type UpdatePartRow struct {
@@ -283,6 +295,7 @@ type UpdatePartRow struct {
 	UnitCostCents  pgtype.Int4
 	Currency       string
 	HasServiceLife bool
+	ReorderToCenti int64
 	CreatedAt      time.Time
 	Version        int32
 }
@@ -302,6 +315,7 @@ func (q *Queries) UpdatePart(ctx context.Context, arg UpdatePartParams) (UpdateP
 		arg.TeamID,
 		arg.ID,
 		arg.Version,
+		arg.ReorderToCenti,
 	)
 	var i UpdatePartRow
 	err := row.Scan(
@@ -316,6 +330,7 @@ func (q *Queries) UpdatePart(ctx context.Context, arg UpdatePartParams) (UpdateP
 		&i.UnitCostCents,
 		&i.Currency,
 		&i.HasServiceLife,
+		&i.ReorderToCenti,
 		&i.CreatedAt,
 		&i.Version,
 	)

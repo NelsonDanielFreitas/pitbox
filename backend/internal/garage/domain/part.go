@@ -34,6 +34,11 @@ const (
 	StockLost       = "lost"
 	StockReturned   = "returned"
 
+	LossBroken  = "broken"
+	LossWorn    = "worn"
+	LossLost    = "lost"
+	LossExpired = "expired"
+
 	// MaxStockCenti is the largest value numeric(10,2) can hold, in hundredths.
 	MaxStockCenti = 9_999_999_999
 )
@@ -62,13 +67,14 @@ type Part struct {
 	UnitCostCents  *int32
 	Currency       string
 	HasServiceLife bool
+	ReorderToCenti *int64
 	QtyCenti       int64
 	BelowMin       bool
 	CreatedAt      time.Time
 	Version        int32
 }
 
-func NewPart(kind string, brand, reference *string, description, unit string, specs map[string]any, minStockCenti int64, unitCostCents *int32, currency string, hasServiceLife bool) (Part, error) {
+func NewPart(kind string, brand, reference *string, description, unit string, specs map[string]any, minStockCenti int64, unitCostCents *int32, currency string, hasServiceLife bool, reorderToCenti *int64) (Part, error) {
 	if _, ok := partKinds[kind]; !ok {
 		return Part{}, fmt.Errorf("%w: part kind", ErrInvalid)
 	}
@@ -85,15 +91,21 @@ func NewPart(kind string, brand, reference *string, description, unit string, sp
 		return Part{}, err
 	}
 	unit = trimOr(unit, "un")
-	if _, err := requiredString(unit, maxUnit); err != nil {
-		return Part{}, err
+	if !ValidUnit(unit) {
+		return Part{}, fmt.Errorf("%w: unit", ErrInvalid)
 	}
 	specs, err = validateSpecs(specs)
 	if err != nil {
 		return Part{}, err
 	}
+	if err := validateSpecsForKind(kind, specs); err != nil {
+		return Part{}, err
+	}
 	if minStockCenti < 0 || minStockCenti > MaxStockCenti {
 		return Part{}, fmt.Errorf("%w: min stock", ErrInvalid)
+	}
+	if err := validReorderTo(reorderToCenti, minStockCenti); err != nil {
+		return Part{}, err
 	}
 	if unitCostCents != nil && *unitCostCents < 0 {
 		return Part{}, fmt.Errorf("%w: unit cost", ErrInvalid)
@@ -105,8 +117,19 @@ func NewPart(kind string, brand, reference *string, description, unit string, sp
 	return Part{
 		Kind: kind, Brand: brand, Reference: reference, Description: description, Unit: unit,
 		Specs: specs, MinStockCenti: minStockCenti, UnitCostCents: unitCostCents,
-		Currency: currency, HasServiceLife: hasServiceLife,
+		Currency: currency, HasServiceLife: hasServiceLife, ReorderToCenti: reorderToCenti,
 	}, nil
+}
+
+// validReorderTo checks the restock target is within range and not below the minimum.
+func validReorderTo(reorderToCenti *int64, minStockCenti int64) error {
+	if reorderToCenti == nil {
+		return nil
+	}
+	if *reorderToCenti < minStockCenti || *reorderToCenti > MaxStockCenti {
+		return fmt.Errorf("%w: reorder to", ErrInvalid)
+	}
+	return nil
 }
 
 type PartUpdate struct {
@@ -125,11 +148,13 @@ type PartUpdate struct {
 	UnitCostCents *int32
 	Currency      *string
 	ServiceLife   *bool
+	ReorderSet    bool
+	ReorderTo     *int64
 }
 
 func (u PartUpdate) Empty() bool {
 	return u.Kind == nil && !u.BrandSet && !u.ReferenceSet && u.Description == nil && u.Unit == nil &&
-		!u.SpecsSet && !u.MinSet && !u.CostSet && u.Currency == nil && u.ServiceLife == nil
+		!u.SpecsSet && !u.MinSet && !u.CostSet && u.Currency == nil && u.ServiceLife == nil && !u.ReorderSet
 }
 
 func ApplyPartUpdate(p Part, u PartUpdate) (Part, error) {
@@ -162,10 +187,11 @@ func ApplyPartUpdate(p Part, u PartUpdate) (Part, error) {
 		}
 	}
 	if u.Unit != nil {
-		p.Unit, err = requiredString(*u.Unit, maxUnit)
-		if err != nil {
-			return Part{}, err
+		unit := trimSpace(*u.Unit)
+		if !ValidUnit(unit) {
+			return Part{}, fmt.Errorf("%w: unit", ErrInvalid)
 		}
+		p.Unit = unit
 	}
 	if u.SpecsSet {
 		p.Specs, err = validateSpecs(u.Specs)
@@ -194,6 +220,18 @@ func ApplyPartUpdate(p Part, u PartUpdate) (Part, error) {
 	if u.ServiceLife != nil {
 		p.HasServiceLife = *u.ServiceLife
 	}
+	if u.ReorderSet {
+		p.ReorderToCenti = u.ReorderTo
+	}
+	// A new kind must still fit the specs, and a new minimum must not pass the restock target.
+	if u.Kind != nil || u.SpecsSet {
+		if err := validateSpecsForKind(p.Kind, p.Specs); err != nil {
+			return Part{}, err
+		}
+	}
+	if err := validReorderTo(p.ReorderToCenti, p.MinStockCenti); err != nil {
+		return Part{}, err
+	}
 	return p, nil
 }
 
@@ -217,9 +255,19 @@ type StockMovement struct {
 	Reason        string
 	Note          *string
 	OccurredAt    time.Time
+	// UnitCostCents is the price paid per unit, only on a purchase.
+	UnitCostCents *int32
+	// LossReason says why a unit was lost; required on, and only valid for, StockLost.
+	LossReason string
 }
 
-func NewStockMovement(partID uuid.UUID, qtyDeltaCenti int64, reason string, note *string, occurredAt time.Time) (StockMovement, error) {
+// MovementDetails are the optional fields of a stock movement.
+type MovementDetails struct {
+	UnitCostCents *int32
+	LossReason    string
+}
+
+func NewStockMovement(partID uuid.UUID, qtyDeltaCenti int64, reason string, note *string, occurredAt time.Time, details MovementDetails) (StockMovement, error) {
 	if _, ok := stockReasons[reason]; !ok {
 		return StockMovement{}, fmt.Errorf("%w: stock reason", ErrInvalid)
 	}
@@ -236,6 +284,12 @@ func NewStockMovement(partID uuid.UUID, qtyDeltaCenti int64, reason string, note
 			return StockMovement{}, fmt.Errorf("%w: stock sign", ErrInvalid)
 		}
 	}
+	if details.UnitCostCents != nil && (reason != StockPurchase || *details.UnitCostCents < 0) {
+		return StockMovement{}, fmt.Errorf("%w: stock unit cost", ErrInvalid)
+	}
+	if (reason == StockLost) != (details.LossReason != "") || (details.LossReason != "" && !ValidLossReason(details.LossReason)) {
+		return StockMovement{}, fmt.Errorf("%w: loss reason", ErrInvalid)
+	}
 	note, err := optionalString(note, maxNote)
 	if err != nil {
 		return StockMovement{}, err
@@ -243,7 +297,14 @@ func NewStockMovement(partID uuid.UUID, qtyDeltaCenti int64, reason string, note
 	if occurredAt.IsZero() {
 		return StockMovement{}, fmt.Errorf("%w: stock time", ErrInvalid)
 	}
-	return StockMovement{PartID: partID, QtyDeltaCenti: qtyDeltaCenti, Reason: reason, Note: note, OccurredAt: occurredAt.UTC()}, nil
+	return StockMovement{
+		PartID: partID, QtyDeltaCenti: qtyDeltaCenti, Reason: reason, Note: note, OccurredAt: occurredAt.UTC(),
+		UnitCostCents: details.UnitCostCents, LossReason: details.LossReason,
+	}, nil
+}
+
+func ValidLossReason(reason string) bool {
+	return reason == LossBroken || reason == LossWorn || reason == LossLost || reason == LossExpired
 }
 
 func ValidPartKind(kind string) bool      { _, ok := partKinds[kind]; return ok }

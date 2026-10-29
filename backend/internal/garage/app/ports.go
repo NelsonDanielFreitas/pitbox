@@ -48,6 +48,12 @@ type Store interface {
 	OpenMountForCar(ctx context.Context, tx db.DBTX, team, car uuid.UUID) (domain.EngineMount, bool, error)
 	CreateMount(ctx context.Context, tx db.DBTX, team, user uuid.UUID, m domain.EngineMount) (domain.EngineMount, error)
 	CloseMount(ctx context.Context, tx db.DBTX, team, id uuid.UUID) error
+	ListShoppingList(ctx context.Context, tx db.DBTX, team, after uuid.UUID, limit int32) ([]domain.ShoppingLine, error)
+	GetShoppingItemForUpdate(ctx context.Context, tx db.DBTX, team, part uuid.UUID) (domain.ShoppingItem, bool, error)
+	CreateShoppingItem(ctx context.Context, tx db.DBTX, team, user uuid.UUID, item domain.ShoppingItem) (domain.ShoppingItem, error)
+	UpdateShoppingItem(ctx context.Context, tx db.DBTX, team uuid.UUID, item domain.ShoppingItem) (domain.ShoppingItem, error)
+	DeleteShoppingItemForPart(ctx context.Context, tx db.DBTX, team, part uuid.UUID) (bool, error)
+	ClearDismissedShoppingItem(ctx context.Context, tx db.DBTX, team, part uuid.UUID) error
 	CreatePartInstall(ctx context.Context, tx db.DBTX, team, user uuid.UUID, in domain.NewInstall) (domain.PartInstall, error)
 	GetPartInstallForUpdate(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.PartInstall, error)
 	ClosePartInstall(ctx context.Context, tx db.DBTX, team, id uuid.UUID, removal domain.Removal) (domain.PartInstall, error)

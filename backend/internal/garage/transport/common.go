@@ -236,3 +236,35 @@ func specsFromProto(v *structpb.Struct) map[string]any {
 	}
 	return v.AsMap()
 }
+
+func lossReasonToProto(r string) garagev1.LossReason {
+	switch r {
+	case domain.LossBroken:
+		return garagev1.LossReason_LOSS_REASON_BROKEN
+	case domain.LossWorn:
+		return garagev1.LossReason_LOSS_REASON_WORN
+	case domain.LossLost:
+		return garagev1.LossReason_LOSS_REASON_LOST
+	case domain.LossExpired:
+		return garagev1.LossReason_LOSS_REASON_EXPIRED
+	}
+	return garagev1.LossReason_LOSS_REASON_UNSPECIFIED
+}
+
+// lossReasonFromProto maps UNSPECIFIED to "" (no reason); the domain decides whether the
+// stock reason needs one.
+func lossReasonFromProto(r garagev1.LossReason) (string, error) {
+	switch r {
+	case garagev1.LossReason_LOSS_REASON_UNSPECIFIED:
+		return "", nil
+	case garagev1.LossReason_LOSS_REASON_BROKEN:
+		return domain.LossBroken, nil
+	case garagev1.LossReason_LOSS_REASON_WORN:
+		return domain.LossWorn, nil
+	case garagev1.LossReason_LOSS_REASON_LOST:
+		return domain.LossLost, nil
+	case garagev1.LossReason_LOSS_REASON_EXPIRED:
+		return domain.LossExpired, nil
+	}
+	return "", domain.ErrInvalid
+}

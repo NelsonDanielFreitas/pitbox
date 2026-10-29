@@ -119,7 +119,8 @@ export const ListShoppingListResponseSchema: GenMessage<ListShoppingListResponse
 
 /**
  * SetShoppingItem adds a manual line, adjusts the quantity or note of a line, or brings
- * back a hidden one. expected_version is 0 when no line is stored yet, else the line's
+ * back a hidden one. It replaces the stored quantity and note: no qty_centi means "use the
+ * suggestion". expected_version is 0 when no line is stored yet, else the line's
  * item_version; a mismatch is a conflict. A manual line needs a quantity.
  *
  * @generated from message pitbox.garage.v1.SetShoppingItemRequest

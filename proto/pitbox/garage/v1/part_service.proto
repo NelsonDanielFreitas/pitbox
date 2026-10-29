@@ -154,7 +154,13 @@ message CreatePartRequest {
   }];
   string unit = 7 [(buf.validate.field).string = {
     max_len: 16
-    in: ["", "un", "ml", "l", "g"]
+    in: [
+      "",
+      "un",
+      "ml",
+      "l",
+      "g"
+    ]
   }];
   google.protobuf.Struct specs = 8;
   int64 min_stock_centi = 9 [(buf.validate.field).int64 = {
@@ -190,7 +196,13 @@ message UpdatePartRequest {
   string description = 8 [(buf.validate.field).string.max_len = 200];
   string unit = 9 [(buf.validate.field).string = {
     max_len: 16
-    in: ["", "un", "ml", "l", "g"]
+    in: [
+      "",
+      "un",
+      "ml",
+      "l",
+      "g"
+    ]
   }];
   google.protobuf.Struct specs = 10;
   int64 min_stock_centi = 11 [(buf.validate.field).int64 = {

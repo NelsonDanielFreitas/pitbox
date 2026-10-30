@@ -31,6 +31,26 @@ func (q *Queries) CloseMount(ctx context.Context, arg CloseMountParams) (uuid.UU
 	return id, err
 }
 
+const closeMountAt = `-- name: CloseMountAt :execrows
+UPDATE garage.engine_mount
+SET unmounted_at = $3
+WHERE team_id = $1 AND id = $2 AND unmounted_at IS NULL
+`
+
+type CloseMountAtParams struct {
+	TeamID      uuid.UUID
+	ID          uuid.UUID
+	UnmountedAt *time.Time
+}
+
+func (q *Queries) CloseMountAt(ctx context.Context, arg CloseMountAtParams) (int64, error) {
+	result, err := q.db.Exec(ctx, closeMountAt, arg.TeamID, arg.ID, arg.UnmountedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createMount = `-- name: CreateMount :one
 INSERT INTO garage.engine_mount (team_id, engine_id, car_id, mounted_at, created_by)
 VALUES ($1, $2, $3, clock_timestamp(), $4)
@@ -62,6 +82,83 @@ func (q *Queries) CreateMount(ctx context.Context, arg CreateMountParams) (Creat
 		arg.CreatedBy,
 	)
 	var i CreateMountRow
+	err := row.Scan(
+		&i.ID,
+		&i.EngineID,
+		&i.CarID,
+		&i.MountedAt,
+		&i.UnmountedAt,
+	)
+	return i, err
+}
+
+const createMountWithID = `-- name: CreateMountWithID :one
+INSERT INTO garage.engine_mount (id, team_id, engine_id, car_id, mounted_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, engine_id, car_id, mounted_at, unmounted_at
+`
+
+type CreateMountWithIDParams struct {
+	ID        uuid.UUID
+	TeamID    uuid.UUID
+	EngineID  uuid.UUID
+	CarID     uuid.UUID
+	MountedAt time.Time
+	CreatedBy *uuid.UUID
+}
+
+type CreateMountWithIDRow struct {
+	ID          uuid.UUID
+	EngineID    uuid.UUID
+	CarID       uuid.UUID
+	MountedAt   time.Time
+	UnmountedAt *time.Time
+}
+
+// The synced variants: the device chose the id and the times (the caller has clamped them).
+func (q *Queries) CreateMountWithID(ctx context.Context, arg CreateMountWithIDParams) (CreateMountWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createMountWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.EngineID,
+		arg.CarID,
+		arg.MountedAt,
+		arg.CreatedBy,
+	)
+	var i CreateMountWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.EngineID,
+		&i.CarID,
+		&i.MountedAt,
+		&i.UnmountedAt,
+	)
+	return i, err
+}
+
+const getMountByID = `-- name: GetMountByID :one
+SELECT id, engine_id, car_id, mounted_at, unmounted_at
+FROM garage.engine_mount
+WHERE team_id = $1 AND id = $2
+`
+
+type GetMountByIDParams struct {
+	TeamID uuid.UUID
+	ID     uuid.UUID
+}
+
+type GetMountByIDRow struct {
+	ID          uuid.UUID
+	EngineID    uuid.UUID
+	CarID       uuid.UUID
+	MountedAt   time.Time
+	UnmountedAt *time.Time
+}
+
+// No lock: Pull reads in a read-only transaction.
+func (q *Queries) GetMountByID(ctx context.Context, arg GetMountByIDParams) (GetMountByIDRow, error) {
+	row := q.db.QueryRow(ctx, getMountByID, arg.TeamID, arg.ID)
+	var i GetMountByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.EngineID,

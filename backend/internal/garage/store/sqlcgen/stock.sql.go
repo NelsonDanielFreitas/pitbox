@@ -72,6 +72,69 @@ func (q *Queries) CreateStockMovement(ctx context.Context, arg CreateStockMoveme
 	return i, err
 }
 
+const createStockMovementWithID = `-- name: CreateStockMovementWithID :one
+INSERT INTO garage.stock_movement (
+  id, team_id, part_id, qty_delta, reason, note, occurred_at, created_by, unit_cost_cents, loss_reason
+)
+VALUES ($1, $2, $3, ($4::bigint::numeric / 100), $5::garage.stock_reason, $6, $7, $8,
+        $9::integer, $10::garage.loss_reason)
+RETURNING id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
+          reason::text AS reason, note, occurred_at, unit_cost_cents, COALESCE(loss_reason::text, '')::text AS loss_reason
+`
+
+type CreateStockMovementWithIDParams struct {
+	ID            uuid.UUID
+	TeamID        uuid.UUID
+	PartID        uuid.UUID
+	Column4       int64
+	Column5       GarageStockReason
+	Note          *string
+	OccurredAt    time.Time
+	CreatedBy     *uuid.UUID
+	UnitCostCents pgtype.Int4
+	LossReason    NullGarageLossReason
+}
+
+type CreateStockMovementWithIDRow struct {
+	ID            uuid.UUID
+	PartID        uuid.UUID
+	QtyDeltaCenti int64
+	Reason        string
+	Note          *string
+	OccurredAt    time.Time
+	UnitCostCents pgtype.Int4
+	LossReason    string
+}
+
+// The synced variant: the device chose the id (UUIDv7, the sync entity id) and the time the
+// movement happened. The caller has already clamped occurred_at to a sane window.
+func (q *Queries) CreateStockMovementWithID(ctx context.Context, arg CreateStockMovementWithIDParams) (CreateStockMovementWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createStockMovementWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.PartID,
+		arg.Column4,
+		arg.Column5,
+		arg.Note,
+		arg.OccurredAt,
+		arg.CreatedBy,
+		arg.UnitCostCents,
+		arg.LossReason,
+	)
+	var i CreateStockMovementWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.QtyDeltaCenti,
+		&i.Reason,
+		&i.Note,
+		&i.OccurredAt,
+		&i.UnitCostCents,
+		&i.LossReason,
+	)
+	return i, err
+}
+
 const getPartStockCenti = `-- name: GetPartStockCenti :one
 SELECT (COALESCE(sum(qty_delta), 0) * 100)::bigint
 FROM garage.stock_movement

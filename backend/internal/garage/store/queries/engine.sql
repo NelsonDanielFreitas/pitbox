@@ -43,3 +43,13 @@ SELECT EXISTS (
   SELECT 1 FROM garage.engine
   WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
 );
+
+-- The device generates the id (UUIDv7) so an offline record keeps it after syncing.
+-- name: CreateEngineWithID :one
+INSERT INTO garage.engine (
+  id, team_id, make, model, serial_number, purchased_on, status, notes, created_by
+)
+VALUES ($1, $2, $3, $4, $5, $6::date, $7::garage.asset_status, $8, $9)
+RETURNING id, make, model, serial_number, COALESCE(purchased_on::text, '')::text AS purchased_on,
+          status::text AS status, (tanks_total * 100)::bigint AS tanks_centi,
+          run_seconds_total, sessions_total, notes, created_at, version;

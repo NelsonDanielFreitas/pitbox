@@ -37,3 +37,20 @@ FROM garage.engine_mount
 WHERE team_id = $1 AND engine_id = $2 AND id < $3
 ORDER BY id DESC
 LIMIT $4;
+
+-- The synced variants: the device chose the id and the times (the caller has clamped them).
+-- name: CreateMountWithID :one
+INSERT INTO garage.engine_mount (id, team_id, engine_id, car_id, mounted_at, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, engine_id, car_id, mounted_at, unmounted_at;
+
+-- name: CloseMountAt :execrows
+UPDATE garage.engine_mount
+SET unmounted_at = $3
+WHERE team_id = $1 AND id = $2 AND unmounted_at IS NULL;
+
+-- No lock: Pull reads in a read-only transaction.
+-- name: GetMountByID :one
+SELECT id, engine_id, car_id, mounted_at, unmounted_at
+FROM garage.engine_mount
+WHERE team_id = $1 AND id = $2;

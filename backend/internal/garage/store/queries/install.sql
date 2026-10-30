@@ -34,3 +34,24 @@ WHERE team_id = $1
   AND id < sqlc.arg('after')
 ORDER BY id DESC
 LIMIT sqlc.arg('row_limit');
+
+-- The synced variants: the device chose the id and the times (the caller has validated them).
+-- name: CreatePartInstallWithID :one
+INSERT INTO garage.part_install (id, team_id, part_id, car_id, engine_id, installed_at, created_by)
+VALUES ($1, $2, $3, sqlc.narg('car_id'), sqlc.narg('engine_id'), $4, $5)
+RETURNING id, part_id, car_id, engine_id, installed_at, removed_at,
+          removal_destination, removal_reason, run_seconds, sessions, version;
+
+-- name: ClosePartInstallAt :one
+UPDATE garage.part_install
+SET removed_at = $4, removal_destination = $3, removal_reason = sqlc.narg('removal_reason')
+WHERE team_id = $1 AND id = $2 AND removed_at IS NULL
+RETURNING id, part_id, car_id, engine_id, installed_at, removed_at,
+          removal_destination, removal_reason, run_seconds, sessions, version;
+
+-- No lock: Pull reads in a read-only transaction.
+-- name: GetPartInstall :one
+SELECT id, part_id, car_id, engine_id, installed_at, removed_at,
+       removal_destination, removal_reason, run_seconds, sessions, version
+FROM garage.part_install
+WHERE team_id = $1 AND id = $2;

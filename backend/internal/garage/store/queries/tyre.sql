@@ -45,3 +45,12 @@ SELECT EXISTS (
   SELECT 1 FROM garage.tyre_set
   WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
 );
+
+-- name: CreateTyreSetWithID :one
+INSERT INTO garage.tyre_set (
+  id, team_id, label, make, model, compound, insert_type, glued_on, status, wear_notes, created_by
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::garage.tyre_status, $10, $11)
+RETURNING id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
+          status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,
+          tyre_part_id, insert_part_id;

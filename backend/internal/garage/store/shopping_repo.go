@@ -88,3 +88,58 @@ func (Repo) ClearDismissedShoppingItem(ctx context.Context, tx db.DBTX, team, pa
 	}
 	return nil
 }
+
+// --- synced shopping lines (addressed by their own id, F1-13) ----------------------------
+
+func shoppingItemFrom(id, part uuid.UUID, qty int64, dismissed bool, note *string, version int32) domain.ShoppingItem {
+	return domain.ShoppingItem{ID: id, PartID: part, QtyCenti: optionalCenti(qty), Dismissed: dismissed, Note: note, Version: version}
+}
+
+func (Repo) GetShoppingItemByID(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.ShoppingItem, error) {
+	row, err := sqlcgen.New(tx).GetShoppingItemByID(ctx, sqlcgen.GetShoppingItemByIDParams{TeamID: team, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ShoppingItem{}, fmt.Errorf("get shopping item: %w", domain.ErrNotFound)
+	}
+	if err != nil {
+		return domain.ShoppingItem{}, fmt.Errorf("get shopping item: %w", err)
+	}
+	return shoppingItemFrom(row.ID, row.PartID, row.QtyCenti, row.Dismissed, row.Note, row.Version), nil
+}
+
+// CreateShoppingItemWithID: the device chose the id. A second line for the same part hits
+// shopping_item_team_id_part_id_key and is reported as ErrAlreadyExists.
+func (Repo) CreateShoppingItemWithID(ctx context.Context, tx db.DBTX, team, user, id uuid.UUID, item domain.ShoppingItem) (domain.ShoppingItem, error) {
+	row, err := sqlcgen.New(tx).CreateShoppingItemWithID(ctx, sqlcgen.CreateShoppingItemWithIDParams{
+		ID: id, TeamID: team, PartID: item.PartID, Dismissed: item.Dismissed, CreatedBy: &user,
+		QtyCenti: int8p(item.QtyCenti), Note: item.Note,
+	})
+	if err != nil {
+		return domain.ShoppingItem{}, mapError("create shopping item", err)
+	}
+	return shoppingItemFrom(row.ID, row.PartID, row.QtyCenti, row.Dismissed, row.Note, row.Version), nil
+}
+
+func (Repo) UpdateShoppingItemByID(ctx context.Context, tx db.DBTX, team uuid.UUID, item domain.ShoppingItem) (domain.ShoppingItem, error) {
+	row, err := sqlcgen.New(tx).UpdateShoppingItemByID(ctx, sqlcgen.UpdateShoppingItemByIDParams{
+		TeamID: team, ID: item.ID, Dismissed: item.Dismissed, Version: item.Version,
+		QtyCenti: int8p(item.QtyCenti), Note: item.Note,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ShoppingItem{}, domain.ErrConflict
+	}
+	if err != nil {
+		return domain.ShoppingItem{}, mapError("update shopping item", err)
+	}
+	return shoppingItemFrom(row.ID, row.PartID, row.QtyCenti, row.Dismissed, row.Note, row.Version), nil
+}
+
+func (Repo) DeleteShoppingItemByID(ctx context.Context, tx db.DBTX, team, id uuid.UUID, version int32) error {
+	n, err := sqlcgen.New(tx).DeleteShoppingItemByID(ctx, sqlcgen.DeleteShoppingItemByIDParams{TeamID: team, ID: id, Version: version})
+	if err != nil {
+		return fmt.Errorf("delete shopping item: %w", err)
+	}
+	if n == 0 {
+		return domain.ErrConflict
+	}
+	return nil
+}

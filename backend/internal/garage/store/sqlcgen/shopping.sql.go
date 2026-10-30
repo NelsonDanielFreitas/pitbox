@@ -78,6 +78,71 @@ func (q *Queries) CreateShoppingItem(ctx context.Context, arg CreateShoppingItem
 	return i, err
 }
 
+const createShoppingItemWithID = `-- name: CreateShoppingItemWithID :one
+INSERT INTO garage.shopping_item (id, team_id, part_id, qty, dismissed, note, created_by)
+VALUES ($1, $2, $3, ($6::bigint::numeric / 100), $4, $7, $5)
+RETURNING id, part_id, COALESCE((qty * 100)::bigint, -1)::bigint AS qty_centi, dismissed, note, version
+`
+
+type CreateShoppingItemWithIDParams struct {
+	ID        uuid.UUID
+	TeamID    uuid.UUID
+	PartID    uuid.UUID
+	Dismissed bool
+	CreatedBy *uuid.UUID
+	QtyCenti  pgtype.Int8
+	Note      *string
+}
+
+type CreateShoppingItemWithIDRow struct {
+	ID        uuid.UUID
+	PartID    uuid.UUID
+	QtyCenti  int64
+	Dismissed bool
+	Note      *string
+	Version   int32
+}
+
+func (q *Queries) CreateShoppingItemWithID(ctx context.Context, arg CreateShoppingItemWithIDParams) (CreateShoppingItemWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createShoppingItemWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.PartID,
+		arg.Dismissed,
+		arg.CreatedBy,
+		arg.QtyCenti,
+		arg.Note,
+	)
+	var i CreateShoppingItemWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.QtyCenti,
+		&i.Dismissed,
+		&i.Note,
+		&i.Version,
+	)
+	return i, err
+}
+
+const deleteShoppingItemByID = `-- name: DeleteShoppingItemByID :execrows
+DELETE FROM garage.shopping_item WHERE team_id = $1 AND id = $2 AND version = $3
+`
+
+type DeleteShoppingItemByIDParams struct {
+	TeamID  uuid.UUID
+	ID      uuid.UUID
+	Version int32
+}
+
+func (q *Queries) DeleteShoppingItemByID(ctx context.Context, arg DeleteShoppingItemByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteShoppingItemByID, arg.TeamID, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteShoppingItemForPart = `-- name: DeleteShoppingItemForPart :execrows
 DELETE FROM garage.shopping_item WHERE team_id = $1 AND part_id = $2
 `
@@ -93,6 +158,42 @@ func (q *Queries) DeleteShoppingItemForPart(ctx context.Context, arg DeleteShopp
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const getShoppingItemByID = `-- name: GetShoppingItemByID :one
+SELECT id, part_id, COALESCE((qty * 100)::bigint, -1)::bigint AS qty_centi, dismissed, note, version
+FROM garage.shopping_item
+WHERE team_id = $1 AND id = $2
+`
+
+type GetShoppingItemByIDParams struct {
+	TeamID uuid.UUID
+	ID     uuid.UUID
+}
+
+type GetShoppingItemByIDRow struct {
+	ID        uuid.UUID
+	PartID    uuid.UUID
+	QtyCenti  int64
+	Dismissed bool
+	Note      *string
+	Version   int32
+}
+
+// The synced variants address a line by its own id (the sync entity id), not by its part.
+// No lock: Pull reads in a read-only transaction, and the writes below check the version.
+func (q *Queries) GetShoppingItemByID(ctx context.Context, arg GetShoppingItemByIDParams) (GetShoppingItemByIDRow, error) {
+	row := q.db.QueryRow(ctx, getShoppingItemByID, arg.TeamID, arg.ID)
+	var i GetShoppingItemByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.QtyCenti,
+		&i.Dismissed,
+		&i.Note,
+		&i.Version,
+	)
+	return i, err
 }
 
 const getShoppingItemForUpdate = `-- name: GetShoppingItemForUpdate :one
@@ -240,6 +341,52 @@ func (q *Queries) UpdateShoppingItem(ctx context.Context, arg UpdateShoppingItem
 		arg.Note,
 	)
 	var i UpdateShoppingItemRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.QtyCenti,
+		&i.Dismissed,
+		&i.Note,
+		&i.Version,
+	)
+	return i, err
+}
+
+const updateShoppingItemByID = `-- name: UpdateShoppingItemByID :one
+UPDATE garage.shopping_item
+SET qty = ($5::bigint::numeric / 100), dismissed = $3, note = $6
+WHERE team_id = $1 AND id = $2 AND version = $4
+RETURNING id, part_id, COALESCE((qty * 100)::bigint, -1)::bigint AS qty_centi, dismissed, note, version
+`
+
+type UpdateShoppingItemByIDParams struct {
+	TeamID    uuid.UUID
+	ID        uuid.UUID
+	Dismissed bool
+	Version   int32
+	QtyCenti  pgtype.Int8
+	Note      *string
+}
+
+type UpdateShoppingItemByIDRow struct {
+	ID        uuid.UUID
+	PartID    uuid.UUID
+	QtyCenti  int64
+	Dismissed bool
+	Note      *string
+	Version   int32
+}
+
+func (q *Queries) UpdateShoppingItemByID(ctx context.Context, arg UpdateShoppingItemByIDParams) (UpdateShoppingItemByIDRow, error) {
+	row := q.db.QueryRow(ctx, updateShoppingItemByID,
+		arg.TeamID,
+		arg.ID,
+		arg.Dismissed,
+		arg.Version,
+		arg.QtyCenti,
+		arg.Note,
+	)
+	var i UpdateShoppingItemByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.PartID,

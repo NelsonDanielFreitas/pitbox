@@ -87,6 +87,24 @@ func (Repo) CreateCar(ctx context.Context, tx db.DBTX, team, user uuid.UUID, c d
 	return carFromCreate(row), nil
 }
 
+// CreateCarWithID creates a car with an id chosen by the caller (the sync layer: the device
+// generates it). An id that already exists is ErrAlreadyExists.
+func (Repo) CreateCarWithID(ctx context.Context, tx db.DBTX, team, user, id uuid.UUID, c domain.Car) (domain.Car, error) {
+	row, err := sqlcgen.New(tx).CreateCarWithID(ctx, sqlcgen.CreateCarWithIDParams{
+		ID: id, TeamID: team, Make: c.Make, Model: c.Model, ModelYear: int2(c.ModelYear),
+		SerialNumber: c.SerialNumber, Nickname: c.Nickname, TransponderNumber: c.TransponderNumber,
+		Column9: sqlcgen.GarageAssetStatus(c.Status), Scale: c.Scale, Powertrain: c.Powertrain,
+		Notes: c.Notes, CreatedBy: &user,
+	})
+	if err != nil {
+		return domain.Car{}, mapError("create car", err)
+	}
+	return domain.Car{ID: row.ID, Make: row.Make, Model: row.Model, ModelYear: ptrInt2(row.ModelYear),
+		SerialNumber: row.SerialNumber, Nickname: row.Nickname, TransponderNumber: row.TransponderNumber,
+		Status: row.Status, Scale: row.Scale, Powertrain: row.Powertrain, Notes: row.Notes,
+		CreatedAt: row.CreatedAt, Version: row.Version}, nil
+}
+
 func (Repo) GetCar(ctx context.Context, tx db.DBTX, team uuid.UUID, id uuid.UUID) (domain.Car, error) {
 	row, err := sqlcgen.New(tx).GetCar(ctx, sqlcgen.GetCarParams{TeamID: team, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -175,6 +193,20 @@ func (Repo) CreateEngine(ctx context.Context, tx db.DBTX, team, user uuid.UUID, 
 	return engineFromCreate(row), nil
 }
 
+// CreateEngineWithID creates an engine with an id chosen by the caller (the sync layer: the
+// device generates it). An id that already exists is ErrAlreadyExists.
+func (Repo) CreateEngineWithID(ctx context.Context, tx db.DBTX, team, user, id uuid.UUID, e domain.Engine) (domain.Engine, error) {
+	row, err := sqlcgen.New(tx).CreateEngineWithID(ctx, sqlcgen.CreateEngineWithIDParams{
+		ID: id, TeamID: team, Make: e.Make, Model: e.Model, SerialNumber: e.SerialNumber,
+		Column6: date(e.PurchasedOn), Column7: sqlcgen.GarageAssetStatus(e.Status),
+		Notes: e.Notes, CreatedBy: &user,
+	})
+	if err != nil {
+		return domain.Engine{}, mapError("create engine", err)
+	}
+	return engineFromCreate(sqlcgen.CreateEngineRow(row)), nil
+}
+
 func (Repo) GetEngine(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Engine, error) {
 	row, err := sqlcgen.New(tx).GetEngine(ctx, sqlcgen.GetEngineParams{TeamID: team, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -236,6 +268,20 @@ func (Repo) CreateTyreSet(ctx context.Context, tx db.DBTX, team, user uuid.UUID,
 		return domain.TyreSet{}, mapError("create tyre set", err)
 	}
 	return tyreFromCreate(row), nil
+}
+
+// CreateTyreSetWithID: see CreateEngineWithID. Sets made from stock parts (glue) are not
+// created this way; the part references stay empty.
+func (Repo) CreateTyreSetWithID(ctx context.Context, tx db.DBTX, team, user, id uuid.UUID, t domain.TyreSet) (domain.TyreSet, error) {
+	row, err := sqlcgen.New(tx).CreateTyreSetWithID(ctx, sqlcgen.CreateTyreSetWithIDParams{
+		ID: id, TeamID: team, Label: t.Label, Make: t.Make, Model: t.Model, Compound: t.Compound,
+		InsertType: t.InsertType, Column8: date(t.GluedOn), Column9: sqlcgen.GarageTyreStatus(t.Status),
+		WearNotes: t.WearNotes, CreatedBy: &user,
+	})
+	if err != nil {
+		return domain.TyreSet{}, mapError("create tyre set", err)
+	}
+	return tyreFromCreate(sqlcgen.CreateTyreSetRow(row)), nil
 }
 
 func (Repo) GetTyreSet(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.TyreSet, error) {
@@ -304,6 +350,24 @@ func (Repo) CreatePart(ctx context.Context, tx db.DBTX, team, user uuid.UUID, p 
 		return domain.Part{}, mapError("create part", err)
 	}
 	return partFromCreate(row), nil
+}
+
+// CreatePartWithID: see CreateEngineWithID.
+func (Repo) CreatePartWithID(ctx context.Context, tx db.DBTX, team, user, id uuid.UUID, p domain.Part) (domain.Part, error) {
+	specs, err := json.Marshal(p.Specs)
+	if err != nil {
+		return domain.Part{}, fmt.Errorf("create part: %w", domain.ErrInvalid)
+	}
+	row, err := sqlcgen.New(tx).CreatePartWithID(ctx, sqlcgen.CreatePartWithIDParams{
+		ID: id, TeamID: team, Column3: sqlcgen.GaragePartKind(p.Kind), Brand: p.Brand, Reference: p.Reference,
+		Description: p.Description, Unit: p.Unit, Column8: specs, Column9: p.MinStockCenti,
+		UnitCostCents: int4(p.UnitCostCents), Currency: p.Currency, HasServiceLife: p.HasServiceLife,
+		CreatedBy: &user, ReorderToCenti: int8p(p.ReorderToCenti),
+	})
+	if err != nil {
+		return domain.Part{}, mapError("create part", err)
+	}
+	return partFromCreate(sqlcgen.CreatePartRow(row)), nil
 }
 
 func (Repo) GetPart(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Part, error) {
@@ -393,6 +457,33 @@ func (Repo) CreateStockMovement(ctx context.Context, tx db.DBTX, team, user uuid
 		return domain.StockMovement{}, mapError("create stock movement", err)
 	}
 	return movementFromCreate(row), nil
+}
+
+// CreateStockMovementWithID: the device chose the id and the time (already clamped by the caller).
+func (Repo) CreateStockMovementWithID(ctx context.Context, tx db.DBTX, team, user, id uuid.UUID, m domain.StockMovement) (domain.StockMovement, error) {
+	row, err := sqlcgen.New(tx).CreateStockMovementWithID(ctx, sqlcgen.CreateStockMovementWithIDParams{
+		ID: id, TeamID: team, PartID: m.PartID, Column4: m.QtyDeltaCenti,
+		Column5: sqlcgen.GarageStockReason(m.Reason), Note: m.Note, OccurredAt: m.OccurredAt, CreatedBy: &user,
+		UnitCostCents: int4(m.UnitCostCents), LossReason: lossReason(m.LossReason),
+	})
+	if err != nil {
+		return domain.StockMovement{}, mapError("create stock movement", err)
+	}
+	return domain.StockMovement{ID: row.ID, PartID: row.PartID, QtyDeltaCenti: row.QtyDeltaCenti, Reason: row.Reason, Note: row.Note,
+		OccurredAt: row.OccurredAt, UnitCostCents: ptrInt4(row.UnitCostCents), LossReason: row.LossReason}, nil
+}
+
+// GetStockMovement reads one movement of the team (not found is domain.ErrNotFound).
+func (Repo) GetStockMovement(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.StockMovement, error) {
+	row, err := sqlcgen.New(tx).GetStockMovement(ctx, sqlcgen.GetStockMovementParams{TeamID: team, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.StockMovement{}, fmt.Errorf("get stock movement: %w", domain.ErrNotFound)
+	}
+	if err != nil {
+		return domain.StockMovement{}, fmt.Errorf("get stock movement: %w", err)
+	}
+	return domain.StockMovement{ID: row.ID, PartID: row.PartID, QtyDeltaCenti: row.QtyDeltaCenti, Reason: row.Reason, Note: row.Note,
+		OccurredAt: row.OccurredAt, UnitCostCents: ptrInt4(row.UnitCostCents), LossReason: row.LossReason}, nil
 }
 
 func (Repo) ListStockMovements(ctx context.Context, tx db.DBTX, team, part, after uuid.UUID, limit int32) ([]domain.StockMovement, error) {
@@ -762,7 +853,8 @@ func mapError(op string, err error) error {
 		switch pgErr.Code {
 		case "23505":
 			switch pgErr.ConstraintName {
-			case "car_transponder_uq", "tyre_set_label_uq":
+			case "car_transponder_uq", "tyre_set_label_uq", "car_pkey", "engine_pkey", "tyre_set_pkey", "part_pkey",
+				"stock_movement_pkey", "engine_mount_pkey", "part_install_pkey", "shopping_item_pkey", "shopping_item_team_id_part_id_key":
 				return fmt.Errorf("%s: %w", op, domain.ErrAlreadyExists)
 			}
 		case "23503":

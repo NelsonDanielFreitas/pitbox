@@ -98,6 +98,92 @@ func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (CreateP
 	return i, err
 }
 
+const createPartWithID = `-- name: CreatePartWithID :one
+INSERT INTO garage.part (
+  id, team_id, kind, brand, reference, description, unit, specs, min_stock,
+  unit_cost_cents, currency, has_service_life, created_by, reorder_to
+)
+VALUES (
+  $1, $2, $3::garage.part_kind, $4, $5, $6, $7, $8::jsonb,
+  ($9::bigint::numeric / 100), $10, $11, $12, $13,
+  ($14::bigint::numeric / 100)
+)
+RETURNING id, kind::text AS kind, brand, reference, description, unit, specs::text AS specs,
+          (min_stock * 100)::bigint AS min_stock_centi, unit_cost_cents, currency,
+          has_service_life, COALESCE((reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, created_at, version
+`
+
+type CreatePartWithIDParams struct {
+	ID             uuid.UUID
+	TeamID         uuid.UUID
+	Column3        GaragePartKind
+	Brand          *string
+	Reference      *string
+	Description    string
+	Unit           string
+	Column8        []byte
+	Column9        int64
+	UnitCostCents  pgtype.Int4
+	Currency       string
+	HasServiceLife bool
+	CreatedBy      *uuid.UUID
+	ReorderToCenti pgtype.Int8
+}
+
+type CreatePartWithIDRow struct {
+	ID             uuid.UUID
+	Kind           string
+	Brand          *string
+	Reference      *string
+	Description    string
+	Unit           string
+	Specs          string
+	MinStockCenti  int64
+	UnitCostCents  pgtype.Int4
+	Currency       string
+	HasServiceLife bool
+	ReorderToCenti int64
+	CreatedAt      time.Time
+	Version        int32
+}
+
+func (q *Queries) CreatePartWithID(ctx context.Context, arg CreatePartWithIDParams) (CreatePartWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createPartWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.Column3,
+		arg.Brand,
+		arg.Reference,
+		arg.Description,
+		arg.Unit,
+		arg.Column8,
+		arg.Column9,
+		arg.UnitCostCents,
+		arg.Currency,
+		arg.HasServiceLife,
+		arg.CreatedBy,
+		arg.ReorderToCenti,
+	)
+	var i CreatePartWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Brand,
+		&i.Reference,
+		&i.Description,
+		&i.Unit,
+		&i.Specs,
+		&i.MinStockCenti,
+		&i.UnitCostCents,
+		&i.Currency,
+		&i.HasServiceLife,
+		&i.ReorderToCenti,
+		&i.CreatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const getPart = `-- name: GetPart :one
 SELECT p.id, p.kind::text AS kind, p.brand, p.reference, p.description, p.unit,
        p.specs::text AS specs, (p.min_stock * 100)::bigint AS min_stock_centi,

@@ -381,16 +381,37 @@ func (s *Service) ListStockMovements(ctx context.Context, user db.UserID, team d
 // transaction: a purchase removes the part's line, and a hidden line is dropped once the
 // part is back at its minimum so the alert works again next time.
 func (s *Service) afterStockChange(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain.Part, purchase bool) error {
+	return afterStockChange(ctx, tx, s.store, team, part, purchase)
+}
+
+func afterStockChange(ctx context.Context, tx db.DBTX, st Store, team uuid.UUID, part domain.Part, purchase bool) error {
 	if purchase {
-		if _, err := s.store.DeleteShoppingItemForPart(ctx, tx, team, part.ID); err != nil {
+		if _, err := st.DeleteShoppingItemForPart(ctx, tx, team, part.ID); err != nil {
 			return err
 		}
 		return nil
 	}
 	if !part.BelowMin {
-		return s.store.ClearDismissedShoppingItem(ctx, tx, team, part.ID)
+		return st.ClearDismissedShoppingItem(ctx, tx, team, part.ID)
 	}
 	return nil
+}
+
+// AfterSyncedMovement is what AddStockMovement does after inserting a movement, for a
+// movement that arrived through sync: it raises the "stock low" event when the part crossed
+// its minimum, then keeps the shopping list in step. `before` is the part's stock (in
+// hundredths) read under the part lock before the insert.
+func AfterSyncedMovement(ctx context.Context, tx db.DBTX, st Store, team, partID, movementID uuid.UUID, before int64, purchase bool) error {
+	part, err := st.GetPart(ctx, tx, team, partID)
+	if err != nil {
+		return err
+	}
+	if before >= part.MinStockCenti && part.QtyCenti < part.MinStockCenti {
+		if err := recordStockLow(ctx, tx, team, part, movementID); err != nil {
+			return err
+		}
+	}
+	return afterStockChange(ctx, tx, st, team, part, purchase)
 }
 
 func recordStockLow(ctx context.Context, tx db.DBTX, team uuid.UUID, part domain.Part, movementID uuid.UUID) error {

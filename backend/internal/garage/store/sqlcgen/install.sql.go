@@ -66,6 +66,61 @@ func (q *Queries) ClosePartInstall(ctx context.Context, arg ClosePartInstallPara
 	return i, err
 }
 
+const closePartInstallAt = `-- name: ClosePartInstallAt :one
+UPDATE garage.part_install
+SET removed_at = $4, removal_destination = $3, removal_reason = $5
+WHERE team_id = $1 AND id = $2 AND removed_at IS NULL
+RETURNING id, part_id, car_id, engine_id, installed_at, removed_at,
+          removal_destination, removal_reason, run_seconds, sessions, version
+`
+
+type ClosePartInstallAtParams struct {
+	TeamID             uuid.UUID
+	ID                 uuid.UUID
+	RemovalDestination *string
+	RemovedAt          *time.Time
+	RemovalReason      *string
+}
+
+type ClosePartInstallAtRow struct {
+	ID                 uuid.UUID
+	PartID             uuid.UUID
+	CarID              *uuid.UUID
+	EngineID           *uuid.UUID
+	InstalledAt        time.Time
+	RemovedAt          *time.Time
+	RemovalDestination *string
+	RemovalReason      *string
+	RunSeconds         int32
+	Sessions           int32
+	Version            int32
+}
+
+func (q *Queries) ClosePartInstallAt(ctx context.Context, arg ClosePartInstallAtParams) (ClosePartInstallAtRow, error) {
+	row := q.db.QueryRow(ctx, closePartInstallAt,
+		arg.TeamID,
+		arg.ID,
+		arg.RemovalDestination,
+		arg.RemovedAt,
+		arg.RemovalReason,
+	)
+	var i ClosePartInstallAtRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.CarID,
+		&i.EngineID,
+		&i.InstalledAt,
+		&i.RemovedAt,
+		&i.RemovalDestination,
+		&i.RemovalReason,
+		&i.RunSeconds,
+		&i.Sessions,
+		&i.Version,
+	)
+	return i, err
+}
+
 const createPartInstall = `-- name: CreatePartInstall :one
 INSERT INTO garage.part_install (team_id, part_id, car_id, engine_id, installed_at, created_by)
 VALUES ($1, $2, $4, $5, COALESCE($6::timestamptz, clock_timestamp()), $3)
@@ -108,6 +163,111 @@ func (q *Queries) CreatePartInstall(ctx context.Context, arg CreatePartInstallPa
 		arg.InstalledAt,
 	)
 	var i CreatePartInstallRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.CarID,
+		&i.EngineID,
+		&i.InstalledAt,
+		&i.RemovedAt,
+		&i.RemovalDestination,
+		&i.RemovalReason,
+		&i.RunSeconds,
+		&i.Sessions,
+		&i.Version,
+	)
+	return i, err
+}
+
+const createPartInstallWithID = `-- name: CreatePartInstallWithID :one
+INSERT INTO garage.part_install (id, team_id, part_id, car_id, engine_id, installed_at, created_by)
+VALUES ($1, $2, $3, $6, $7, $4, $5)
+RETURNING id, part_id, car_id, engine_id, installed_at, removed_at,
+          removal_destination, removal_reason, run_seconds, sessions, version
+`
+
+type CreatePartInstallWithIDParams struct {
+	ID          uuid.UUID
+	TeamID      uuid.UUID
+	PartID      uuid.UUID
+	InstalledAt time.Time
+	CreatedBy   *uuid.UUID
+	CarID       *uuid.UUID
+	EngineID    *uuid.UUID
+}
+
+type CreatePartInstallWithIDRow struct {
+	ID                 uuid.UUID
+	PartID             uuid.UUID
+	CarID              *uuid.UUID
+	EngineID           *uuid.UUID
+	InstalledAt        time.Time
+	RemovedAt          *time.Time
+	RemovalDestination *string
+	RemovalReason      *string
+	RunSeconds         int32
+	Sessions           int32
+	Version            int32
+}
+
+// The synced variants: the device chose the id and the times (the caller has validated them).
+func (q *Queries) CreatePartInstallWithID(ctx context.Context, arg CreatePartInstallWithIDParams) (CreatePartInstallWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createPartInstallWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.PartID,
+		arg.InstalledAt,
+		arg.CreatedBy,
+		arg.CarID,
+		arg.EngineID,
+	)
+	var i CreatePartInstallWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.PartID,
+		&i.CarID,
+		&i.EngineID,
+		&i.InstalledAt,
+		&i.RemovedAt,
+		&i.RemovalDestination,
+		&i.RemovalReason,
+		&i.RunSeconds,
+		&i.Sessions,
+		&i.Version,
+	)
+	return i, err
+}
+
+const getPartInstall = `-- name: GetPartInstall :one
+SELECT id, part_id, car_id, engine_id, installed_at, removed_at,
+       removal_destination, removal_reason, run_seconds, sessions, version
+FROM garage.part_install
+WHERE team_id = $1 AND id = $2
+`
+
+type GetPartInstallParams struct {
+	TeamID uuid.UUID
+	ID     uuid.UUID
+}
+
+type GetPartInstallRow struct {
+	ID                 uuid.UUID
+	PartID             uuid.UUID
+	CarID              *uuid.UUID
+	EngineID           *uuid.UUID
+	InstalledAt        time.Time
+	RemovedAt          *time.Time
+	RemovalDestination *string
+	RemovalReason      *string
+	RunSeconds         int32
+	Sessions           int32
+	Version            int32
+}
+
+// No lock: Pull reads in a read-only transaction.
+func (q *Queries) GetPartInstall(ctx context.Context, arg GetPartInstallParams) (GetPartInstallRow, error) {
+	row := q.db.QueryRow(ctx, getPartInstall, arg.TeamID, arg.ID)
+	var i GetPartInstallRow
 	err := row.Scan(
 		&i.ID,
 		&i.PartID,

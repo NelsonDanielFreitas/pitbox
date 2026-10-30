@@ -109,6 +109,86 @@ func (q *Queries) CreateCar(ctx context.Context, arg CreateCarParams) (CreateCar
 	return i, err
 }
 
+const createCarWithID = `-- name: CreateCarWithID :one
+INSERT INTO garage.car (
+  id, team_id, make, model, model_year, serial_number, nickname, transponder_number,
+  status, scale, powertrain, notes, created_by
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9::garage.asset_status, $10, $11, $12, $13
+)
+RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
+          status::text AS status, scale, powertrain, notes, created_at, version
+`
+
+type CreateCarWithIDParams struct {
+	ID                uuid.UUID
+	TeamID            uuid.UUID
+	Make              string
+	Model             string
+	ModelYear         pgtype.Int2
+	SerialNumber      *string
+	Nickname          *string
+	TransponderNumber *string
+	Column9           GarageAssetStatus
+	Scale             string
+	Powertrain        string
+	Notes             *string
+	CreatedBy         *uuid.UUID
+}
+
+type CreateCarWithIDRow struct {
+	ID                uuid.UUID
+	Make              string
+	Model             string
+	ModelYear         pgtype.Int2
+	SerialNumber      *string
+	Nickname          *string
+	TransponderNumber *string
+	Status            string
+	Scale             string
+	Powertrain        string
+	Notes             *string
+	CreatedAt         time.Time
+	Version           int32
+}
+
+// The device generates the id (UUIDv7) so an offline record keeps it after syncing.
+func (q *Queries) CreateCarWithID(ctx context.Context, arg CreateCarWithIDParams) (CreateCarWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createCarWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.Make,
+		arg.Model,
+		arg.ModelYear,
+		arg.SerialNumber,
+		arg.Nickname,
+		arg.TransponderNumber,
+		arg.Column9,
+		arg.Scale,
+		arg.Powertrain,
+		arg.Notes,
+		arg.CreatedBy,
+	)
+	var i CreateCarWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Make,
+		&i.Model,
+		&i.ModelYear,
+		&i.SerialNumber,
+		&i.Nickname,
+		&i.TransponderNumber,
+		&i.Status,
+		&i.Scale,
+		&i.Powertrain,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const getCar = `-- name: GetCar :one
 SELECT id, make, model, model_year, serial_number, nickname, transponder_number,
        status::text AS status, scale, powertrain, notes, created_at, version

@@ -43,3 +43,15 @@ SELECT EXISTS (
   SELECT 1 FROM garage.car
   WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
 );
+
+-- The device generates the id (UUIDv7) so an offline record keeps it after syncing.
+-- name: CreateCarWithID :one
+INSERT INTO garage.car (
+  id, team_id, make, model, model_year, serial_number, nickname, transponder_number,
+  status, scale, powertrain, notes, created_by
+)
+VALUES (
+  $1, $2, $3, $4, $5, $6, $7, $8, $9::garage.asset_status, $10, $11, $12, $13
+)
+RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
+          status::text AS status, scale, powertrain, notes, created_at, version;

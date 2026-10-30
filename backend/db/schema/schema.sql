@@ -423,7 +423,12 @@ CREATE TABLE garage.tyre_set (
   updated_at          timestamptz NOT NULL DEFAULT now(),
   version             integer     NOT NULL DEFAULT 1,
   deleted_at          timestamptz,
-  UNIQUE (team_id, id)
+  tyre_part_id        uuid,                                   -- peças de onde o conjunto foi colado
+  insert_part_id      uuid,
+  UNIQUE (team_id, id),
+  CONSTRAINT tyre_set_parts_differ_ck CHECK (
+    tyre_part_id IS NULL OR insert_part_id IS NULL OR tyre_part_id <> insert_part_id
+  )
 );
 CREATE UNIQUE INDEX tyre_set_label_uq ON garage.tyre_set (team_id, label)
   WHERE deleted_at IS NULL AND status <> 'retired';
@@ -454,6 +459,13 @@ CREATE TABLE garage.part (
   CONSTRAINT part_unit_ck CHECK (unit IN ('un', 'ml', 'l', 'g'))
 );
 CREATE INDEX part_team_kind_idx ON garage.part (team_id, kind) WHERE deleted_at IS NULL;
+
+-- tyre_set é criada antes de part: as ligações ao stock de onde o conjunto foi colado ficam aqui.
+ALTER TABLE garage.tyre_set
+  ADD CONSTRAINT tyre_set_tyre_part_fk FOREIGN KEY (team_id, tyre_part_id)
+    REFERENCES garage.part (team_id, id) ON DELETE SET NULL (tyre_part_id),
+  ADD CONSTRAINT tyre_set_insert_part_fk FOREIGN KEY (team_id, insert_part_id)
+    REFERENCES garage.part (team_id, id) ON DELETE SET NULL (insert_part_id);
 
 -- Movimentos de stock (só acrescento). O stock atual é a soma — ver garage.stock_level.
 CREATE TABLE garage.stock_movement (

@@ -233,6 +233,29 @@ DO $$ BEGIN
   ASSERT (SELECT count(*) FROM sync.change_log WHERE entity = 'garage.shopping_item') = 2, 'shopping_item entra no change log';
 END $$;
 
+-- Conjunto de pneus colado a partir do stock (F1-07d)
+INSERT INTO garage.part (id, team_id, kind, description)
+VALUES ('01900000-0000-7000-8000-0000000000f5', app.current_team_id(), 'tyre', 'Pneus 1/8 TT'),
+       ('01900000-0000-7000-8000-0000000000f6', app.current_team_id(), 'insert', 'Insertos 1/8 TT');
+DO $$ BEGIN
+  INSERT INTO garage.tyre_set (id, team_id, label, make, model, tyre_part_id, insert_part_id)
+  VALUES ('01900000-0000-7000-8000-0000000000f7', app.current_team_id(), 'J4', 'Pneus', 'T', '01900000-0000-7000-8000-0000000000f5', '01900000-0000-7000-8000-0000000000f6');
+  BEGIN
+    INSERT INTO garage.tyre_set (team_id, label, make, model, tyre_part_id, insert_part_id)
+    VALUES (app.current_team_id(), 'J5', 'Pneus', 'T', '01900000-0000-7000-8000-0000000000f5', '01900000-0000-7000-8000-0000000000f5');
+    RAISE EXCEPTION 'FALHOU: a mesma peça como pneus e insertos';
+  EXCEPTION WHEN check_violation THEN NULL; END;
+  BEGIN
+    INSERT INTO garage.tyre_set (team_id, label, make, model, tyre_part_id)
+    VALUES (app.current_team_id(), 'J6', 'Pneus', 'T', '01900000-0000-7000-8000-0000000000ff');
+    RAISE EXCEPTION 'FALHOU: peça inexistente';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+  -- SET NULL só anula a coluna da ligação, nunca o team_id
+  DELETE FROM garage.part WHERE id = '01900000-0000-7000-8000-0000000000f5';
+  ASSERT (SELECT tyre_part_id IS NULL AND insert_part_id IS NOT NULL AND team_id IS NOT NULL
+          FROM garage.tyre_set WHERE id = '01900000-0000-7000-8000-0000000000f7'), 'ON DELETE SET NULL só da coluna da ligação';
+END $$;
+
 -- Vistas
 DO $$ BEGIN
   ASSERT (SELECT best_lap_ms FROM events.session_lap_stats) = 41000, 'melhor volta';
@@ -289,6 +312,15 @@ DO $$ BEGIN
     VALUES ('01900000-0000-7000-8000-0000000000a1', '01900000-0000-7000-8000-0000000000f1');
     RAISE EXCEPTION 'FALHOU: linha da lista noutra equipa';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+
+-- B não consegue ligar um conjunto seu a uma peça de A (FK composta)
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO garage.tyre_set (team_id, label, make, model, insert_part_id)
+    VALUES (app.current_team_id(), 'J4', 'Pneus', 'T', '01900000-0000-7000-8000-0000000000f6');
+    RAISE EXCEPTION 'FALHOU: conjunto com peça de outra equipa';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
 END $$;
 
 -- UPDATE/DELETE em massa não tocam em A

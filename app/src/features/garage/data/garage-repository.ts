@@ -5,11 +5,22 @@ import type {
   Engine,
   EngineInput,
   EngineMount,
+  CountDraft,
   EngineWithMount,
+  InstallFilter,
+  InstallPartInput,
   Part,
+  PartInstall,
   PartCreateInput,
   PartInput,
+  PartKind,
   PartWithStock,
+  ReadScope,
+  RemovePartInput,
+  ShoppingLine,
+  StockChange,
+  StockMovement,
+  StockMovementInput,
   TyreSet,
   TyreSetInput,
 } from "../domain/models";
@@ -45,8 +56,9 @@ export interface GarageRepository {
     input: TyreSetInput,
   ): Promise<TyreSet>;
 
-  listParts(teamId: string): Promise<PartWithStock[]>;
-  getPart(teamId: string, id: string): Promise<PartWithStock | undefined>;
+  /** Costs are only read when `scope.costs` is true (owners and mechanics). */
+  listParts(teamId: string, scope?: ReadScope): Promise<PartWithStock[]>;
+  getPart(teamId: string, id: string, scope?: ReadScope): Promise<PartWithStock | undefined>;
   createPart(teamId: string, input: PartCreateInput): Promise<PartWithStock>;
   updatePart(
     teamId: string,
@@ -54,6 +66,49 @@ export interface GarageRepository {
     localRev: number,
     input: PartInput,
   ): Promise<PartWithStock>;
+  archivePart(teamId: string, id: string, localRev: number): Promise<void>;
+
+  listStockMovements(
+    teamId: string,
+    partId: string,
+    scope?: ReadScope,
+  ): Promise<StockMovement[]>;
+  addStockMovement(teamId: string, input: StockMovementInput): Promise<StockChange>;
+  /** Appends the inverse adjustment of a movement; the original stays in the history. */
+  undoMovement(
+    teamId: string,
+    movementId: string,
+    undo: { occurredOn: string; note: string; createdBy: string | null },
+  ): Promise<StockChange>;
+
+  /** Active installs, or the whole history when `history` is true. */
+  listPartInstalls(teamId: string, filter: InstallFilter, history?: boolean): Promise<PartInstall[]>;
+  /** Mounts one unit and writes the `installed` movement in the same transaction. */
+  installPart(teamId: string, input: InstallPartInput): Promise<StockChange>;
+  /** Closes an install; destination `stock` also returns the unit to the stock. */
+  removePart(teamId: string, installId: string, input: RemovePartInput): Promise<void>;
+
+  getCountDraft(teamId: string): Promise<CountDraft | null>;
+  /** Opens a draft (a no-op when one is already open) and returns it. */
+  startCount(teamId: string, scopeKind: PartKind | null): Promise<CountDraft>;
+  /** Sets the counted quantity of a part; `null` removes the line. */
+  setCountLine(teamId: string, partId: string, countedCenti: number | null): Promise<void>;
+  discardCount(teamId: string): Promise<void>;
+  /**
+   * Turns the draft into one `adjustment` per part whose counted value differs from the
+   * current stock, in one transaction, and deletes the draft. Returns how many were made.
+   */
+  applyCount(
+    teamId: string,
+    apply: { occurredOn: string; note: string; createdBy: string | null },
+  ): Promise<number>;
+
+  /** Parts below the minimum plus the lines added by hand, minus the hidden ones. */
+  listShoppingList(teamId: string, scope?: ReadScope): Promise<ShoppingLine[]>;
+  /** Adds a line, changes its quantity or brings a hidden one back; `null` uses the suggestion. */
+  setShoppingItem(teamId: string, partId: string, qtyCenti: number | null): Promise<void>;
+  /** Deletes a manual line, or hides an automatic one until the stock is back at the minimum. */
+  removeShoppingItem(teamId: string, partId: string): Promise<void>;
 }
 
 export type { CarSummary, Part, Engine };

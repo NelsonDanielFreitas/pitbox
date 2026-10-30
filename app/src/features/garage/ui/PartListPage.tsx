@@ -1,19 +1,22 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import type { TeamRole } from "@/features/teams/domain/team";
 import { Badge } from "@/shared/ui/Badge";
+import { SearchInput } from "@/shared/ui/SearchInput";
 import { ErrorState } from "@/shared/ui/ErrorState";
 import { Spinner } from "@/shared/ui/Spinner";
 import { cn } from "@/shared/lib/cn";
+import { normalizeSearch } from "@/shared/lib/normalize-search";
 
-import { partsQueryOptions } from "../data/garage-queries";
+import { countDraftQueryOptions, partsQueryOptions } from "../data/garage-queries";
 import type { GarageRepository } from "../data/garage-repository";
 import { formatQuantity } from "../domain/format";
 import { partKinds, type PartWithStock } from "../domain/models";
-import { canWriteGarage } from "../domain/roles";
+import { canSeeCosts, canWriteGarage } from "../domain/roles";
+import { CountScopeSheet } from "./CountScopeSheet";
 import { GarageEmpty, GaragePageHeader } from "./common";
 
 export function PartListPage({
@@ -26,14 +29,31 @@ export function PartListPage({
   repository: GarageRepository;
 }) {
   const { t, i18n } = useTranslation();
-  const parts = useQuery(partsQueryOptions(repository, teamId));
+  const parts = useQuery(partsQueryOptions(repository, teamId, { costs: canSeeCosts(role) }));
   const [filter, setFilter] = useState<"all" | "low">("all");
+  const [search, setSearch] = useState("");
+  const draft = useQuery(countDraftQueryOptions(repository, teamId));
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const navigate = useNavigate();
+  const openCount = () => void navigate({ to: "/teams/$teamId/garage/parts/count", params: { teamId } });
   const canWrite = canWriteGarage(role);
 
   const lowCount = parts.data?.filter((part) => part.belowMin).length ?? 0;
   const visible = useMemo(
-    () => (parts.data ?? []).filter((part) => filter === "all" || part.belowMin),
-    [parts.data, filter],
+    () => {
+      const needle = normalizeSearch(search);
+      return (parts.data ?? []).filter(
+        (part) =>
+          (filter === "all" || part.belowMin) &&
+          (needle === "" ||
+            normalizeSearch(
+              [part.description, part.brand, part.reference, t(`garage.kinds.${part.kind}`)]
+                .filter(Boolean)
+                .join(" "),
+            ).includes(needle)),
+      );
+    },
+    [parts.data, filter, search, t],
   );
   const groups = useMemo(() => groupParts(visible), [visible]);
 
@@ -54,6 +74,46 @@ export function PartListPage({
           ) : null
         }
       />
+      <div className="mb-3">
+        <Link
+          to="/teams/$teamId/garage/shopping"
+          params={{ teamId }}
+          className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 text-sm font-semibold text-fg"
+        >
+          <span>{t("garage.shopping.open")}</span>
+          {lowCount > 0 ? <span className="tabular-nums text-warn">{lowCount}</span> : null}
+        </Link>
+      </div>
+      {canWrite ? (
+        <div className="mb-3">
+          {draft.data ? (
+            <Link
+              to="/teams/$teamId/garage/parts/count"
+              params={{ teamId }}
+              className="flex min-h-12 items-center justify-between gap-3 rounded-2xl border border-warn/40 bg-warn/10 px-4 text-sm font-semibold text-fg"
+            >
+              <span>{t("garage.count.pending")}</span>
+              <span className="text-primary">{t("garage.count.resume")}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setScopeOpen(true)}
+              className="flex min-h-12 w-full items-center justify-center rounded-2xl border border-line bg-surface px-4 text-sm font-semibold text-fg"
+            >
+              {t("garage.count.title")}
+            </button>
+          )}
+        </div>
+      ) : null}
+      <div className="mb-3">
+        <SearchInput
+          label={t("garage.search")}
+          placeholder={t("garage.search")}
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </div>
       <div className="mb-4 flex gap-2" role="group" aria-label={t("garage.sections.stock")}>
         <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
           {t("garage.all")}
@@ -135,6 +195,15 @@ export function PartListPage({
           ))}
         </div>
       )}
+      {canWrite ? (
+        <CountScopeSheet
+          open={scopeOpen}
+          onClose={() => setScopeOpen(false)}
+          onStarted={openCount}
+          teamId={teamId}
+          repository={repository}
+        />
+      ) : null}
     </>
   );
 }

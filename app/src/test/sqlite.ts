@@ -6,6 +6,7 @@ import { MemoryVFS } from "wa-sqlite/src/examples/MemoryVFS.js";
 import * as SQLite from "wa-sqlite";
 
 import { LocalConstraintError } from "@/db/errors";
+import { databasePragmas } from "@/db/pragmas";
 import type { SqlParams, SqlStatement } from "@/db/protocol";
 import type { SqlExecutor } from "@/db/migrations/runner";
 import { runMigrations } from "@/db/migrations/runner";
@@ -103,6 +104,8 @@ export class NodeSqliteExecutor implements SqlExecutor {
 
 export async function openTestDatabase(): Promise<NodeSqliteExecutor> {
   const db = await NodeSqliteExecutor.create();
+  // Same pragmas as the worker, so foreign keys are enforced in tests too.
+  for (const pragma of databasePragmas) await db.exec(pragma);
   await runMigrations(db, migrations);
   return db;
 }

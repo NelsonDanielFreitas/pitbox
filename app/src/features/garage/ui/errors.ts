@@ -11,7 +11,10 @@ type ErrorKey =
   | "garage.conflicts.retired"
   | "garage.conflicts.constraint"
   | "garage.conflicts.notFound"
-  | "garage.conflicts.busy";
+  | "garage.conflicts.busy"
+  | "garage.conflicts.undone"
+  | "garage.conflicts.installClosed"
+  | "garage.conflicts.notServiceable";
 
 export function garageErrorMessage(t: TFunction, error: unknown): string {
   let key: ErrorKey = "garage.conflicts.generic";
@@ -34,6 +37,15 @@ export function garageErrorMessage(t: TFunction, error: unknown): string {
         break;
       case "constraint":
         key = "garage.conflicts.constraint";
+        break;
+      case "undone":
+        key = "garage.conflicts.undone";
+        break;
+      case "install_closed":
+        key = "garage.conflicts.installClosed";
+        break;
+      case "not_serviceable":
+        key = "garage.conflicts.notServiceable";
         break;
     }
   } else if (error instanceof GarageNotFoundError) {

@@ -9,6 +9,13 @@ const validationKeys = [
   "garage.validation.status",
   "garage.validation.partKind",
   "garage.validation.unit",
+  "garage.validation.price",
+  "garage.validation.reorderBelowMin",
+  "garage.validation.spec",
+  "garage.validation.reason",
+  "garage.validation.dateFuture",
+  "garage.validation.lossReason",
+  "garage.validation.priceOnlyPurchase",
 ] as const;
 export type ValidationKey = (typeof validationKeys)[number];
 

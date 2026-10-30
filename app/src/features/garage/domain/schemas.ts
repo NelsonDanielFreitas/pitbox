@@ -1,6 +1,18 @@
 import { z } from "zod";
 
-import { MAX_STOCK_CENTI, partKinds, partUnits } from "./models";
+import {
+  lossReasons,
+  removalDestinations,
+  scrapReasons,
+  MAX_STOCK_CENTI,
+  partKinds,
+  partUnits,
+  stockReasons,
+  type PartUnit,
+  type StockMovementInput,
+} from "./models";
+import { parseSpecInputs } from "./specs";
+import { reasonSign } from "./stock";
 
 const requiredText = (max: number) =>
   z
@@ -119,6 +131,35 @@ export const tyreFormSchema = z.object({
 export type TyreFormValues = z.input<typeof tyreFormSchema>;
 export type TyreFormOutput = z.output<typeof tyreFormSchema>;
 
+const optionalCenti = z
+  .string()
+  .trim()
+  .refine((value) => value === "" || /^\d+([.,]\d{0,2})?$/.test(value), {
+    message: "garage.validation.quantity",
+  })
+  .transform((value) =>
+    value === "" ? null : Math.round(Number(value.replace(",", ".")) * 100),
+  )
+  .pipe(
+    z
+      .number()
+      .int({ message: "garage.validation.quantity" })
+      .min(0, { message: "garage.validation.quantity" })
+      .max(MAX_STOCK_CENTI, { message: "garage.validation.quantity" })
+      .nullable(),
+  );
+
+/** Money typed in euros (at most two decimals), kept as integer cents. */
+const optionalEuros = z
+  .string()
+  .trim()
+  .refine((value) => value === "" || /^\d{1,7}([.,]\d{1,2})?$/.test(value), {
+    message: "garage.validation.price",
+  })
+  .transform((value) =>
+    value === "" ? null : Math.round(Number(value.replace(",", ".")) * 100),
+  );
+
 const partBaseSchema = z.object({
   kind: partKind,
   brand: optionalText(80),
@@ -126,26 +167,40 @@ const partBaseSchema = z.object({
   description: requiredText(200),
   unit: partUnit,
   minStock: nonNegativeCenti,
+  reorderTo: optionalCenti,
+  specs: z.record(z.string(), z.string()),
+  unitCost: optionalEuros,
   hasServiceLife: z.boolean(),
 });
 
 const refinePartUnit = (
-  value: { unit: string; minStock: number; initialQty?: number },
+  value: {
+    kind: string;
+    unit: string;
+    minStock: number;
+    reorderTo: number | null;
+    specs: Record<string, string>;
+    initialQty?: number;
+  },
   ctx: z.RefinementCtx,
 ) => {
-  if (value.unit !== "un") return;
-  if (value.minStock % 100 !== 0) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["minStock"],
-      message: "garage.validation.wholeUnit",
-    });
+  const whole = (path: string, centi: number | null | undefined) => {
+    if (value.unit === "un" && centi != null && centi % 100 !== 0) {
+      ctx.addIssue({ code: "custom", path: [path], message: "garage.validation.wholeUnit" });
+    }
+  };
+  whole("minStock", value.minStock);
+  whole("reorderTo", value.reorderTo);
+  whole("initialQty", value.initialQty);
+  if (value.reorderTo !== null && value.reorderTo < value.minStock) {
+    ctx.addIssue({ code: "custom", path: ["reorderTo"], message: "garage.validation.reorderBelowMin" });
   }
-  if (value.initialQty !== undefined && value.initialQty % 100 !== 0) {
+  const parsed = parseSpecInputs(value.kind as (typeof partKinds)[number], value.specs);
+  if (parsed.error) {
     ctx.addIssue({
       code: "custom",
-      path: ["initialQty"],
-      message: "garage.validation.wholeUnit",
+      path: ["specs", parsed.error.key],
+      message: "garage.validation.spec",
     });
   }
 };
@@ -160,6 +215,77 @@ export type PartFormValues = z.input<typeof partFormSchema>;
 export type PartFormOutput = z.output<typeof partFormSchema>;
 export type PartUpdateFormValues = z.input<typeof partUpdateFormSchema>;
 export type PartUpdateFormOutput = z.output<typeof partUpdateFormSchema>;
+
+export interface MovementFormContext {
+  unit: PartUnit;
+  /** Today as yyyy-mm-dd in the user's calendar; a movement cannot be in the future. */
+  today: string;
+}
+
+/** Form for a stock movement; the rules depend on the part unit and on today's date. */
+export function movementFormSchema({ unit, today }: MovementFormContext) {
+  return z
+    .object({
+      reason: z.enum(stockReasons, { error: "garage.validation.reason" }),
+      direction: z.enum(["in", "out"]),
+      qty: z
+        .string()
+        .trim()
+        .regex(/^\d+([.,]\d{0,2})?$/, { message: "garage.validation.quantity" }),
+      lossReason: z.union([z.enum(lossReasons), z.literal("")]),
+      price: optionalEuros,
+      store: optionalText(80),
+      date: z
+        .string()
+        .trim()
+        .refine(isIsoDate, { message: "garage.validation.date" })
+        .refine((value) => value <= today, { message: "garage.validation.dateFuture" }),
+      note: optionalText(500),
+    })
+    .superRefine((value, ctx) => {
+      const centi = Math.round(Number(value.qty.replace(",", ".")) * 100);
+      if (!Number.isFinite(centi) || centi <= 0 || centi > MAX_STOCK_CENTI) {
+        ctx.addIssue({ code: "custom", path: ["qty"], message: "garage.validation.quantity" });
+      } else if (unit === "un" && centi % 100 !== 0) {
+        ctx.addIssue({ code: "custom", path: ["qty"], message: "garage.validation.wholeUnit" });
+      }
+      if ((value.reason === "lost") !== (value.lossReason !== "")) {
+        ctx.addIssue({ code: "custom", path: ["lossReason"], message: "garage.validation.lossReason" });
+      }
+      if (value.reason !== "purchase") {
+        if (value.price !== null) {
+          ctx.addIssue({ code: "custom", path: ["price"], message: "garage.validation.priceOnlyPurchase" });
+        }
+        if (value.store !== null) {
+          ctx.addIssue({ code: "custom", path: ["store"], message: "garage.validation.priceOnlyPurchase" });
+        }
+      }
+    });
+}
+
+export type MovementFormValues = z.input<ReturnType<typeof movementFormSchema>>;
+export type MovementFormOutput = z.output<ReturnType<typeof movementFormSchema>>;
+
+/** Maps validated form output to the repository input. */
+export function toMovementInput(
+  partId: string,
+  value: MovementFormOutput,
+  createdBy: string | null,
+): StockMovementInput {
+  const centi = Math.round(Number(value.qty.replace(",", ".")) * 100);
+  const sign = reasonSign[value.reason] || (value.direction === "in" ? 1 : -1);
+  return {
+    partId,
+    reason: value.reason,
+    qtyDeltaCenti: sign * centi,
+    lossReason: value.lossReason === "" ? null : value.lossReason,
+    unitCostCents: value.reason === "purchase" ? value.price : null,
+    store: value.reason === "purchase" ? value.store : null,
+    occurredOn: value.date,
+    note: value.note,
+    createdBy,
+  };
+}
 
 const nullableString = z.string().nullable();
 const sqliteBool = z.union([z.literal(0), z.literal(1)]);
@@ -249,6 +375,19 @@ export const tyreSetRowSchema = z
   })
   .strict();
 
+const specsText = z.string().transform((text, ctx) => {
+  try {
+    const parsed = z
+      .record(z.string(), z.union([z.string(), z.number()]))
+      .safeParse(JSON.parse(text));
+    if (parsed.success) return parsed.data;
+  } catch {
+    // Falls through to the issue below.
+  }
+  ctx.addIssue({ code: "custom", message: "invalid part specs" });
+  return z.NEVER;
+});
+
 export const partRowSchema = z
   .object({
     id: z.uuid(),
@@ -258,7 +397,10 @@ export const partRowSchema = z
     reference: nullableString,
     description: z.string(),
     unit: partUnit,
+    specs: specsText,
     min_stock_centi: z.number().int().nonnegative(),
+    reorder_to_centi: z.number().int().nonnegative().nullable(),
+    unit_cost_cents: z.number().int().nonnegative().nullable().optional(),
     has_service_life: sqliteBool,
     created_at: z.string(),
     updated_at: z.string(),
@@ -266,5 +408,77 @@ export const partRowSchema = z
     local_rev: z.number().int().nonnegative(),
     qty_centi: z.number().int(),
     below_min: sqliteBool,
+  })
+  .strict();
+
+export const stockMovementRowSchema = z
+  .object({
+    id: z.uuid(),
+    part_id: z.uuid(),
+    qty_delta_centi: z.number().int(),
+    reason: z.enum(stockReasons),
+    loss_reason: z.enum(lossReasons).nullable(),
+    note: nullableString,
+    store: nullableString,
+    unit_cost_cents: z.number().int().nonnegative().nullable().optional(),
+    occurred_at: z.string(),
+    created_at: z.string(),
+    created_by: nullableString,
+    reverts_movement_id: nullableString,
+    undone: sqliteBool,
+    /** Stock of the part right after the movement; only the write queries select it. */
+    part_qty_centi: z.number().int().optional(),
+    part_min_stock_centi: z.number().int().optional(),
+  })
+  .strict();
+
+export const partInstallRowSchema = z
+  .object({
+    id: z.uuid(),
+    part_id: z.uuid(),
+    part_kind: z.enum(partKinds),
+    part_description: z.string(),
+    part_brand: nullableString,
+    part_reference: nullableString,
+    car_id: nullableString,
+    engine_id: nullableString,
+    target_name: z.string(),
+    installed_at: z.string(),
+    removed_at: nullableString,
+    removal_destination: z.enum(removalDestinations).nullable(),
+    removal_reason: z.enum(scrapReasons).nullable(),
+    run_seconds: z.number().int().nonnegative(),
+    sessions: z.number().int().nonnegative(),
+    note: nullableString,
+  })
+  .strict();
+
+export const countDraftRowSchema = z
+  .object({
+    scope_kind: z.enum(partKinds).nullable(),
+    started_at: z.string(),
+    movements_since: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const countLineRowSchema = z
+  .object({ part_id: z.uuid(), counted_centi: z.number().int().nonnegative() })
+  .strict();
+
+export const shoppingLineRowSchema = z
+  .object({
+    part_id: z.uuid(),
+    kind: z.enum(partKinds),
+    description: z.string(),
+    brand: nullableString,
+    reference: nullableString,
+    unit: partUnit,
+    stock_centi: z.number().int(),
+    min_stock_centi: z.number().int().nonnegative(),
+    reorder_to_centi: z.number().int().nonnegative().nullable(),
+    below_min: sqliteBool,
+    item_qty_centi: z.number().int().positive().nullable(),
+    item_note: nullableString,
+    unit_cost_cents: z.number().int().nonnegative().nullable().optional(),
   })
   .strict();

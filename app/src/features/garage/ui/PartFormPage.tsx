@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useWatch } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 
+import { useSession } from "@/auth/session-query";
 import type { TeamRole } from "@/features/teams/domain/team";
 import { Button } from "@/shared/ui/Button";
 import { ErrorState } from "@/shared/ui/ErrorState";
@@ -17,8 +18,9 @@ import { TextInput } from "@/shared/ui/TextInput";
 
 import { partQueryOptions, partsQueryOptions } from "../data/garage-queries";
 import type { GarageRepository } from "../data/garage-repository";
-import { centiToInput } from "../domain/format";
-import { canWriteGarage } from "../domain/roles";
+import { centiToInput, unitLabel } from "../domain/format";
+import { canSeeCosts, canWriteGarage } from "../domain/roles";
+import { parseSpecInputs, specFieldsFor, specInputsFrom } from "../domain/specs";
 import {
   partFormSchema,
   type PartFormOutput,
@@ -27,39 +29,51 @@ import {
 import { GarageForbidden, GaragePageHeader } from "./common";
 import { garageErrorMessage } from "./errors";
 
-const emptyValues: PartFormValues = {
+const emptyValues = (description = ""): PartFormValues => ({
   kind: "glow_plug",
   brand: "",
   reference: "",
-  description: "",
+  description,
   unit: "un",
   minStock: "0",
+  reorderTo: "",
+  specs: {},
+  unitCost: "",
   initialQty: "",
   hasServiceLife: false,
-};
+});
 
 export function PartFormPage({
   teamId,
   role,
   repository,
   partId,
+  prefillDescription,
+  thenShopping = false,
 }: {
   teamId: string;
   role: TeamRole;
   repository: GarageRepository;
   partId?: string;
+  /** Description typed in the shopping list search, when the part does not exist yet. */
+  prefillDescription?: string | undefined;
+  /** After creating, put the new part on the shopping list and go back to it. */
+  thenShopping?: boolean;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const canWrite = canWriteGarage(role);
+  const costs = canSeeCosts(role);
+  const session = useSession();
+  const userId = session.data?.authenticated ? session.data.user_id : null;
   const isEdit = partId !== undefined;
   const part = useQuery({
-    ...partQueryOptions(repository, teamId, partId ?? ""),
+    ...partQueryOptions(repository, teamId, partId ?? "", { costs }),
     enabled: isEdit,
   });
   const parts = useQuery({
-    ...partsQueryOptions(repository, teamId),
+    ...partsQueryOptions(repository, teamId, { costs }),
     enabled: !isEdit,
   });
   const {
@@ -71,12 +85,14 @@ export function PartFormPage({
     formState: { errors, isSubmitting },
   } = useForm<PartFormValues, unknown, PartFormOutput>({
     resolver: zodResolver(partFormSchema),
-    defaultValues: emptyValues,
+    defaultValues: emptyValues(prefillDescription),
     mode: "onTouched",
     reValidateMode: "onChange",
     shouldFocusError: true,
   });
   const unit = useWatch({ control, name: "unit" });
+  const kind = useWatch({ control, name: "kind" });
+  const specFields = specFieldsFor(kind);
   const loadedRef = useRef<string | undefined>(undefined);
   const prefilledRef = useRef(false);
 
@@ -90,6 +106,15 @@ export function PartFormPage({
         description: part.data.description,
         unit: part.data.unit,
         minStock: centiToInput(part.data.minStockCenti, part.data.unit),
+        reorderTo:
+          part.data.reorderToCenti === null
+            ? ""
+            : centiToInput(part.data.reorderToCenti, part.data.unit),
+        specs: specInputsFrom(part.data.kind, part.data.specs),
+        unitCost:
+          part.data.unitCostCents == null
+            ? ""
+            : (part.data.unitCostCents / 100).toFixed(2).replace(".", ","),
         initialQty: "",
         hasServiceLife: part.data.hasServiceLife,
       });
@@ -100,9 +125,9 @@ export function PartFormPage({
     const previous = parts.data?.find((candidate) => candidate.brand);
     if (!isEdit && previous && !prefilledRef.current) {
       prefilledRef.current = true;
-      reset({ ...emptyValues, brand: previous.brand ?? "" });
+      reset({ ...emptyValues(prefillDescription), brand: previous.brand ?? "" });
     }
-  }, [parts.data, isEdit, reset]);
+  }, [parts.data, isEdit, reset, prefillDescription]);
 
   if (!canWrite) return <GarageForbidden />;
   if (isEdit && part.isPending) {
@@ -125,27 +150,37 @@ export function PartFormPage({
 
   const onSubmit = async (values: PartFormOutput) => {
     try {
+      // Spec inputs of another kind are dropped; the form schema already validated the rest.
+      const parsed = parseSpecInputs(values.kind, values.specs);
+      const base = {
+        kind: values.kind,
+        brand: values.brand,
+        reference: values.reference,
+        description: values.description,
+        unit: values.unit,
+        specs: parsed.specs ?? {},
+        minStockCenti: values.minStock,
+        reorderToCenti: values.reorderTo,
+        hasServiceLife: values.hasServiceLife,
+        // `undefined` keeps the stored cost for readers who cannot see it.
+        ...(costs ? { unitCostCents: values.unitCost } : {}),
+      };
       const saved = partId
-        ? await repository.updatePart(teamId, partId, part.data?.localRev ?? 0, {
-            kind: values.kind,
-            brand: values.brand,
-            reference: values.reference,
-            description: values.description,
-            unit: values.unit,
-            minStockCenti: values.minStock,
-            hasServiceLife: values.hasServiceLife,
-          })
+        ? await repository.updatePart(teamId, partId, part.data?.localRev ?? 0, base)
         : await repository.createPart(teamId, {
-            kind: values.kind,
-            brand: values.brand,
-            reference: values.reference,
-            description: values.description,
-            unit: values.unit,
-            minStockCenti: values.minStock,
+            ...base,
             initialQtyCenti: values.initialQty,
-            hasServiceLife: values.hasServiceLife,
+            createdBy: userId,
           });
+      if (thenShopping && !partId) {
+        // A new part has no stock, so it needs an explicit quantity: one unit to start.
+        await repository.setShoppingItem(teamId, saved.id, 100);
+      }
       await queryClient.invalidateQueries({ queryKey: ["garage", teamId] });
+      if (thenShopping && !partId) {
+        await navigate({ to: "/teams/$teamId/garage/shopping", params: { teamId } });
+        return;
+      }
       await navigate({
         to: "/teams/$teamId/garage/parts/$partId",
         params: { teamId, partId: saved.id },
@@ -219,7 +254,7 @@ export function PartFormPage({
           <FormField
             id="part-min"
             label={t("garage.fields.minStock")}
-            unit={t(`garage.units.${unit}`)}
+            unit={unitLabel(unit)}
             error={errors.minStock?.message}
           >
             <TextInput
@@ -230,11 +265,63 @@ export function PartFormPage({
               {...register("minStock")}
             />
           </FormField>
+          <FormField
+            id="part-reorder"
+            label={t("garage.fields.reorderTo")}
+            unit={unitLabel(unit)}
+            hint={t("garage.fields.reorderToHint")}
+            error={errors.reorderTo?.message}
+          >
+            <TextInput
+              id="part-reorder"
+              inputMode="decimal"
+              invalid={Boolean(errors.reorderTo)}
+              aria-describedby={fieldDescribedBy("part-reorder", errors.reorderTo?.message, t("garage.fields.reorderToHint"))}
+              {...register("reorderTo")}
+            />
+          </FormField>
+          {costs ? (
+            <FormField
+              id="part-cost"
+              label={t("garage.fields.unitCost")}
+              unit="€"
+              error={errors.unitCost?.message}
+            >
+              <TextInput
+                id="part-cost"
+                inputMode="decimal"
+                invalid={Boolean(errors.unitCost)}
+                aria-describedby={fieldDescribedBy("part-cost", errors.unitCost?.message, undefined)}
+                {...register("unitCost")}
+              />
+            </FormField>
+          ) : null}
+          {specFields.map((field) => {
+            const message = errors.specs?.[field.key]?.message;
+            const id = `part-spec-${field.key}`;
+            return (
+              <FormField
+                key={`${kind}-${field.key}`}
+                id={id}
+                label={t(`garage.fields.spec.${field.key}`)}
+                unit={field.unit}
+                error={message}
+              >
+                <TextInput
+                  id={id}
+                  inputMode={field.type === "number" ? "decimal" : "text"}
+                  invalid={Boolean(message)}
+                  aria-describedby={fieldDescribedBy(id, message, undefined)}
+                  {...register(`specs.${field.key}`)}
+                />
+              </FormField>
+            );
+          })}
           {!isEdit ? (
             <FormField
               id="part-initial"
               label={t("garage.fields.initialQty")}
-              unit={t(`garage.units.${unit}`)}
+              unit={unitLabel(unit)}
               error={errors.initialQty?.message}
             >
               <TextInput

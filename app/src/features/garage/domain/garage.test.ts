@@ -34,11 +34,16 @@ describe("garage schemas", () => {
       description: "Combustível",
       unit: "l",
       minStock: "1,5",
+      reorderTo: "4",
+      specs: { nitro_pct: "25", oil_pct: "" },
+      unitCost: "14,50",
       initialQty: "2",
       hasServiceLife: false,
     });
     expect(part.minStock).toBe(150);
     expect(part.initialQty).toBe(200);
+    expect(part.reorderTo).toBe(400);
+    expect(part.unitCost).toBe(1450);
   });
 
   it("rejects invalid years, long text and whole-unit fractions", () => {
@@ -52,6 +57,9 @@ describe("garage schemas", () => {
         description: "Vela",
         unit: "un",
         minStock: "1,5",
+        reorderTo: "",
+        specs: {},
+        unitCost: "",
         initialQty: "1",
         hasServiceLife: false,
       }).success,
@@ -64,6 +72,9 @@ describe("garage schemas", () => {
         description: "Vela",
         unit: "un",
         minStock: "2",
+        reorderTo: "",
+        specs: {},
+        unitCost: "",
         hasServiceLife: false,
       }).success,
     ).toBe(true);
@@ -122,5 +133,28 @@ describe("garage roles", () => {
     expect(canWriteGarage("owner")).toBe(true);
     expect(canReadGarage("guest")).toBe(false);
     expect(canReadGarage("unknown")).toBe(false);
+  });
+
+  it("validates the restock target, specs and price of a part", () => {
+    const base = {
+      kind: "fuel" as const,
+      brand: "",
+      reference: "",
+      description: "Combustível",
+      unit: "l" as const,
+      minStock: "2",
+      reorderTo: "",
+      specs: {},
+      unitCost: "",
+      hasServiceLife: false,
+    };
+    const ok = (over: object) => partUpdateFormSchema.safeParse({ ...base, ...over }).success;
+    expect(ok({})).toBe(true);
+    expect(ok({ reorderTo: "1" })).toBe(false);
+    expect(ok({ reorderTo: "2" })).toBe(true);
+    expect(ok({ specs: { nitro_pct: "41" } })).toBe(false);
+    expect(ok({ specs: { nitro_pct: "25,5" } })).toBe(true);
+    expect(ok({ unitCost: "1,234" })).toBe(false);
+    expect(ok({ unitCost: "-1" })).toBe(false);
   });
 });

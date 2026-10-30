@@ -25,6 +25,7 @@ import type { EngineWithMount } from "../domain/models";
 import { DetailRow, GaragePageHeader } from "./common";
 import { garageErrorMessage } from "./errors";
 import { PickCarSheet } from "./PickCarSheet";
+import { MountsSection } from "./MountsSection";
 import { RetireDialog } from "./RetireDialog";
 import { AssetStatusBadge, EngineMountBadge } from "./status";
 
@@ -262,6 +263,12 @@ export function EngineDetailPage({
         )}
       </Card>
 
+      <MountsSection
+        teamId={teamId}
+        repository={repository}
+        subject={{ kind: "engine", engineId }}
+        canWrite={canWrite && value.status !== "retired"}
+      />
       <PickCarSheet
         open={pickerOpen}
         cars={cars.data}

@@ -74,6 +74,16 @@ export function TeamHomePage({
           />
         </div>
       )}
+      {lowStock > 0 ? (
+        <Link
+          to="/teams/$teamId/garage/shopping"
+          params={{ teamId: team.id }}
+          className="flex min-h-14 items-center justify-between gap-3 rounded-2xl border border-warn/40 bg-warn/10 px-5 text-base font-semibold text-fg"
+        >
+          <span>{t("garage.shopping.open")}</span>
+          <span className="tabular-nums text-warn">{lowStock}</span>
+        </Link>
+      ) : null}
       <Link
         to="/teams/$teamId/garage/cars"
         params={{ teamId: team.id }}

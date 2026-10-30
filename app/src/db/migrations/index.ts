@@ -4,6 +4,7 @@ import alignment from "./0003_alignment.sql?raw";
 import garageConstraints from "./0004_garage_constraints.sql?raw";
 import stockMovementIndex from "./0005_stock_movement_index.sql?raw";
 import inventory from "./0006_inventory.sql?raw";
+import setups from "./0007_setups.sql?raw";
 
 export interface Migration {
   version: number;
@@ -18,4 +19,5 @@ export const migrations: readonly Migration[] = [
   { version: 4, name: "garage_constraints", sql: garageConstraints },
   { version: 5, name: "stock_movement_index", sql: stockMovementIndex },
   { version: 6, name: "inventory", sql: inventory },
+  { version: 7, name: "setups", sql: setups },
 ];

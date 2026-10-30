@@ -1,6 +1,6 @@
 # 0024 — Extensões locais dos setups
 
-- **Estado:** Aceite (Nelson, 2026-10-30)
+- **Estado:** Aceite (Nelson, 2026-10-30). A decisão 1 («Feedback só local») foi substituída pelo [ADR 0026](0026-feedback-do-piloto-no-servidor.md).
 - **Cartão:** F1-12 (#40)
 - **Relacionado:** [ADR 0003](0003-app-offline-first-sync-proprio.md), [ADR 0018](0018-base-local-web.md), [ADR 0020](0020-gestao-online-equipas-convites.md), [ADR 0023](0023-extensoes-locais-do-inventario.md); especificação §5; arquitetura §3 e §8.
 

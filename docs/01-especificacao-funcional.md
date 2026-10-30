@@ -136,6 +136,7 @@ Cada peça importante tem identidade própria e contador de uso, para que motore
 - Conjunto de 4 rodas com marca, modelo, composto, inserts, data de colagem
 - Contador de mangas e minutos; estado (novo, usado, gasto) com nota de desgaste
 - Marcação do conjunto (ex.: "J2") que a equipa escreve nas jantes
+- Pneus e insertos novos ficam em stock como peças; "colar conjunto" cria o conjunto (4 + 4 por omissão, marca, modelo e composto vindos das peças) e tira essas unidades do stock, tudo ou nada. Um conjunto comprado já colado cria-se sem passar pelo stock (ADR 0022)
 
 ### 4.4 Peças e consumíveis
 

@@ -6,9 +6,11 @@ import "buf/validate/validate.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "pitbox/garage/v1/garage.proto";
+import "pitbox/garage/v1/part_service.proto";
 
 // TyreService manages sets of four wheels. Labels are unique per team among
-// non-deleted, non-retired sets. Counters are read-only in F1.
+// non-deleted, non-retired sets. Counters are read-only in F1. GlueTyreSet turns
+// tyres and inserts in stock into a set.
 service TyreService {
   rpc GetTyreSet(GetTyreSetRequest) returns (GetTyreSetResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -19,6 +21,10 @@ service TyreService {
   rpc CreateTyreSet(CreateTyreSetRequest) returns (CreateTyreSetResponse);
   rpc UpdateTyreSet(UpdateTyreSetRequest) returns (UpdateTyreSetResponse);
   rpc DeleteTyreSet(DeleteTyreSetRequest) returns (DeleteTyreSetResponse);
+  // GlueTyreSet creates a set from a tyre part and an insert part in stock and takes
+  // the used quantities out of the stock (`consumed` movements), all or nothing.
+  // Mechanics and owners only. A short stock is FAILED_PRECONDITION.
+  rpc GlueTyreSet(GlueTyreSetRequest) returns (GlueTyreSetResponse);
 }
 
 message TyreSet {
@@ -35,6 +41,9 @@ message TyreSet {
   optional string wear_notes = 11;
   google.protobuf.Timestamp created_at = 12;
   int32 version = 13;
+  // Parts the set was glued from; unset for sets created already glued.
+  optional string tyre_part_id = 14;
+  optional string insert_part_id = 15;
 }
 
 message GetTyreSetRequest {
@@ -114,3 +123,46 @@ message DeleteTyreSetRequest {
 }
 
 message DeleteTyreSetResponse {}
+
+message GlueTyreSetRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  // Part of kind `tyre` and part of kind `insert`, both in stock.
+  string tyre_part_id = 3 [(buf.validate.field).string.uuid = true];
+  string insert_part_id = 4 [(buf.validate.field).string.uuid = true];
+  // Units taken out of each part. 0 means the default of 4.
+  int32 tyre_qty = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 16
+  }];
+  int32 insert_qty = 6 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 16
+  }];
+  string label = 7 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 20
+  }];
+  // Default to the parts' brand and description; required when the tyre part has no brand.
+  optional string make = 8 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  optional string model = 9 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  // Default to the `compound` spec of the tyre part and the `insert_type` spec of the insert part.
+  optional string compound = 10 [(buf.validate.field).string.max_len = 40];
+  optional string insert_type = 11 [(buf.validate.field).string.max_len = 40];
+  // Defaults to today (server date).
+  optional string glued_on = 12 [(buf.validate.field).string.pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"];
+  optional string note = 13 [(buf.validate.field).string.max_len = 500];
+}
+
+message GlueTyreSetResponse {
+  TyreSet tyre_set = 1;
+  // Both parts with the stock after the movements.
+  Part tyre_part = 2;
+  Part insert_part = 3;
+}

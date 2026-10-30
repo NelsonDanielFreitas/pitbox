@@ -284,3 +284,47 @@ func TestPriceLossReasonAndUnitContract(t *testing.T) {
 		}
 	}
 }
+
+func TestGlueTyreSetContract(t *testing.T) {
+	v, err := protovalidate.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	const team, tyre, insert = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d61", "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d62", "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d63"
+	glue := func(mutate func(*garagev1.GlueTyreSetRequest)) *garagev1.GlueTyreSetRequest {
+		r := &garagev1.GlueTyreSetRequest{TeamId: team, RequestId: validRequestID, TyrePartId: tyre, InsertPartId: insert, Label: "J4"}
+		mutate(r)
+		return r
+	}
+	valid := map[string]proto.Message{
+		"defaults":     glue(func(*garagev1.GlueTyreSetRequest) {}),
+		"max quantity": glue(func(r *garagev1.GlueTyreSetRequest) { r.TyreQty, r.InsertQty = 16, 16 }),
+		"with details": glue(func(r *garagev1.GlueTyreSetRequest) {
+			r.Make, r.Model, r.Compound = proto.String("Sworkz"), proto.String("Z"), proto.String("soft")
+		}),
+		"glued on date": glue(func(r *garagev1.GlueTyreSetRequest) { r.GluedOn = proto.String("2026-10-30") }),
+	}
+	for name, msg := range valid {
+		if err := v.Validate(msg); err != nil {
+			t.Errorf("%s refused: %v", name, err)
+		}
+	}
+	invalid := map[string]proto.Message{
+		"no request id":      glue(func(r *garagev1.GlueTyreSetRequest) { r.RequestId = "" }),
+		"tyre part not uuid": glue(func(r *garagev1.GlueTyreSetRequest) { r.TyrePartId = "x" }),
+		"no insert part":     glue(func(r *garagev1.GlueTyreSetRequest) { r.InsertPartId = "" }),
+		"quantity too high":  glue(func(r *garagev1.GlueTyreSetRequest) { r.TyreQty = 17 }),
+		"negative quantity":  glue(func(r *garagev1.GlueTyreSetRequest) { r.InsertQty = -1 }),
+		"empty label":        glue(func(r *garagev1.GlueTyreSetRequest) { r.Label = "" }),
+		"long label":         glue(func(r *garagev1.GlueTyreSetRequest) { r.Label = strings.Repeat("a", 21) }),
+		"empty make":         glue(func(r *garagev1.GlueTyreSetRequest) { r.Make = proto.String("") }),
+		"long compound":      glue(func(r *garagev1.GlueTyreSetRequest) { r.Compound = proto.String(strings.Repeat("a", 41)) }),
+		"bad date":           glue(func(r *garagev1.GlueTyreSetRequest) { r.GluedOn = proto.String("30/10/2026") }),
+		"long note":          glue(func(r *garagev1.GlueTyreSetRequest) { r.Note = proto.String(strings.Repeat("a", 501)) }),
+	}
+	for name, msg := range invalid {
+		if v.Validate(msg) == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

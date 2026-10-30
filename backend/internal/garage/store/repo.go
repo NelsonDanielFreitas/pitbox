@@ -230,7 +230,7 @@ func (Repo) CreateTyreSet(ctx context.Context, tx db.DBTX, team, user uuid.UUID,
 	row, err := sqlcgen.New(tx).CreateTyreSet(ctx, sqlcgen.CreateTyreSetParams{
 		TeamID: team, Label: t.Label, Make: t.Make, Model: t.Model, Compound: t.Compound,
 		InsertType: t.InsertType, Column7: date(t.GluedOn), Column8: sqlcgen.GarageTyreStatus(t.Status),
-		WearNotes: t.WearNotes, CreatedBy: &user,
+		WearNotes: t.WearNotes, CreatedBy: &user, TyrePartID: t.TyrePartID, InsertPartID: t.InsertPartID,
 	})
 	if err != nil {
 		return domain.TyreSet{}, mapError("create tyre set", err)
@@ -666,25 +666,25 @@ func engineFromUpdate(r sqlcgen.UpdateEngineRow) domain.Engine {
 
 func tyreFromCreate(r sqlcgen.CreateTyreSetRow) domain.TyreSet {
 	return tyreSet(r.ID, r.Label, r.Make, r.Model, r.Compound, r.InsertType, r.GluedOn, r.Status,
-		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version)
+		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version, r.TyrePartID, r.InsertPartID)
 }
 func tyreFromGet(r sqlcgen.GetTyreSetRow) domain.TyreSet {
 	return tyreSet(r.ID, r.Label, r.Make, r.Model, r.Compound, r.InsertType, r.GluedOn, r.Status,
-		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version)
+		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version, r.TyrePartID, r.InsertPartID)
 }
 func tyreFromList(r sqlcgen.ListTyreSetsRow) domain.TyreSet {
 	return tyreSet(r.ID, r.Label, r.Make, r.Model, r.Compound, r.InsertType, r.GluedOn, r.Status,
-		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version)
+		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version, r.TyrePartID, r.InsertPartID)
 }
 func tyreFromUpdate(r sqlcgen.UpdateTyreSetRow) domain.TyreSet {
 	return tyreSet(r.ID, r.Label, r.Make, r.Model, r.Compound, r.InsertType, r.GluedOn, r.Status,
-		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version)
+		r.SessionsTotal, r.RunSecondsTotal, r.WearNotes, r.CreatedAt, r.Version, r.TyrePartID, r.InsertPartID)
 }
 func tyreSet(id uuid.UUID, label, make, model string, compound, insert *string, glued string, status string,
-	sessions, run int32, wear *string, created time.Time, version int32) domain.TyreSet {
+	sessions, run int32, wear *string, created time.Time, version int32, tyrePart, insertPart *uuid.UUID) domain.TyreSet {
 	return domain.TyreSet{ID: id, Label: label, Make: make, Model: model, Compound: compound, InsertType: insert,
 		GluedOn: ptrDate(glued), Status: status, SessionsTotal: sessions, RunSecondsTotal: run,
-		WearNotes: wear, CreatedAt: created, Version: version}
+		WearNotes: wear, CreatedAt: created, Version: version, TyrePartID: tyrePart, InsertPartID: insertPart}
 }
 
 func partFromCreate(r sqlcgen.CreatePartRow) domain.Part {

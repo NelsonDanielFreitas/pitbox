@@ -17,16 +17,18 @@ type specField struct {
 }
 
 var (
-	oilSpecs   = map[string]specField{"viscosity_cst": {min: 0, max: 100_000, exclMin: true}}
-	fuelSpecs  = map[string]specField{"nitro_pct": {min: 0, max: 40}, "oil_pct": {min: 0, max: 30}}
-	plugSpecs  = map[string]specField{"heat_range": {text: true}}
-	springSpec = map[string]specField{"rate": {text: true}}
+	oilSpecs    = map[string]specField{"viscosity_cst": {min: 0, max: 100_000, exclMin: true}}
+	fuelSpecs   = map[string]specField{"nitro_pct": {min: 0, max: 40}, "oil_pct": {min: 0, max: 30}}
+	plugSpecs   = map[string]specField{"heat_range": {text: true}}
+	springSpec  = map[string]specField{"rate": {text: true}}
+	tyreSpecs   = map[string]specField{"compound": {text: true}}
+	insertSpecs = map[string]specField{"insert_type": {text: true}}
 )
 
 // specsByKind lists the allowed keys per part kind. A kind that is not listed takes none.
 var specsByKind = map[string]map[string]specField{
 	PartShockOil: oilSpecs, PartDiffOil: oilSpecs, PartFuel: fuelSpecs,
-	PartGlowPlug: plugSpecs, PartSpring: springSpec,
+	PartGlowPlug: plugSpecs, PartSpring: springSpec, PartTyre: tyreSpecs, PartInsert: insertSpecs,
 }
 
 // validateSpecsForKind rejects unknown keys, wrong types and out-of-range values.

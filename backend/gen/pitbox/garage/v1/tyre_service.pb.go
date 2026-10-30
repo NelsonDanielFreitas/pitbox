@@ -39,8 +39,11 @@ type TyreSet struct {
 	WearNotes       *string                `protobuf:"bytes,11,opt,name=wear_notes,json=wearNotes,proto3,oneof" json:"wear_notes,omitempty"`
 	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Version         int32                  `protobuf:"varint,13,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Parts the set was glued from; unset for sets created already glued.
+	TyrePartId    *string `protobuf:"bytes,14,opt,name=tyre_part_id,json=tyrePartId,proto3,oneof" json:"tyre_part_id,omitempty"`
+	InsertPartId  *string `protobuf:"bytes,15,opt,name=insert_part_id,json=insertPartId,proto3,oneof" json:"insert_part_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TyreSet) Reset() {
@@ -162,6 +165,20 @@ func (x *TyreSet) GetVersion() int32 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *TyreSet) GetTyrePartId() string {
+	if x != nil && x.TyrePartId != nil {
+		return *x.TyrePartId
+	}
+	return ""
+}
+
+func (x *TyreSet) GetInsertPartId() string {
+	if x != nil && x.InsertPartId != nil {
+		return *x.InsertPartId
+	}
+	return ""
 }
 
 type GetTyreSetRequest struct {
@@ -820,11 +837,217 @@ func (*DeleteTyreSetResponse) Descriptor() ([]byte, []int) {
 	return file_pitbox_garage_v1_tyre_service_proto_rawDescGZIP(), []int{10}
 }
 
+type GlueTyreSetRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	TeamId    string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	RequestId string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Part of kind `tyre` and part of kind `insert`, both in stock.
+	TyrePartId   string `protobuf:"bytes,3,opt,name=tyre_part_id,json=tyrePartId,proto3" json:"tyre_part_id,omitempty"`
+	InsertPartId string `protobuf:"bytes,4,opt,name=insert_part_id,json=insertPartId,proto3" json:"insert_part_id,omitempty"`
+	// Units taken out of each part. 0 means the default of 4.
+	TyreQty   int32  `protobuf:"varint,5,opt,name=tyre_qty,json=tyreQty,proto3" json:"tyre_qty,omitempty"`
+	InsertQty int32  `protobuf:"varint,6,opt,name=insert_qty,json=insertQty,proto3" json:"insert_qty,omitempty"`
+	Label     string `protobuf:"bytes,7,opt,name=label,proto3" json:"label,omitempty"`
+	// Default to the parts' brand and description; required when the tyre part has no brand.
+	Make  *string `protobuf:"bytes,8,opt,name=make,proto3,oneof" json:"make,omitempty"`
+	Model *string `protobuf:"bytes,9,opt,name=model,proto3,oneof" json:"model,omitempty"`
+	// Default to the `compound` spec of the tyre part and the `insert_type` spec of the insert part.
+	Compound   *string `protobuf:"bytes,10,opt,name=compound,proto3,oneof" json:"compound,omitempty"`
+	InsertType *string `protobuf:"bytes,11,opt,name=insert_type,json=insertType,proto3,oneof" json:"insert_type,omitempty"`
+	// Defaults to today (server date).
+	GluedOn       *string `protobuf:"bytes,12,opt,name=glued_on,json=gluedOn,proto3,oneof" json:"glued_on,omitempty"`
+	Note          *string `protobuf:"bytes,13,opt,name=note,proto3,oneof" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GlueTyreSetRequest) Reset() {
+	*x = GlueTyreSetRequest{}
+	mi := &file_pitbox_garage_v1_tyre_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GlueTyreSetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GlueTyreSetRequest) ProtoMessage() {}
+
+func (x *GlueTyreSetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_tyre_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GlueTyreSetRequest.ProtoReflect.Descriptor instead.
+func (*GlueTyreSetRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_tyre_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GlueTyreSetRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetTyrePartId() string {
+	if x != nil {
+		return x.TyrePartId
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetInsertPartId() string {
+	if x != nil {
+		return x.InsertPartId
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetTyreQty() int32 {
+	if x != nil {
+		return x.TyreQty
+	}
+	return 0
+}
+
+func (x *GlueTyreSetRequest) GetInsertQty() int32 {
+	if x != nil {
+		return x.InsertQty
+	}
+	return 0
+}
+
+func (x *GlueTyreSetRequest) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetMake() string {
+	if x != nil && x.Make != nil {
+		return *x.Make
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetModel() string {
+	if x != nil && x.Model != nil {
+		return *x.Model
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetCompound() string {
+	if x != nil && x.Compound != nil {
+		return *x.Compound
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetInsertType() string {
+	if x != nil && x.InsertType != nil {
+		return *x.InsertType
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetGluedOn() string {
+	if x != nil && x.GluedOn != nil {
+		return *x.GluedOn
+	}
+	return ""
+}
+
+func (x *GlueTyreSetRequest) GetNote() string {
+	if x != nil && x.Note != nil {
+		return *x.Note
+	}
+	return ""
+}
+
+type GlueTyreSetResponse struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	TyreSet *TyreSet               `protobuf:"bytes,1,opt,name=tyre_set,json=tyreSet,proto3" json:"tyre_set,omitempty"`
+	// Both parts with the stock after the movements.
+	TyrePart      *Part `protobuf:"bytes,2,opt,name=tyre_part,json=tyrePart,proto3" json:"tyre_part,omitempty"`
+	InsertPart    *Part `protobuf:"bytes,3,opt,name=insert_part,json=insertPart,proto3" json:"insert_part,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GlueTyreSetResponse) Reset() {
+	*x = GlueTyreSetResponse{}
+	mi := &file_pitbox_garage_v1_tyre_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GlueTyreSetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GlueTyreSetResponse) ProtoMessage() {}
+
+func (x *GlueTyreSetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_garage_v1_tyre_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GlueTyreSetResponse.ProtoReflect.Descriptor instead.
+func (*GlueTyreSetResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_garage_v1_tyre_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GlueTyreSetResponse) GetTyreSet() *TyreSet {
+	if x != nil {
+		return x.TyreSet
+	}
+	return nil
+}
+
+func (x *GlueTyreSetResponse) GetTyrePart() *Part {
+	if x != nil {
+		return x.TyrePart
+	}
+	return nil
+}
+
+func (x *GlueTyreSetResponse) GetInsertPart() *Part {
+	if x != nil {
+		return x.InsertPart
+	}
+	return nil
+}
+
 var File_pitbox_garage_v1_tyre_service_proto protoreflect.FileDescriptor
 
 const file_pitbox_garage_v1_tyre_service_proto_rawDesc = "" +
 	"\n" +
-	"#pitbox/garage/v1/tyre_service.proto\x12\x10pitbox.garage.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpitbox/garage/v1/garage.proto\"\xfb\x03\n" +
+	"#pitbox/garage/v1/tyre_service.proto\x12\x10pitbox.garage.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpitbox/garage/v1/garage.proto\x1a#pitbox/garage/v1/part_service.proto\"\xf1\x04\n" +
 	"\aTyreSet\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x12\n" +
@@ -842,11 +1065,16 @@ const file_pitbox_garage_v1_tyre_service_proto_rawDesc = "" +
 	"wear_notes\x18\v \x01(\tH\x03R\twearNotes\x88\x01\x01\x129\n" +
 	"\n" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
-	"\aversion\x18\r \x01(\x05R\aversionB\v\n" +
+	"\aversion\x18\r \x01(\x05R\aversion\x12%\n" +
+	"\ftyre_part_id\x18\x0e \x01(\tH\x04R\n" +
+	"tyrePartId\x88\x01\x01\x12)\n" +
+	"\x0einsert_part_id\x18\x0f \x01(\tH\x05R\finsertPartId\x88\x01\x01B\v\n" +
 	"\t_compoundB\x0e\n" +
 	"\f_insert_typeB\v\n" +
 	"\t_glued_onB\r\n" +
-	"\v_wear_notes\"`\n" +
+	"\v_wear_notesB\x0f\n" +
+	"\r_tyre_part_idB\x11\n" +
+	"\x0f_insert_part_id\"`\n" +
 	"\x11GetTyreSetRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12(\n" +
 	"\vtyre_set_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\ttyreSetId\"J\n" +
@@ -913,14 +1141,45 @@ const file_pitbox_garage_v1_tyre_service_proto_rawDesc = "" +
 	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12(\n" +
 	"\vtyre_set_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\ttyreSetId\x12!\n" +
 	"\aversion\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\aversion\"\x17\n" +
-	"\x15DeleteTyreSetResponse2\xf5\x03\n" +
+	"\x15DeleteTyreSetResponse\"\xfe\x04\n" +
+	"\x12GlueTyreSetRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12*\n" +
+	"\ftyre_part_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"tyrePartId\x12.\n" +
+	"\x0einsert_part_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\finsertPartId\x12$\n" +
+	"\btyre_qty\x18\x05 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x10(\x00R\atyreQty\x12(\n" +
+	"\n" +
+	"insert_qty\x18\x06 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x10(\x00R\tinsertQty\x12\x1f\n" +
+	"\x05label\x18\a \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18\x14R\x05label\x12\"\n" +
+	"\x04make\x18\b \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18PH\x00R\x04make\x88\x01\x01\x12$\n" +
+	"\x05model\x18\t \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18PH\x01R\x05model\x88\x01\x01\x12(\n" +
+	"\bcompound\x18\n" +
+	" \x01(\tB\a\xbaH\x04r\x02\x18(H\x02R\bcompound\x88\x01\x01\x12-\n" +
+	"\vinsert_type\x18\v \x01(\tB\a\xbaH\x04r\x02\x18(H\x03R\n" +
+	"insertType\x88\x01\x01\x12C\n" +
+	"\bglued_on\x18\f \x01(\tB#\xbaH r\x1e2\x1c^[0-9]{4}-[0-9]{2}-[0-9]{2}$H\x04R\agluedOn\x88\x01\x01\x12!\n" +
+	"\x04note\x18\r \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x05R\x04note\x88\x01\x01B\a\n" +
+	"\x05_makeB\b\n" +
+	"\x06_modelB\v\n" +
+	"\t_compoundB\x0e\n" +
+	"\f_insert_typeB\v\n" +
+	"\t_glued_onB\a\n" +
+	"\x05_note\"\xb9\x01\n" +
+	"\x13GlueTyreSetResponse\x124\n" +
+	"\btyre_set\x18\x01 \x01(\v2\x19.pitbox.garage.v1.TyreSetR\atyreSet\x123\n" +
+	"\ttyre_part\x18\x02 \x01(\v2\x16.pitbox.garage.v1.PartR\btyrePart\x127\n" +
+	"\vinsert_part\x18\x03 \x01(\v2\x16.pitbox.garage.v1.PartR\n" +
+	"insertPart2\xd1\x04\n" +
 	"\vTyreService\x12\\\n" +
 	"\n" +
 	"GetTyreSet\x12#.pitbox.garage.v1.GetTyreSetRequest\x1a$.pitbox.garage.v1.GetTyreSetResponse\"\x03\x90\x02\x01\x12b\n" +
 	"\fListTyreSets\x12%.pitbox.garage.v1.ListTyreSetsRequest\x1a&.pitbox.garage.v1.ListTyreSetsResponse\"\x03\x90\x02\x01\x12`\n" +
 	"\rCreateTyreSet\x12&.pitbox.garage.v1.CreateTyreSetRequest\x1a'.pitbox.garage.v1.CreateTyreSetResponse\x12`\n" +
 	"\rUpdateTyreSet\x12&.pitbox.garage.v1.UpdateTyreSetRequest\x1a'.pitbox.garage.v1.UpdateTyreSetResponse\x12`\n" +
-	"\rDeleteTyreSet\x12&.pitbox.garage.v1.DeleteTyreSetRequest\x1a'.pitbox.garage.v1.DeleteTyreSetResponseB\xd7\x01\n" +
+	"\rDeleteTyreSet\x12&.pitbox.garage.v1.DeleteTyreSetRequest\x1a'.pitbox.garage.v1.DeleteTyreSetResponse\x12Z\n" +
+	"\vGlueTyreSet\x12$.pitbox.garage.v1.GlueTyreSetRequest\x1a%.pitbox.garage.v1.GlueTyreSetResponseB\xd7\x01\n" +
 	"\x14com.pitbox.garage.v1B\x10TyreServiceProtoP\x01ZKgithub.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1;garagev1\xa2\x02\x03PGX\xaa\x02\x10Pitbox.Garage.V1\xca\x02\x10Pitbox\\Garage\\V1\xe2\x02\x1cPitbox\\Garage\\V1\\GPBMetadata\xea\x02\x12Pitbox::Garage::V1b\x06proto3"
 
 var (
@@ -935,7 +1194,7 @@ func file_pitbox_garage_v1_tyre_service_proto_rawDescGZIP() []byte {
 	return file_pitbox_garage_v1_tyre_service_proto_rawDescData
 }
 
-var file_pitbox_garage_v1_tyre_service_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_pitbox_garage_v1_tyre_service_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_pitbox_garage_v1_tyre_service_proto_goTypes = []any{
 	(*TyreSet)(nil),               // 0: pitbox.garage.v1.TyreSet
 	(*GetTyreSetRequest)(nil),     // 1: pitbox.garage.v1.GetTyreSetRequest
@@ -948,35 +1207,43 @@ var file_pitbox_garage_v1_tyre_service_proto_goTypes = []any{
 	(*UpdateTyreSetResponse)(nil), // 8: pitbox.garage.v1.UpdateTyreSetResponse
 	(*DeleteTyreSetRequest)(nil),  // 9: pitbox.garage.v1.DeleteTyreSetRequest
 	(*DeleteTyreSetResponse)(nil), // 10: pitbox.garage.v1.DeleteTyreSetResponse
-	(TyreStatus)(0),               // 11: pitbox.garage.v1.TyreStatus
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil), // 13: google.protobuf.FieldMask
+	(*GlueTyreSetRequest)(nil),    // 11: pitbox.garage.v1.GlueTyreSetRequest
+	(*GlueTyreSetResponse)(nil),   // 12: pitbox.garage.v1.GlueTyreSetResponse
+	(TyreStatus)(0),               // 13: pitbox.garage.v1.TyreStatus
+	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
+	(*Part)(nil),                  // 16: pitbox.garage.v1.Part
 }
 var file_pitbox_garage_v1_tyre_service_proto_depIdxs = []int32{
-	11, // 0: pitbox.garage.v1.TyreSet.status:type_name -> pitbox.garage.v1.TyreStatus
-	12, // 1: pitbox.garage.v1.TyreSet.created_at:type_name -> google.protobuf.Timestamp
+	13, // 0: pitbox.garage.v1.TyreSet.status:type_name -> pitbox.garage.v1.TyreStatus
+	14, // 1: pitbox.garage.v1.TyreSet.created_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: pitbox.garage.v1.GetTyreSetResponse.tyre_set:type_name -> pitbox.garage.v1.TyreSet
 	0,  // 3: pitbox.garage.v1.ListTyreSetsResponse.tyre_sets:type_name -> pitbox.garage.v1.TyreSet
-	11, // 4: pitbox.garage.v1.CreateTyreSetRequest.status:type_name -> pitbox.garage.v1.TyreStatus
+	13, // 4: pitbox.garage.v1.CreateTyreSetRequest.status:type_name -> pitbox.garage.v1.TyreStatus
 	0,  // 5: pitbox.garage.v1.CreateTyreSetResponse.tyre_set:type_name -> pitbox.garage.v1.TyreSet
-	13, // 6: pitbox.garage.v1.UpdateTyreSetRequest.update_mask:type_name -> google.protobuf.FieldMask
-	11, // 7: pitbox.garage.v1.UpdateTyreSetRequest.status:type_name -> pitbox.garage.v1.TyreStatus
+	15, // 6: pitbox.garage.v1.UpdateTyreSetRequest.update_mask:type_name -> google.protobuf.FieldMask
+	13, // 7: pitbox.garage.v1.UpdateTyreSetRequest.status:type_name -> pitbox.garage.v1.TyreStatus
 	0,  // 8: pitbox.garage.v1.UpdateTyreSetResponse.tyre_set:type_name -> pitbox.garage.v1.TyreSet
-	1,  // 9: pitbox.garage.v1.TyreService.GetTyreSet:input_type -> pitbox.garage.v1.GetTyreSetRequest
-	3,  // 10: pitbox.garage.v1.TyreService.ListTyreSets:input_type -> pitbox.garage.v1.ListTyreSetsRequest
-	5,  // 11: pitbox.garage.v1.TyreService.CreateTyreSet:input_type -> pitbox.garage.v1.CreateTyreSetRequest
-	7,  // 12: pitbox.garage.v1.TyreService.UpdateTyreSet:input_type -> pitbox.garage.v1.UpdateTyreSetRequest
-	9,  // 13: pitbox.garage.v1.TyreService.DeleteTyreSet:input_type -> pitbox.garage.v1.DeleteTyreSetRequest
-	2,  // 14: pitbox.garage.v1.TyreService.GetTyreSet:output_type -> pitbox.garage.v1.GetTyreSetResponse
-	4,  // 15: pitbox.garage.v1.TyreService.ListTyreSets:output_type -> pitbox.garage.v1.ListTyreSetsResponse
-	6,  // 16: pitbox.garage.v1.TyreService.CreateTyreSet:output_type -> pitbox.garage.v1.CreateTyreSetResponse
-	8,  // 17: pitbox.garage.v1.TyreService.UpdateTyreSet:output_type -> pitbox.garage.v1.UpdateTyreSetResponse
-	10, // 18: pitbox.garage.v1.TyreService.DeleteTyreSet:output_type -> pitbox.garage.v1.DeleteTyreSetResponse
-	14, // [14:19] is the sub-list for method output_type
-	9,  // [9:14] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	0,  // 9: pitbox.garage.v1.GlueTyreSetResponse.tyre_set:type_name -> pitbox.garage.v1.TyreSet
+	16, // 10: pitbox.garage.v1.GlueTyreSetResponse.tyre_part:type_name -> pitbox.garage.v1.Part
+	16, // 11: pitbox.garage.v1.GlueTyreSetResponse.insert_part:type_name -> pitbox.garage.v1.Part
+	1,  // 12: pitbox.garage.v1.TyreService.GetTyreSet:input_type -> pitbox.garage.v1.GetTyreSetRequest
+	3,  // 13: pitbox.garage.v1.TyreService.ListTyreSets:input_type -> pitbox.garage.v1.ListTyreSetsRequest
+	5,  // 14: pitbox.garage.v1.TyreService.CreateTyreSet:input_type -> pitbox.garage.v1.CreateTyreSetRequest
+	7,  // 15: pitbox.garage.v1.TyreService.UpdateTyreSet:input_type -> pitbox.garage.v1.UpdateTyreSetRequest
+	9,  // 16: pitbox.garage.v1.TyreService.DeleteTyreSet:input_type -> pitbox.garage.v1.DeleteTyreSetRequest
+	11, // 17: pitbox.garage.v1.TyreService.GlueTyreSet:input_type -> pitbox.garage.v1.GlueTyreSetRequest
+	2,  // 18: pitbox.garage.v1.TyreService.GetTyreSet:output_type -> pitbox.garage.v1.GetTyreSetResponse
+	4,  // 19: pitbox.garage.v1.TyreService.ListTyreSets:output_type -> pitbox.garage.v1.ListTyreSetsResponse
+	6,  // 20: pitbox.garage.v1.TyreService.CreateTyreSet:output_type -> pitbox.garage.v1.CreateTyreSetResponse
+	8,  // 21: pitbox.garage.v1.TyreService.UpdateTyreSet:output_type -> pitbox.garage.v1.UpdateTyreSetResponse
+	10, // 22: pitbox.garage.v1.TyreService.DeleteTyreSet:output_type -> pitbox.garage.v1.DeleteTyreSetResponse
+	12, // 23: pitbox.garage.v1.TyreService.GlueTyreSet:output_type -> pitbox.garage.v1.GlueTyreSetResponse
+	18, // [18:24] is the sub-list for method output_type
+	12, // [12:18] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_pitbox_garage_v1_tyre_service_proto_init() }
@@ -985,16 +1252,18 @@ func file_pitbox_garage_v1_tyre_service_proto_init() {
 		return
 	}
 	file_pitbox_garage_v1_garage_proto_init()
+	file_pitbox_garage_v1_part_service_proto_init()
 	file_pitbox_garage_v1_tyre_service_proto_msgTypes[0].OneofWrappers = []any{}
 	file_pitbox_garage_v1_tyre_service_proto_msgTypes[5].OneofWrappers = []any{}
 	file_pitbox_garage_v1_tyre_service_proto_msgTypes[7].OneofWrappers = []any{}
+	file_pitbox_garage_v1_tyre_service_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pitbox_garage_v1_tyre_service_proto_rawDesc), len(file_pitbox_garage_v1_tyre_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

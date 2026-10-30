@@ -59,3 +59,9 @@ JOIN setup.setup s ON s.team_id = v.team_id AND s.id = v.setup_id AND s.deleted_
 WHERE v.team_id = $1 AND v.setup_id = $2 AND v.version < $3
 ORDER BY v.version DESC
 LIMIT $4;
+
+-- The device generates the id (UUIDv7) so an offline record keeps it after syncing.
+-- name: CreateSetupWithID :one
+INSERT INTO setup.setup (id, team_id, car_id, name, notes, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, car_id, name, current_version, notes, created_at, updated_at, version;

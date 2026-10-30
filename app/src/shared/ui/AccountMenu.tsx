@@ -2,7 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { clearLocalData, lastKnownUserId } from "@/auth/local-data";
+import { clearLocalData, lastKnownUserId, UnsyncedChangesError } from "@/auth/local-data";
 import { useSession } from "@/auth/session-query";
 
 import { Alert } from "./Alert";
@@ -14,7 +14,7 @@ export function AccountMenu() {
   const logoutForm = useRef<HTMLFormElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"local" | "pending" | "local_only" | null>(null);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export function AccountMenu() {
 
   const confirmLogout = async () => {
     setPending(true);
-    setError(false);
+    setError(null);
     try {
       const userId = session.data?.authenticated ? session.data.user_id : lastKnownUserId();
       if (userId) {
@@ -34,8 +34,8 @@ export function AccountMenu() {
       }
       setConfirming(false);
       logoutForm.current?.requestSubmit();
-    } catch {
-      setError(true);
+    } catch (caught) {
+      setError(caught instanceof UnsyncedChangesError ? caught.reason : "local");
       setPending(false);
     }
   };
@@ -60,7 +60,7 @@ export function AccountMenu() {
               className="min-h-12 w-full rounded-lg px-3 text-left text-sm text-fg outline-none hover:bg-surface-2 focus:bg-surface-2"
               onSelect={(event) => {
                 event.preventDefault();
-                setError(false);
+                setError(null);
                 setConfirming(true);
               }}
             >
@@ -90,7 +90,11 @@ export function AccountMenu() {
         </p>
         {error ? (
           <Alert tone="crit" className="mt-4">
-            {t("auth.logoutError")}
+            {error === "pending"
+              ? t("sync.logoutUnsynced")
+              : error === "local_only"
+                ? t("sync.logoutLocalOnly")
+                : t("auth.logoutError")}
           </Alert>
         ) : null}
         <div className="mt-6 flex justify-end gap-3">

@@ -127,4 +127,10 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The device key is a non-extractable CryptoKey: it can sign but never be read back, which
+    // is why it may live in IndexedDB (nothing sensitive is stored there in clear).
+    files: ["src/sync/device-key.ts"],
+    rules: { "no-restricted-globals": "off" },
+  },
 );

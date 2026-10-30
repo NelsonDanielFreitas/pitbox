@@ -13,6 +13,7 @@ import { isUnauthenticated } from "@/shared/api/errors";
 import { closeDatabase, deleteUserDatabase, openDatabase } from "@/db/client";
 import { CorruptLocalDataError } from "@/db/errors";
 import { subscribeToLogout } from "@/db/session-channel";
+import { startSync, stopSync } from "@/sync/runtime";
 import { bootstrapTeams, hasLocalTeams } from "@/sync/teams";
 
 type GateState = { status: "loading" } | { status: "ready" } | { status: "error" };
@@ -68,7 +69,22 @@ export function DatabaseGate({ userId, children }: { userId: string; children: R
           if (!(await hasLocalTeams())) throw error;
         }
         await queryClient.invalidateQueries({ queryKey: ["teams", "mine"] });
-        if (active) setState({ status: "ready" });
+        if (active) {
+          setState({ status: "ready" });
+          // Background and best effort: the app never waits for the first sync.
+          void startSync({
+            userId,
+            onDataChanged: () =>
+              void queryClient.invalidateQueries({
+                predicate: (query) => query.queryKey[0] !== sessionQueryKey[0],
+              }),
+            onUnauthenticated: () => {
+              queryClient.setQueryData(sessionQueryKey, { authenticated: false });
+              const returnTo = `${window.location.pathname}${window.location.search}`;
+              void navigate({ to: "/login", search: { returnTo } });
+            },
+          });
+        }
       } catch (error) {
         if (isUnauthenticated(error)) {
           queryClient.removeQueries({ queryKey: sessionQueryKey });
@@ -82,12 +98,14 @@ export function DatabaseGate({ userId, children }: { userId: string; children: R
     })();
     return () => {
       active = false;
+      stopSync();
     };
   }, [navigate, queryClient, userId]);
 
   useEffect(
     () =>
       subscribeToLogout(() => {
+        stopSync();
         void closeDatabase();
         queryClient.clear();
         queryClient.setQueryData(sessionQueryKey, { authenticated: false });

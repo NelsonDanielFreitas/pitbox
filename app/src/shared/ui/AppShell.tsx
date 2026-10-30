@@ -1,4 +1,6 @@
 import { Link, Outlet } from "@tanstack/react-router";
+import { SyncIndicator } from "@/features/sync/ui/SyncIndicator";
+
 import { AccountMenu } from "./AccountMenu";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { Logo } from "./Logo";
@@ -12,6 +14,7 @@ export function AppShell() {
             <Logo />
           </Link>
           <div className="flex items-center gap-1 sm:gap-2">
+            <SyncIndicator />
             <LanguageSwitcher />
             <AccountMenu />
           </div>

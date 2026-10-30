@@ -10,6 +10,7 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/clock"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/idempotency"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/syncapply"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/setup/app"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/setup/store"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/setup/transport"
@@ -25,8 +26,9 @@ type Deps struct {
 }
 
 type Module struct {
-	setup  *transport.Setup
-	shared *transport.Shared
+	setup    *transport.Setup
+	shared   *transport.Shared
+	appliers []syncapply.Applier
 }
 
 func New(d Deps) (*Module, error) {
@@ -38,8 +40,14 @@ func New(d Deps) (*Module, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Module{setup: transport.NewSetup(svc), shared: transport.NewShared(svc)}, nil
+	return &Module{
+		setup: transport.NewSetup(svc), shared: transport.NewShared(svc),
+		appliers: []syncapply.Applier{app.NewSetupApplier(svc), app.NewVersionApplier(svc), app.NewFeedbackApplier(svc)},
+	}, nil
 }
+
+// SyncAppliers are the entities of this module the sync module may write.
+func (m *Module) SyncAppliers() []syncapply.Applier { return m.appliers }
 
 func (m *Module) Register(server *connect.Server) {
 	setupv1connect.RegisterSetupServiceHandler(server, m.setup)

@@ -13,6 +13,7 @@ import (
 // transaction opened by the use case.
 type Store interface {
 	CreateSetup(ctx context.Context, tx db.DBTX, team, user uuid.UUID, carID uuid.UUID, name string, notes *string) (domain.Setup, error)
+	CreateSetupWithID(ctx context.Context, tx db.DBTX, team, user, id, carID uuid.UUID, name string, notes *string) (domain.Setup, error)
 	GetSetup(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Setup, error)
 	LockSetup(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Setup, error)
 	ListSetups(ctx context.Context, tx db.DBTX, team, after uuid.UUID, carID *uuid.UUID, limit int32) ([]domain.Setup, error)
@@ -21,6 +22,9 @@ type Store interface {
 	CreateVersion(ctx context.Context, tx db.DBTX, team, user uuid.UUID, setupID uuid.UUID, version int32, data []byte, basedOnSetup *uuid.UUID, basedOnVersion *int32, summary *string) (domain.VersionRef, error)
 	GetVersion(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID, version int32) (domain.Version, error)
 	ListVersions(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID, before, limit int32) ([]domain.VersionRef, error)
+
+	CreateFeedbackWithID(ctx context.Context, tx db.DBTX, team uuid.UUID, f domain.Feedback) error
+	GetFeedback(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Feedback, error)
 
 	CreateShareLink(ctx context.Context, tx db.DBTX, team, setupID, user uuid.UUID, pinned *int32, tokenHash []byte, ttl *string) (domain.ShareLink, error)
 	ListShareLinks(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID) ([]domain.ShareLink, error)

@@ -48,3 +48,24 @@ DELETE FROM garage.shopping_item si
 USING garage.stock_level sl
 WHERE si.team_id = $1 AND si.part_id = $2 AND si.dismissed
   AND sl.team_id = si.team_id AND sl.part_id = si.part_id AND NOT sl.below_min;
+
+-- The synced variants address a line by its own id (the sync entity id), not by its part.
+-- No lock: Pull reads in a read-only transaction, and the writes below check the version.
+-- name: GetShoppingItemByID :one
+SELECT id, part_id, COALESCE((qty * 100)::bigint, -1)::bigint AS qty_centi, dismissed, note, version
+FROM garage.shopping_item
+WHERE team_id = $1 AND id = $2;
+
+-- name: CreateShoppingItemWithID :one
+INSERT INTO garage.shopping_item (id, team_id, part_id, qty, dismissed, note, created_by)
+VALUES ($1, $2, $3, (sqlc.narg('qty_centi')::bigint::numeric / 100), $4, sqlc.narg('note'), $5)
+RETURNING id, part_id, COALESCE((qty * 100)::bigint, -1)::bigint AS qty_centi, dismissed, note, version;
+
+-- name: UpdateShoppingItemByID :one
+UPDATE garage.shopping_item
+SET qty = (sqlc.narg('qty_centi')::bigint::numeric / 100), dismissed = $3, note = sqlc.narg('note')
+WHERE team_id = $1 AND id = $2 AND version = $4
+RETURNING id, part_id, COALESCE((qty * 100)::bigint, -1)::bigint AS qty_centi, dismissed, note, version;
+
+-- name: DeleteShoppingItemByID :execrows
+DELETE FROM garage.shopping_item WHERE team_id = $1 AND id = $2 AND version = $3;

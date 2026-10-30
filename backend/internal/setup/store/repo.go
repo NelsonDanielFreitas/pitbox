@@ -38,6 +38,19 @@ func (Repo) CreateSetup(ctx context.Context, tx db.DBTX, team, user uuid.UUID, c
 	return setupFromCreate(row), nil
 }
 
+// CreateSetupWithID creates a setup with an id chosen by the caller (the sync layer).
+func (Repo) CreateSetupWithID(ctx context.Context, tx db.DBTX, team, user, id, carID uuid.UUID, name string, notes *string) (domain.Setup, error) {
+	row, err := sqlcgen.New(tx).CreateSetupWithID(ctx, sqlcgen.CreateSetupWithIDParams{
+		ID: id, TeamID: team, CarID: carID, Name: name, Notes: notes, CreatedBy: &user,
+	})
+	if err != nil {
+		return domain.Setup{}, mapError("create setup", err)
+	}
+	return domain.Setup{ID: row.ID.String(), CarID: row.CarID.String(), Name: row.Name,
+		CurrentVersion: row.CurrentVersion, Notes: row.Notes, CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt, Version: row.Version}, nil
+}
+
 func (Repo) GetSetup(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Setup, error) {
 	row, err := sqlcgen.New(tx).GetSetup(ctx, sqlcgen.GetSetupParams{TeamID: team, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -329,4 +342,48 @@ func mapError(op string, err error) error {
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)
+}
+
+// CreateFeedbackWithID stores the feedback with the id the device chose. A missing setup
+// version is the composite foreign key (domain.ErrNotFound); the same id twice is the
+// primary key (domain.ErrInvalid).
+func (Repo) CreateFeedbackWithID(ctx context.Context, tx db.DBTX, team uuid.UUID, f domain.Feedback) error {
+	i2 := func(v *int16) pgtype.Int2 {
+		if v == nil {
+			return pgtype.Int2{}
+		}
+		return pgtype.Int2{Int16: *v, Valid: true}
+	}
+	_, err := sqlcgen.New(tx).CreateFeedbackWithID(ctx, sqlcgen.CreateFeedbackWithIDParams{
+		ID: f.ID, TeamID: team, SetupID: f.SetupID, Version: f.Version, AuthorID: f.AuthorID, CreatedAt: f.CreatedAt,
+		SteeringEntry: i2(f.SteeringEntry), SteeringMid: i2(f.SteeringMid), SteeringExit: i2(f.SteeringExit),
+		Traction: i2(f.Traction), JumpStability: i2(f.JumpStability), Braking: i2(f.Braking),
+		EngineLowEnd: i2(f.EngineLowEnd), EngineTopEnd: i2(f.EngineTopEnd), TrackZone: f.TrackZone, Note: f.Note,
+	})
+	if err != nil {
+		return mapError("create setup feedback", err)
+	}
+	return nil
+}
+
+func (Repo) GetFeedback(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Feedback, error) {
+	row, err := sqlcgen.New(tx).GetFeedback(ctx, sqlcgen.GetFeedbackParams{TeamID: team, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Feedback{}, fmt.Errorf("get setup feedback: %w", domain.ErrNotFound)
+	}
+	if err != nil {
+		return domain.Feedback{}, fmt.Errorf("get setup feedback: %w", err)
+	}
+	p := func(v pgtype.Int2) *int16 {
+		if !v.Valid {
+			return nil
+		}
+		return &v.Int16
+	}
+	return domain.Feedback{
+		ID: row.ID, SetupID: row.SetupID, Version: row.Version, AuthorID: row.AuthorID, CreatedAt: row.CreatedAt,
+		SteeringEntry: p(row.SteeringEntry), SteeringMid: p(row.SteeringMid), SteeringExit: p(row.SteeringExit),
+		Traction: p(row.Traction), JumpStability: p(row.JumpStability), Braking: p(row.Braking),
+		EngineLowEnd: p(row.EngineLowEnd), EngineTopEnd: p(row.EngineTopEnd), TrackZone: row.TrackZone, Note: row.Note,
+	}, nil
 }

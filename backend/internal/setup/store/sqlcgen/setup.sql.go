@@ -60,6 +60,56 @@ func (q *Queries) CreateSetup(ctx context.Context, arg CreateSetupParams) (Creat
 	return i, err
 }
 
+const createSetupWithID = `-- name: CreateSetupWithID :one
+INSERT INTO setup.setup (id, team_id, car_id, name, notes, created_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, car_id, name, current_version, notes, created_at, updated_at, version
+`
+
+type CreateSetupWithIDParams struct {
+	ID        uuid.UUID
+	TeamID    uuid.UUID
+	CarID     uuid.UUID
+	Name      string
+	Notes     *string
+	CreatedBy *uuid.UUID
+}
+
+type CreateSetupWithIDRow struct {
+	ID             uuid.UUID
+	CarID          uuid.UUID
+	Name           string
+	CurrentVersion int32
+	Notes          *string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Version        int32
+}
+
+// The device generates the id (UUIDv7) so an offline record keeps it after syncing.
+func (q *Queries) CreateSetupWithID(ctx context.Context, arg CreateSetupWithIDParams) (CreateSetupWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createSetupWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.CarID,
+		arg.Name,
+		arg.Notes,
+		arg.CreatedBy,
+	)
+	var i CreateSetupWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.CarID,
+		&i.Name,
+		&i.CurrentVersion,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const createVersion = `-- name: CreateVersion :one
 INSERT INTO setup.setup_version (
   team_id, setup_id, version, data, schema_version,

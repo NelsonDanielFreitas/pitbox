@@ -32,3 +32,14 @@ SELECT id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
        reason::text AS reason, note, occurred_at, unit_cost_cents, COALESCE(loss_reason::text, '')::text AS loss_reason
 FROM garage.stock_movement
 WHERE team_id = $1 AND id = $2;
+
+-- The synced variant: the device chose the id (UUIDv7, the sync entity id) and the time the
+-- movement happened. The caller has already clamped occurred_at to a sane window.
+-- name: CreateStockMovementWithID :one
+INSERT INTO garage.stock_movement (
+  id, team_id, part_id, qty_delta, reason, note, occurred_at, created_by, unit_cost_cents, loss_reason
+)
+VALUES ($1, $2, $3, ($4::bigint::numeric / 100), $5::garage.stock_reason, $6, $7, $8,
+        sqlc.narg('unit_cost_cents')::integer, sqlc.narg('loss_reason')::garage.loss_reason)
+RETURNING id, part_id, (qty_delta * 100)::bigint AS qty_delta_centi,
+          reason::text AS reason, note, occurred_at, unit_cost_cents, COALESCE(loss_reason::text, '')::text AS loss_reason;

@@ -78,6 +78,74 @@ func (q *Queries) CreateEngine(ctx context.Context, arg CreateEngineParams) (Cre
 	return i, err
 }
 
+const createEngineWithID = `-- name: CreateEngineWithID :one
+INSERT INTO garage.engine (
+  id, team_id, make, model, serial_number, purchased_on, status, notes, created_by
+)
+VALUES ($1, $2, $3, $4, $5, $6::date, $7::garage.asset_status, $8, $9)
+RETURNING id, make, model, serial_number, COALESCE(purchased_on::text, '')::text AS purchased_on,
+          status::text AS status, (tanks_total * 100)::bigint AS tanks_centi,
+          run_seconds_total, sessions_total, notes, created_at, version
+`
+
+type CreateEngineWithIDParams struct {
+	ID           uuid.UUID
+	TeamID       uuid.UUID
+	Make         string
+	Model        string
+	SerialNumber *string
+	Column6      pgtype.Date
+	Column7      GarageAssetStatus
+	Notes        *string
+	CreatedBy    *uuid.UUID
+}
+
+type CreateEngineWithIDRow struct {
+	ID              uuid.UUID
+	Make            string
+	Model           string
+	SerialNumber    *string
+	PurchasedOn     string
+	Status          string
+	TanksCenti      int64
+	RunSecondsTotal int32
+	SessionsTotal   int32
+	Notes           *string
+	CreatedAt       time.Time
+	Version         int32
+}
+
+// The device generates the id (UUIDv7) so an offline record keeps it after syncing.
+func (q *Queries) CreateEngineWithID(ctx context.Context, arg CreateEngineWithIDParams) (CreateEngineWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createEngineWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.Make,
+		arg.Model,
+		arg.SerialNumber,
+		arg.Column6,
+		arg.Column7,
+		arg.Notes,
+		arg.CreatedBy,
+	)
+	var i CreateEngineWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Make,
+		&i.Model,
+		&i.SerialNumber,
+		&i.PurchasedOn,
+		&i.Status,
+		&i.TanksCenti,
+		&i.RunSecondsTotal,
+		&i.SessionsTotal,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.Version,
+	)
+	return i, err
+}
+
 const engineExists = `-- name: EngineExists :one
 SELECT EXISTS (
   SELECT 1 FROM garage.engine

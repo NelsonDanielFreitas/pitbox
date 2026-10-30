@@ -53,3 +53,17 @@ UPDATE garage.part
 SET deleted_at = now()
 WHERE team_id = $1 AND id = $2 AND version = $3 AND deleted_at IS NULL
 RETURNING id;
+
+-- name: CreatePartWithID :one
+INSERT INTO garage.part (
+  id, team_id, kind, brand, reference, description, unit, specs, min_stock,
+  unit_cost_cents, currency, has_service_life, created_by, reorder_to
+)
+VALUES (
+  $1, $2, $3::garage.part_kind, $4, $5, $6, $7, $8::jsonb,
+  ($9::bigint::numeric / 100), $10, $11, $12, $13,
+  (sqlc.narg('reorder_to_centi')::bigint::numeric / 100)
+)
+RETURNING id, kind::text AS kind, brand, reference, description, unit, specs::text AS specs,
+          (min_stock * 100)::bigint AS min_stock_centi, unit_cost_cents, currency,
+          has_service_life, COALESCE((reorder_to * 100)::bigint, -1)::bigint AS reorder_to_centi, created_at, version;

@@ -18,6 +18,7 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
   export PITBOX_OIDC_CLIENT_ID="$(get PITBOX_OIDC_CLIENT_ID)"
   export PITBOX_OIDC_CLIENT_SECRET="$(get PITBOX_OIDC_CLIENT_SECRET)"
   export PITBOX_AUTH_KEYS="$(get PITBOX_AUTH_KEYS)"
+  export PITBOX_SYNC_PASS_KEYS="$(get PITBOX_SYNC_PASS_KEYS)"
   if [ -z "${PITBOX_PUBLIC_URL:-}" ]; then
     PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"
     PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
@@ -40,5 +41,21 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
 else
   echo "run-api: sem login (corre 'make zitadel-provision' para o ligar); os RPC são todos recusados" >&2
 fi
+
+# Aviso (não bloqueia): uma branch com migrações novas precisa de `make db-migrate`, senão a
+# API arranca mas os RPC falham com "column ... does not exist". Só lê o estado (migrate status).
+warn_pending_migrations() {
+  command -v atlas >/dev/null 2>&1 || return 0
+  local password port pending
+  password="$(get PITBOX_MIGRATOR_PASSWORD)"
+  [ -n "$password" ] || return 0
+  port="$(get POSTGRES_PORT)"; port="${port:-5432}"
+  pending="$(DATABASE_URL="postgres://pitbox_migrator:${password}@127.0.0.1:${port}/pitbox?sslmode=disable" \
+    timeout 10 atlas migrate status --env local 2>/dev/null | sed -n 's/^ *-- Pending Files: *\([0-9][0-9]*\).*/\1/p' | head -1 || true)"
+  if [ -n "$pending" ] && [ "$pending" -gt 0 ]; then
+    echo "run-api: AVISO: $pending migração(ões) por aplicar na base local; corre 'make db-migrate' (sem isto os RPC podem falhar)" >&2
+  fi
+}
+warn_pending_migrations
 
 cd backend && exec go run ./cmd/api

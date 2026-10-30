@@ -23,6 +23,7 @@ func hosted(env string, extra map[string]string) map[string]string {
 		"PITBOX_OIDC_CLIENT_ID":        "client-id",
 		"PITBOX_OIDC_CLIENT_SECRET":    "client-secret", //nolint:gosec // fake value
 		"PITBOX_AUTH_KEYS":             "k1:" + testKey,
+		"PITBOX_SYNC_PASS_KEYS":        "k1:" + testKey,   //nolint:gosec // fake value
 		"PITBOX_VALKEY_PASSWORD":       "valkey-password", //nolint:gosec // fake value
 		"PITBOX_VALKEY_TLS":            "true",
 		"PITBOX_DATABASE_URL":          "postgres://pitbox_api:db-password@db.example.eu:5432/pitbox?sslmode=verify-full", //nolint:gosec // fake value

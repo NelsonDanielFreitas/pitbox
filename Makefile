@@ -46,6 +46,7 @@ init: ## Cria deploy/compose/.env com segredos aleatórios; acrescenta as chaves
 	add S3_ACCESS_KEY "$$(openssl rand -hex 10)"; \
 	add S3_SECRET_KEY "$$(openssl rand -hex 24)"; \
 	add PITBOX_AUTH_KEYS "k1:$$(openssl rand -base64 32)"; \
+	add PITBOX_SYNC_PASS_KEYS "k1:$$(openssl rand -base64 32)"; \
 	add MAILPIT_SMTP_USERNAME "pitbox-smtp"; \
 	add MAILPIT_SMTP_PASSWORD "$$(openssl rand -hex 24)"; \
 	add MAILPIT_UI_USERNAME "pitbox-ui"; \

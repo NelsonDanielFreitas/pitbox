@@ -610,6 +610,34 @@ CREATE TABLE setup.setup_version (
 );
 CREATE INDEX setup_version_data_gin ON setup.setup_version USING gin (data jsonb_path_ops);
 
+-- Feedback do piloto sobre uma versão de setup (ADR 0026). Só de acrescento; o F2 liga-o a uma sessão.
+CREATE TABLE setup.setup_feedback (
+  id                  uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
+  team_id             uuid        NOT NULL,
+  setup_id            uuid        NOT NULL,
+  version             integer     NOT NULL,
+  author_id           uuid        NOT NULL REFERENCES identity.user_account (id),
+  steering_entry      smallint    CHECK (steering_entry  BETWEEN 1 AND 5),
+  steering_mid        smallint    CHECK (steering_mid    BETWEEN 1 AND 5),
+  steering_exit       smallint    CHECK (steering_exit   BETWEEN 1 AND 5),
+  traction            smallint    CHECK (traction        BETWEEN 1 AND 5),
+  jump_stability      smallint    CHECK (jump_stability  BETWEEN 1 AND 5),
+  braking             smallint    CHECK (braking         BETWEEN 1 AND 5),
+  engine_low_end      smallint    CHECK (engine_low_end  BETWEEN 1 AND 5),
+  engine_top_end      smallint    CHECK (engine_top_end  BETWEEN 1 AND 5),
+  track_zone          text        CHECK (track_zone IS NULL OR char_length(btrim(track_zone)) BETWEEN 1 AND 80),
+  note                text        CHECK (note IS NULL OR char_length(btrim(note)) BETWEEN 1 AND 2000),
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (team_id, id),
+  FOREIGN KEY (team_id, setup_id, version)
+    REFERENCES setup.setup_version (team_id, setup_id, version) ON DELETE CASCADE,
+  CONSTRAINT setup_feedback_content_ck CHECK (
+    num_nonnulls(steering_entry, steering_mid, steering_exit, traction, jump_stability,
+                 braking, engine_low_end, engine_top_end, note) > 0
+  )
+);
+CREATE INDEX setup_feedback_version_idx ON setup.setup_feedback (team_id, setup_id, version, created_at);
+
 -- Favoritos por pista e condição do piso.
 CREATE TABLE setup.favorite (
   team_id             uuid        NOT NULL,
@@ -1212,9 +1240,14 @@ CREATE TABLE sync.operation (
   received_at         timestamptz NOT NULL DEFAULT now(),
   status              sync.op_status NOT NULL,
   reason              text,                                   -- motivo de rejeição
+  device_signature    bytea       NOT NULL,                   -- ECDSA P-256 (P1363) sobre a forma canónica
+  CONSTRAINT operation_signature_len CHECK (length(device_signature) = 64),
+  result_version      integer,                                -- versão da entidade depois desta operação
   FOREIGN KEY (team_id, device_key_id) REFERENCES identity.device_key (team_id, id)
 );
 CREATE INDEX operation_team_received_idx ON sync.operation (team_id, received_at DESC);
+CREATE INDEX operation_entity_version_idx ON sync.operation (team_id, entity, entity_id, result_version DESC)
+  WHERE result_version IS NOT NULL;
 
 CREATE TABLE sync.conflict (
   id                  uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
@@ -1240,9 +1273,12 @@ CREATE TABLE sync.change_log (
   entity              text        NOT NULL,
   entity_id           uuid        NOT NULL,
   op                  char(1)     NOT NULL CHECK (op IN ('I', 'U', 'D')),
-  changed_at          timestamptz NOT NULL DEFAULT now()
+  changed_at          timestamptz NOT NULL DEFAULT now(),
+  -- Transação que escreveu: o Pull só devolve linhas com xid < xmin do snapshot (sem buracos no cursor).
+  xid                 xid8        NOT NULL DEFAULT pg_current_xact_id()
 );
 CREATE INDEX change_log_team_seq_idx ON sync.change_log (team_id, seq);
+CREATE INDEX change_log_team_xid_seq_idx ON sync.change_log (team_id, xid, seq);
 
 -- Regista uma alteração no change log. TG_ARGV[0] = coluna que identifica a entidade.
 CREATE OR REPLACE FUNCTION sync.log_change() RETURNS trigger
@@ -1432,6 +1468,8 @@ $$;
 -- Tabelas só de acrescento.
 CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON setup.setup_version
   FOR EACH ROW EXECUTE FUNCTION app.forbid_mutation();
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON setup.setup_feedback
+  FOR EACH ROW EXECUTE FUNCTION app.forbid_mutation();
 CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON audit.audit_log
   FOR EACH ROW EXECUTE FUNCTION app.forbid_mutation();
 CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON garage.stock_movement
@@ -1462,6 +1500,7 @@ BEGIN
     ['garage','tyre_set','id'], ['garage','part','id'], ['garage','stock_movement','id'],
     ['garage','part_install','id'], ['garage','shopping_item','id'],
     ['setup','field_definition','id'], ['setup','setup','id'], ['setup','setup_version','setup_id'],
+    ['setup','setup_feedback','id'],
     ['setup','favorite','setup_id'],
     ['events','track','id'], ['events','championship','id'], ['events','event','id'],
     ['events','session','id'], ['events','driver_feedback','id'], ['events','lap','session_id'],
@@ -1595,6 +1634,7 @@ $$;
 -- Restrições adicionais além dos triggers.
 REVOKE UPDATE, DELETE ON audit.audit_log            FROM pitbox_app;
 REVOKE UPDATE, DELETE ON setup.setup_version        FROM pitbox_app;
+REVOKE UPDATE, DELETE ON setup.setup_feedback       FROM pitbox_app;
 REVOKE UPDATE, DELETE ON garage.stock_movement      FROM pitbox_app;
 REVOKE INSERT, UPDATE, DELETE ON telemetry.firmware_release FROM pitbox_app;
 REVOKE SELECT ON platform.idempotency_key           FROM pitbox_readonly;

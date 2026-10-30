@@ -94,6 +94,83 @@ func (q *Queries) CreateTyreSet(ctx context.Context, arg CreateTyreSetParams) (C
 	return i, err
 }
 
+const createTyreSetWithID = `-- name: CreateTyreSetWithID :one
+INSERT INTO garage.tyre_set (
+  id, team_id, label, make, model, compound, insert_type, glued_on, status, wear_notes, created_by
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9::garage.tyre_status, $10, $11)
+RETURNING id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
+          status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,
+          tyre_part_id, insert_part_id
+`
+
+type CreateTyreSetWithIDParams struct {
+	ID         uuid.UUID
+	TeamID     uuid.UUID
+	Label      string
+	Make       string
+	Model      string
+	Compound   *string
+	InsertType *string
+	Column8    pgtype.Date
+	Column9    GarageTyreStatus
+	WearNotes  *string
+	CreatedBy  *uuid.UUID
+}
+
+type CreateTyreSetWithIDRow struct {
+	ID              uuid.UUID
+	Label           string
+	Make            string
+	Model           string
+	Compound        *string
+	InsertType      *string
+	GluedOn         string
+	Status          string
+	SessionsTotal   int32
+	RunSecondsTotal int32
+	WearNotes       *string
+	CreatedAt       time.Time
+	Version         int32
+	TyrePartID      *uuid.UUID
+	InsertPartID    *uuid.UUID
+}
+
+func (q *Queries) CreateTyreSetWithID(ctx context.Context, arg CreateTyreSetWithIDParams) (CreateTyreSetWithIDRow, error) {
+	row := q.db.QueryRow(ctx, createTyreSetWithID,
+		arg.ID,
+		arg.TeamID,
+		arg.Label,
+		arg.Make,
+		arg.Model,
+		arg.Compound,
+		arg.InsertType,
+		arg.Column8,
+		arg.Column9,
+		arg.WearNotes,
+		arg.CreatedBy,
+	)
+	var i CreateTyreSetWithIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Label,
+		&i.Make,
+		&i.Model,
+		&i.Compound,
+		&i.InsertType,
+		&i.GluedOn,
+		&i.Status,
+		&i.SessionsTotal,
+		&i.RunSecondsTotal,
+		&i.WearNotes,
+		&i.CreatedAt,
+		&i.Version,
+		&i.TyrePartID,
+		&i.InsertPartID,
+	)
+	return i, err
+}
+
 const getTyreSet = `-- name: GetTyreSet :one
 SELECT id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
        status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,

@@ -14,6 +14,7 @@ import (
 	garagev1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1"
 	identityv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1"
 	setupv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/setup/v1"
+	syncv1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/sync/v1"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/authz"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/config"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/httpserver"
@@ -53,6 +54,8 @@ func requestMessages() []proto.Message {
 		&setupv1.ListSetupsRequest{}, &setupv1.ListVersionsRequest{}, &setupv1.CompareVersionsRequest{},
 		&setupv1.CreateShareLinkRequest{}, &setupv1.ListShareLinksRequest{}, &setupv1.RevokeShareLinkRequest{},
 		&setupv1.GetSharedSetupRequest{},
+		&syncv1.RegisterDeviceRequest{}, &syncv1.IssueOfflinePassRequest{}, &syncv1.PushRequest{}, &syncv1.PullRequest{},
+		&syncv1.ListConflictsRequest{}, &syncv1.ResolveConflictRequest{}, &syncv1.RevokeDeviceRequest{},
 	}
 }
 

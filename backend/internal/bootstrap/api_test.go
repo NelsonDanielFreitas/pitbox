@@ -118,3 +118,65 @@ func TestRunAPIFailsWhenThePortIsBusy(t *testing.T) {
 		t.Errorf("runAPI = %v, want a listen error", err)
 	}
 }
+
+// The sync service is registered only when the pass key is configured, and when it is, it sits
+// behind authentication like every other service: an anonymous call never reaches it.
+func TestSyncServiceNeedsTheKeyAndAuthentication(t *testing.T) {
+	t.Parallel()
+
+	const pull = "/pitbox.sync.v1.SyncService/Pull"
+	for _, tc := range []struct {
+		name     string
+		withKey  bool
+		wantHTTP int
+	}{
+		{"configured: refused without a session", true, http.StatusUnauthorized},
+		{"not configured: not served", false, http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := localEnv(t)
+			if tc.withKey {
+				env["PITBOX_SYNC_PASS_KEYS"] = "k1:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+			}
+			cfg, err := config.LoadFrom(env)
+			if err != nil {
+				t.Fatalf("LoadFrom: %v", err)
+			}
+			var logs syncBuffer
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			addrCh := make(chan net.Addr, 1)
+			done := make(chan error, 1)
+			go func() {
+				done <- runAPI(ctx, cfg, platformlog.New(&logs, cfg.SlogLevel()), func(a net.Addr) { addrCh <- a })
+			}()
+			var addr net.Addr
+			select {
+			case addr = <-addrCh:
+			case err := <-done:
+				t.Fatalf("runAPI returned early: %v", err)
+			case <-time.After(10 * time.Second):
+				t.Fatal("server did not start")
+			}
+
+			req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+addr.String()+pull, strings.NewReader(`{}`))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Connect-Protocol-Version", "1")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("POST %s: %v", pull, err)
+			}
+			_ = resp.Body.Close()
+			if resp.StatusCode != tc.wantHTTP {
+				t.Errorf("status = %d, want %d", resp.StatusCode, tc.wantHTTP)
+			}
+			if !tc.withKey && !strings.Contains(logs.String(), "sync service disabled") {
+				t.Error("the log does not say that sync is disabled")
+			}
+			if strings.Contains(logs.String(), "AQEBAQEB") {
+				t.Error("the pass key leaked into the log")
+			}
+		})
+	}
+}

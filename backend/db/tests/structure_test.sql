@@ -52,8 +52,8 @@ DO $$ DECLARE bad text; BEGIN
   ) q;
   ASSERT bad IS NULL, 'objetos com dono errado: ' || bad;
   ASSERT (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 60,
-    'esperadas 60 tabelas (hypertable incluída)';
+          WHERE n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit') AND c.relkind = 'r') = 61,
+    'esperadas 61 tabelas (hypertable incluída)';
 END $$;
 
 -- 5. Papéis: nenhum com privilégios de administração; os de grupo não fazem login.
@@ -85,6 +85,8 @@ DO $$ DECLARE bad text; BEGIN
      AND NOT has_table_privilege('pitbox_app', 'audit.audit_log', 'DELETE'), 'audit_log é só de acrescento';
   ASSERT NOT has_table_privilege('pitbox_app', 'setup.setup_version', 'UPDATE')
      AND NOT has_table_privilege('pitbox_app', 'setup.setup_version', 'DELETE'), 'setup_version é imutável';
+  ASSERT NOT has_table_privilege('pitbox_app', 'setup.setup_feedback', 'UPDATE')
+     AND NOT has_table_privilege('pitbox_app', 'setup.setup_feedback', 'DELETE'), 'setup_feedback é só de acrescento';
   ASSERT NOT has_table_privilege('pitbox_app', 'garage.stock_movement', 'UPDATE')
      AND NOT has_table_privilege('pitbox_app', 'garage.stock_movement', 'DELETE'), 'stock_movement é só de acrescento';
   ASSERT NOT has_table_privilege('pitbox_app', 'telemetry.firmware_release', 'INSERT')

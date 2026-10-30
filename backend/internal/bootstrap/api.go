@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"time"
 
+	"connectrpc.com/connect/v2"
+
 	identityv1connect "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/identity/v1/identityv1connect"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/garage"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/identity"
@@ -25,7 +27,9 @@ import (
 	platformotel "github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/otel"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/outbox"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/ratelimit"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/syncapply"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/setup"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/sync"
 	"go.opentelemetry.io/otel"
 )
 
@@ -127,6 +131,34 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		return fmt.Errorf("set up setups: %w", err)
 	}
 
+	registers := []func(*connect.Server){identityModule.Register, garageModule.Register, setupModule.Register}
+	// Sync needs a key to sign offline passes. Without it (only possible in local, see
+	// config.validateSync) the service is not registered: its RPCs answer UNIMPLEMENTED
+	// and nothing is accepted.
+	if cfg.SyncConfigured() {
+		keyring, err := cfg.SyncPassKeyring()
+		if err != nil {
+			flushTelemetry(ctx, tel, logger)
+			return fmt.Errorf("sync pass keys: %w", err)
+		}
+		passKeys := make([]sync.PassKey, 0, len(keyring))
+		for _, k := range keyring {
+			passKeys = append(passKeys, sync.PassKey{ID: k.ID, Seed: k.Seed})
+		}
+		syncModule, err := sync.New(sync.Deps{
+			DB: db.New(authn.pool), Authz: authzClient, Clock: clock.Real(), Log: logger,
+			Appliers: syncapply.NewRegistry(append(garage.SyncAppliers(), setupModule.SyncAppliers()...)...),
+			PassKeys: passKeys, Catalog: newSyncCatalog(authn.pool),
+		})
+		if err != nil {
+			flushTelemetry(ctx, tel, logger)
+			return fmt.Errorf("set up sync: %w", err)
+		}
+		registers = append(registers, syncModule.Register)
+	} else {
+		logger.WarnContext(ctx, "sync service disabled: PITBOX_SYNC_PASS_KEYS is not set")
+	}
+
 	// Step-up: transfers need a recent strong authentication; CreateTeam needs a
 	// strong factor (MFA) but no recency, so a password-only session cannot make
 	// the caller an owner. The lists are part of the security surface.
@@ -140,7 +172,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		},
 	})
 
-	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, identityModule.Register, garageModule.Register, setupModule.Register)
+	api, err := newRPCServer(cfg, logger, tel.TracerProvider, authn.interceptor, interceptors.RateLimit(rlimiter), stepUp, authzClient, registers...)
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("create rpc server: %w", err)

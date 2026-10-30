@@ -1,0 +1,217 @@
+syntax = "proto3";
+
+package pitbox.sync.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// SyncService carries offline writes from a device to the server and the
+// server's changes back to the device.
+//
+// Every operation is authorised against the CURRENT permissions of the user
+// (not the ones at the time it was queued), signed by the device key and
+// idempotent on op_id. Another team is NOT_FOUND; a revoked device or an
+// expired offline pass is rejected per operation, never silently applied.
+service SyncService {
+  rpc RegisterDevice(RegisterDeviceRequest) returns (RegisterDeviceResponse);
+  rpc IssueOfflinePass(IssueOfflinePassRequest) returns (IssueOfflinePassResponse);
+  rpc Push(PushRequest) returns (PushResponse);
+  rpc Pull(PullRequest) returns (PullResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListConflicts(ListConflictsRequest) returns (ListConflictsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+  rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse);
+}
+
+enum OpKind {
+  OP_KIND_UNSPECIFIED = 0;
+  OP_KIND_CREATE = 1;
+  OP_KIND_PATCH = 2;
+  OP_KIND_APPEND = 3;
+  OP_KIND_DELETE = 4;
+}
+
+enum OpStatus {
+  OP_STATUS_UNSPECIFIED = 0;
+  OP_STATUS_APPLIED = 1;
+  OP_STATUS_MERGED = 2;
+  OP_STATUS_CONFLICT = 3;
+  OP_STATUS_REJECTED = 4;
+}
+
+enum ChangeKind {
+  CHANGE_KIND_UNSPECIFIED = 0;
+  CHANGE_KIND_UPSERT = 1;
+  // Tombstone: the entity was deleted (kept for 30 days).
+  CHANGE_KIND_DELETE = 2;
+}
+
+enum ConflictResolution {
+  CONFLICT_RESOLUTION_UNSPECIFIED = 0;
+  CONFLICT_RESOLUTION_SERVER = 1;
+  CONFLICT_RESOLUTION_CLIENT = 2;
+  CONFLICT_RESOLUTION_MANUAL = 3;
+}
+
+message RegisterDeviceRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string device_name = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 80
+  }];
+  string platform = 4 [(buf.validate.field).string = {
+    in: ["web", "android", "ios"]
+  }];
+  // ECDSA P-256 public key, SPKI DER (91 bytes).
+  bytes public_key = 5 [(buf.validate.field).bytes.len = 91];
+  // Proof of possession: ECDSA P-256 signature (P1363, 64 bytes) over
+  // sync/domain.RegistrationMessage (team_id, user_id and the public key).
+  bytes proof = 6 [(buf.validate.field).bytes.len = 64];
+}
+
+message RegisterDeviceResponse {
+  string device_id = 1;
+}
+
+message IssueOfflinePassRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string device_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message IssueOfflinePassResponse {
+  // Server-signed token (team, device, role, expiry). Opaque to the client.
+  string token = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message Operation {
+  // UUIDv7 generated on the device; idempotency key.
+  string op_id = 1 [(buf.validate.field).string.uuid = true];
+  // Allow-listed entity, e.g. "garage.car", "setup.setup_version".
+  string entity = 2 [(buf.validate.field).string = {
+    min_len: 3
+    max_len: 64
+    pattern: "^[a-z_]+\\.[a-z_]+$"
+  }];
+  string entity_id = 3 [(buf.validate.field).string.uuid = true];
+  OpKind kind = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // JSON object, exactly the bytes the device signed (no re-canonicalisation
+  // on either side). UTF-8, at most 64 KiB.
+  bytes fields_json = 5 [(buf.validate.field).bytes = {
+    min_len: 2
+    max_len: 65536
+  }];
+  optional int32 base_version = 6 [(buf.validate.field).int32.gte = 1];
+  // Signed by the device. Never used to order operations; the server only
+  // checks it against the offline pass window and the clock (not in the future).
+  google.protobuf.Timestamp client_ts = 7 [(buf.validate.field).required = true];
+  // ECDSA P-256 / SHA-256, IEEE P1363 (r||s, 64 bytes) over the message built
+  // by sync/domain.SigningMessage: domain tag, op_id, team_id, device_id,
+  // entity, entity_id, kind, base_version, client_ts and SHA-256(fields_json),
+  // each length-prefixed.
+  bytes device_signature = 8 [(buf.validate.field).bytes.len = 64];
+}
+
+message PushRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string device_id = 2 [(buf.validate.field).string.uuid = true];
+  string offline_pass = 3 [(buf.validate.field).string.max_len = 2048];
+  // Processed in order, each in its own transaction.
+  repeated Operation operations = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 100
+  }];
+}
+
+message OperationResult {
+  string op_id = 1;
+  OpStatus status = 2;
+  // Stable machine-readable code for REJECTED (no internal details).
+  optional string reason = 3;
+  // Server version after applying, when applicable.
+  optional int32 version = 4;
+}
+
+message PushResponse {
+  repeated OperationResult results = 1;
+}
+
+message PullRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  // Opaque cursor from the previous PullResponse; empty for the first pull.
+  string cursor = 2 [(buf.validate.field).string.max_len = 64];
+  int32 limit = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+  // Hash of the catalogue the device already has; empty if none.
+  string catalog_version = 4 [(buf.validate.field).string.max_len = 128];
+}
+
+message Change {
+  string entity = 1;
+  string entity_id = 2;
+  ChangeKind kind = 3;
+  // Current server row, filtered by the caller's role. Empty for deletes.
+  google.protobuf.Struct data = 4;
+}
+
+message PullResponse {
+  repeated Change changes = 1;
+  string next_cursor = 2;
+  bool has_more = 3;
+  string catalog_version = 4;
+  // Present only when the device's catalog_version differs.
+  optional google.protobuf.Struct catalog_snapshot = 5;
+}
+
+message Conflict {
+  string id = 1;
+  string op_id = 2;
+  string entity = 3;
+  string entity_id = 4;
+  string field = 5;
+  google.protobuf.Value server_value = 6;
+  google.protobuf.Value client_value = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message ListConflictsRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ListConflictsResponse {
+  repeated Conflict conflicts = 1;
+}
+
+message ResolveConflictRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string conflict_id = 3 [(buf.validate.field).string.uuid = true];
+  ConflictResolution resolution = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Required when resolution is MANUAL.
+  google.protobuf.Value value = 5;
+}
+
+message ResolveConflictResponse {
+  Conflict conflict = 1;
+}
+
+message RevokeDeviceRequest {
+  string team_id = 1 [(buf.validate.field).string.uuid = true];
+  string request_id = 2 [(buf.validate.field).string.uuid = true];
+  string device_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+message RevokeDeviceResponse {}

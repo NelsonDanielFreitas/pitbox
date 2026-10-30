@@ -36,6 +36,7 @@ make smoke-api     # prova ponta a ponta: /healthz, trace no Jaeger e paragem li
 | `PITBOX_VALKEY_TLS` | `false` | Obrigatório fora de `local` |
 | `PITBOX_DATABASE_URL` | (vazio) | `postgres://pitbox_api:<palavra-passe>@host:5432/pitbox`; o papel da aplicação (nunca o dono nem o migrador). Fora de `local`, só `sslmode=verify-full` (`require` cifra mas aceita qualquer certificado). **Segredo** |
 | `PITBOX_AUTH_KEYS` | (vazio) | Chaves mestras para cifrar cookies e refresh tokens: `kid:base64[,kid:base64]`, pelo menos 32 bytes cada (`openssl rand -base64 32`). A primeira cifra; as outras só decifram (rotação). **Segredo** |
+| `PITBOX_SYNC_PASS_KEYS` | (vazio) | Chaves Ed25519 que assinam os passes offline (sync, ADR 0025): `kid:base64[,kid:base64]`, exatamente 32 bytes cada (`openssl rand -base64 32`). A primeira assina; todas verificam (rotação). Obrigatória fora de `local`; em `local` sem ela o `SyncService` não é registado. **Segredo** |
 | `PITBOX_SESSION_IDLE_TIMEOUT` | `168h` | Inatividade máxima de uma sessão web (mínimo 1 min) |
 | `PITBOX_SESSION_ABSOLUTE_TIMEOUT` | `720h` | Duração máxima; não pode passar o limite do refresh token no Zitadel (720 h) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | (vazio) | Sem endpoint, os traces ficam desligados. `http://` só com `PITBOX_ENV=local` |

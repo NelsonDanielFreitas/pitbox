@@ -114,6 +114,12 @@ type Config struct {
 	// Read them with AuthKeyring.
 	AuthKeys string `env:"PITBOX_AUTH_KEYS"`
 
+	// SyncPassKeys are the Ed25519 seeds that sign offline passes (F1-13, ADR 0025), as
+	// "kid:base64,kid:base64" with 32 bytes each. The first one signs; all of them verify
+	// (rotation). Required outside local; without it in local the sync service is off.
+	// Read them with SyncPassKeyring.
+	SyncPassKeys string `env:"PITBOX_SYNC_PASS_KEYS"`
+
 	// SessionIdleTimeout and SessionAbsoluteTimeout bound a web session (ADR 0013).
 	SessionIdleTimeout     time.Duration `env:"PITBOX_SESSION_IDLE_TIMEOUT" envDefault:"168h"`
 	SessionAbsoluteTimeout time.Duration `env:"PITBOX_SESSION_ABSOLUTE_TIMEOUT" envDefault:"720h"`
@@ -231,6 +237,7 @@ func (c Config) Validate() error {
 	errs = append(errs, c.validateRateLimit()...)
 	errs = append(errs, c.validateOpenFGA()...)
 	errs = append(errs, c.validateOutbox()...)
+	errs = append(errs, c.validateSync()...)
 
 	// Telemetry must not travel in clear text outside local development.
 	if c.Env != EnvLocal {

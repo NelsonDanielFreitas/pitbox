@@ -18,8 +18,8 @@ export function GarageNav({ teamId }: { teamId: string }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   return (
-    <nav aria-label={t("garage.title")} className="mb-5 overflow-x-auto">
-      <div className="flex min-w-max gap-1 rounded-2xl border border-line bg-surface p-1">
+    <nav aria-label={t("garage.title")} className="mb-5">
+      <div className="flex flex-wrap gap-1 rounded-2xl border border-line bg-surface p-1">
         {sections.map((section) => {
           const href = `/teams/${teamId}/garage/${section}`;
           const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -30,7 +30,7 @@ export function GarageNav({ teamId }: { teamId: string }) {
               params={{ teamId }}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold",
+                "flex min-h-11 flex-1 items-center justify-center rounded-xl px-3 text-sm font-semibold",
                 active ? "bg-primary text-on-primary" : "text-muted hover:bg-surface-2 hover:text-fg",
               )}
             >

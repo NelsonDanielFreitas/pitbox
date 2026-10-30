@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { NotFound } from "@/shared/ui/NotFound";
 import { canReadGarage } from "@/features/garage/domain/roles";
+import { canReadSetups } from "@/features/setups/domain/roles";
 import { teamsQueryOptions } from "@/features/teams/data/teams-query";
 import { TeamContext } from "@/features/teams/ui/team-context";
 import { TeamTopBar } from "@/features/teams/ui/TeamTopBar";
@@ -57,7 +58,9 @@ function TeamLayout() {
         <div className="mt-5">
           <Outlet />
         </div>
-        <TeamTabBar teamId={team.id} showGarage={canReadGarage(team.role)} showMore={team.role !== "guest" && team.role !== "unknown"} />
+        <TeamTabBar teamId={team.id} showGarage={canReadGarage(team.role)}
+          showSetups={canReadSetups(team.role)}
+          showMore={team.role !== "guest" && team.role !== "unknown"} />
       </div>
     </TeamContext.Provider>
   );

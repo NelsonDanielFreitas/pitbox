@@ -109,6 +109,9 @@ Elementos: `SyncService`, passe offline, fila local.
 | TM-SYNC-04 | D | `Push` enorme ou em ciclo esgota a API | Limites de tamanho e de operações por pedido; páginas de 500 no `Pull` | planeado | F1-13 | M |
 | TM-SYNC-05 | T | Conflito resolvido em silêncio perde dados do mecânico | Conflito de campo gera registo `conflict` e escolha do utilizador; registos de acrescento nunca em conflito | planeado | F1-13 | M |
 | TM-SYNC-06 | I | Pull devolve dados de outra equipa | RLS + autorização no `Pull`; cursor por equipa | planeado | F1-13 (barreira RLS já testada, TM-DB-01) | A |
+| TM-SYNC-07 | T | Setup local com valores impossíveis ou versão antiga alterada na base local | Catálogo e validação iguais às do servidor (teste de deriva contra `schema_v1.json`); versões imutáveis por *trigger*; nova versão só se a base ainda for a atual | implementado | F1-12; `app/src/features/setups/domain/catalogue.test.ts`; `app/src/db/migrations/0007_setups.test.ts`; `app/src/features/setups/data/local-setup-repository.test.ts` | M |
+| TM-SYNC-08 | E | Piloto altera setups na app | Papéis na UI (só dono e mecânico escrevem; o piloto só dá feedback); o servidor recusa na mesma (F1-05) | implementado | F1-12; `app/src/features/setups/ui/setup-pages.test.tsx`; `app/tests/e2e/setups.spec.ts` | M |
+| TM-SYNC-09 | I | Valores de setup ou autores com nome em erros, logs ou na base local | Erros só com caminho e regra; autor só por id (ADR 0020/0023/0024) | implementado | F1-12; `app/src/features/setups/data/local-setup-repository.test.ts` | B |
 
 ## Dispositivo do utilizador perdido ou roubado (DF-02, DF-03)
 

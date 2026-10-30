@@ -16,6 +16,10 @@ const validationKeys = [
   "garage.validation.dateFuture",
   "garage.validation.lossReason",
   "garage.validation.priceOnlyPurchase",
+  "setups.validation.required",
+  "setups.validation.tooLong",
+  "setups.validation.rating",
+  "setups.validation.feedbackEmpty",
 ] as const;
 export type ValidationKey = (typeof validationKeys)[number];
 

@@ -6,10 +6,12 @@ import { cn } from "@/shared/lib/cn";
 export function TeamTabBar({
   teamId,
   showGarage,
+  showSetups,
   showMore,
 }: {
   teamId: string;
   showGarage: boolean;
+  showSetups: boolean;
   showMore: boolean;
 }) {
   const { t } = useTranslation();
@@ -36,6 +38,14 @@ export function TeamTabBar({
             active={pathname.startsWith(`/teams/${teamId}/garage`)}
           />
         ) : null}
+        {showSetups ? (
+          <TabLink
+            to="/teams/$teamId/setups"
+            params={{ teamId }}
+            label={t("setups.tabLabel")}
+            active={pathname.startsWith(`/teams/${teamId}/setups`)}
+          />
+        ) : null}
         {showMore ? (
           <TabLink
             to="/teams/$teamId/more"
@@ -55,7 +65,11 @@ function TabLink({
   label,
   active,
 }: {
-  to: "/teams/$teamId" | "/teams/$teamId/garage/cars" | "/teams/$teamId/more";
+  to:
+    | "/teams/$teamId"
+    | "/teams/$teamId/garage/cars"
+    | "/teams/$teamId/setups"
+    | "/teams/$teamId/more";
   params: { teamId: string };
   label: string;
   active: boolean;

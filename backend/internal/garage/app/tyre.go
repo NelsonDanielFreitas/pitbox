@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ const (
 	tyreCreateMethod = "/pitbox.garage.v1.TyreService/CreateTyreSet"
 	tyreUpdateMethod = "/pitbox.garage.v1.TyreService/UpdateTyreSet"
 	tyreDeleteMethod = "/pitbox.garage.v1.TyreService/DeleteTyreSet"
+	tyreGlueMethod   = "/pitbox.garage.v1.TyreService/GlueTyreSet"
 )
 
 type CreateTyreSetInput struct {
@@ -200,6 +202,116 @@ func (s *Service) DeleteTyreSet(ctx context.Context, user db.UserID, team db.Tea
 		}
 		return s.audit(ctx, tx, "tyre.delete", "tyre_set", id.String(), tyreAudit(current), nil, requestID.String())
 	})
+}
+
+type GlueTyreSetInput struct {
+	RequestID uuid.UUID
+	Glue      domain.GlueInput
+}
+
+type glueResult struct {
+	Set        domain.TyreSet `json:"set"`
+	TyrePart   domain.Part    `json:"tyre_part"`
+	InsertPart domain.Part    `json:"insert_part"`
+}
+
+// GlueTyreSet turns tyres and inserts in stock into a set: the set and the two `consumed`
+// movements are written in one transaction, so a failure (duplicate label, short stock, a
+// part of another team) leaves the stock untouched.
+func (s *Service) GlueTyreSet(ctx context.Context, user db.UserID, team db.TeamID, in GlueTyreSetInput) (domain.TyreSet, domain.Part, domain.Part, error) {
+	glueIn, err := in.Glue.Normalize()
+	if err != nil {
+		return domain.TyreSet{}, domain.Part{}, domain.Part{}, err
+	}
+	in.Glue = glueIn
+	hash, err := hashInput(uuid.UUID(team), in)
+	if err != nil {
+		return domain.TyreSet{}, domain.Part{}, domain.Part{}, err
+	}
+	var out glueResult
+	err = s.withMechanicTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, _ string) error {
+		response, replayed, err := s.replay(ctx, tx, uuid.UUID(user), in.RequestID, tyreGlueMethod, hash)
+		if err != nil {
+			return err
+		}
+		if replayed {
+			out, err = decodeResource[glueResult](response)
+			return err
+		}
+		// Fixed lock order (smaller id first) so two concurrent gluings cannot deadlock.
+		first, second := in.Glue.TyrePartID, in.Glue.InsertPartID
+		if bytes.Compare(first[:], second[:]) > 0 {
+			first, second = second, first
+		}
+		for _, id := range []uuid.UUID{first, second} {
+			if err := s.store.LockPartForStock(ctx, tx, uuid.UUID(team), id); err != nil {
+				return err
+			}
+		}
+		tyrePart, err := s.store.GetPart(ctx, tx, uuid.UUID(team), in.Glue.TyrePartID)
+		if err != nil {
+			return err
+		}
+		insertPart, err := s.store.GetPart(ctx, tx, uuid.UUID(team), in.Glue.InsertPartID)
+		if err != nil {
+			return err
+		}
+		glue, err := domain.NewGlue(in.Glue, tyrePart, insertPart, s.now())
+		if err != nil {
+			return err
+		}
+		response, replayed, err = s.claimOrReplay(ctx, tx, uuid.UUID(user), in.RequestID, tyreGlueMethod, hash)
+		if err != nil {
+			return err
+		}
+		if replayed {
+			out, err = decodeResource[glueResult](response)
+			return err
+		}
+		created, err := s.store.CreateTyreSet(ctx, tx, uuid.UUID(team), uuid.UUID(user), glue.Set)
+		if err != nil {
+			return err
+		}
+		tyreMove, err := s.store.CreateStockMovement(ctx, tx, uuid.UUID(team), uuid.UUID(user), glue.TyreMovement)
+		if err != nil {
+			return err
+		}
+		insertMove, err := s.store.CreateStockMovement(ctx, tx, uuid.UUID(team), uuid.UUID(user), glue.InsertMovement)
+		if err != nil {
+			return err
+		}
+		moves := []struct {
+			before domain.Part
+			move   domain.StockMovement
+		}{{tyrePart, tyreMove}, {insertPart, insertMove}}
+		after := make([]domain.Part, 0, len(moves))
+		for _, m := range moves {
+			part, err := s.store.GetPart(ctx, tx, uuid.UUID(team), m.before.ID)
+			if err != nil {
+				return err
+			}
+			if m.before.QtyCenti >= part.MinStockCenti && part.QtyCenti < part.MinStockCenti {
+				if err := recordStockLow(ctx, tx, uuid.UUID(team), part, m.move.ID); err != nil {
+					return err
+				}
+			}
+			if err := s.afterStockChange(ctx, tx, uuid.UUID(team), part, false); err != nil {
+				return err
+			}
+			after = append(after, part)
+		}
+		out = glueResult{Set: created, TyrePart: after[0], InsertPart: after[1]}
+		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, out); err != nil {
+			return err
+		}
+		audit := tyreAudit(created)
+		audit["tyre_part_id"] = in.Glue.TyrePartID.String()
+		audit["insert_part_id"] = in.Glue.InsertPartID.String()
+		audit["tyre_movement_id"] = tyreMove.ID.String()
+		audit["insert_movement_id"] = insertMove.ID.String()
+		return s.audit(ctx, tx, "tyre.glue", "tyre_set", created.ID.String(), nil, audit, in.RequestID.String())
+	})
+	return out.Set, out.TyrePart, out.InsertPart, err
 }
 
 func tyreAudit(t domain.TyreSet) map[string]any {

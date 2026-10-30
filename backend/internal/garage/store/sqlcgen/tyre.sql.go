@@ -15,24 +15,29 @@ import (
 
 const createTyreSet = `-- name: CreateTyreSet :one
 INSERT INTO garage.tyre_set (
-  team_id, label, make, model, compound, insert_type, glued_on, status, wear_notes, created_by
+  team_id, label, make, model, compound, insert_type, glued_on, status, wear_notes, created_by,
+  tyre_part_id, insert_part_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::garage.tyre_status, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::garage.tyre_status, $9, $10,
+        $11, $12)
 RETURNING id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
-          status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version
+          status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,
+          tyre_part_id, insert_part_id
 `
 
 type CreateTyreSetParams struct {
-	TeamID     uuid.UUID
-	Label      string
-	Make       string
-	Model      string
-	Compound   *string
-	InsertType *string
-	Column7    pgtype.Date
-	Column8    GarageTyreStatus
-	WearNotes  *string
-	CreatedBy  *uuid.UUID
+	TeamID       uuid.UUID
+	Label        string
+	Make         string
+	Model        string
+	Compound     *string
+	InsertType   *string
+	Column7      pgtype.Date
+	Column8      GarageTyreStatus
+	WearNotes    *string
+	CreatedBy    *uuid.UUID
+	TyrePartID   *uuid.UUID
+	InsertPartID *uuid.UUID
 }
 
 type CreateTyreSetRow struct {
@@ -49,6 +54,8 @@ type CreateTyreSetRow struct {
 	WearNotes       *string
 	CreatedAt       time.Time
 	Version         int32
+	TyrePartID      *uuid.UUID
+	InsertPartID    *uuid.UUID
 }
 
 func (q *Queries) CreateTyreSet(ctx context.Context, arg CreateTyreSetParams) (CreateTyreSetRow, error) {
@@ -63,6 +70,8 @@ func (q *Queries) CreateTyreSet(ctx context.Context, arg CreateTyreSetParams) (C
 		arg.Column8,
 		arg.WearNotes,
 		arg.CreatedBy,
+		arg.TyrePartID,
+		arg.InsertPartID,
 	)
 	var i CreateTyreSetRow
 	err := row.Scan(
@@ -79,13 +88,16 @@ func (q *Queries) CreateTyreSet(ctx context.Context, arg CreateTyreSetParams) (C
 		&i.WearNotes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.TyrePartID,
+		&i.InsertPartID,
 	)
 	return i, err
 }
 
 const getTyreSet = `-- name: GetTyreSet :one
 SELECT id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
-       status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version
+       status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,
+       tyre_part_id, insert_part_id
 FROM garage.tyre_set
 WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -109,6 +121,8 @@ type GetTyreSetRow struct {
 	WearNotes       *string
 	CreatedAt       time.Time
 	Version         int32
+	TyrePartID      *uuid.UUID
+	InsertPartID    *uuid.UUID
 }
 
 func (q *Queries) GetTyreSet(ctx context.Context, arg GetTyreSetParams) (GetTyreSetRow, error) {
@@ -128,13 +142,16 @@ func (q *Queries) GetTyreSet(ctx context.Context, arg GetTyreSetParams) (GetTyre
 		&i.WearNotes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.TyrePartID,
+		&i.InsertPartID,
 	)
 	return i, err
 }
 
 const listTyreSets = `-- name: ListTyreSets :many
 SELECT id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
-       status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version
+       status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,
+       tyre_part_id, insert_part_id
 FROM garage.tyre_set
 WHERE team_id = $1 AND deleted_at IS NULL AND id > $2
 ORDER BY id
@@ -161,6 +178,8 @@ type ListTyreSetsRow struct {
 	WearNotes       *string
 	CreatedAt       time.Time
 	Version         int32
+	TyrePartID      *uuid.UUID
+	InsertPartID    *uuid.UUID
 }
 
 func (q *Queries) ListTyreSets(ctx context.Context, arg ListTyreSetsParams) ([]ListTyreSetsRow, error) {
@@ -186,6 +205,8 @@ func (q *Queries) ListTyreSets(ctx context.Context, arg ListTyreSetsParams) ([]L
 			&i.WearNotes,
 			&i.CreatedAt,
 			&i.Version,
+			&i.TyrePartID,
+			&i.InsertPartID,
 		); err != nil {
 			return nil, err
 		}
@@ -242,7 +263,8 @@ SET label = $1, make = $2, model = $3, compound = $4, insert_type = $5,
     glued_on = $6::date, status = $7::garage.tyre_status, wear_notes = $8
 WHERE team_id = $9 AND id = $10 AND version = $11 AND deleted_at IS NULL
 RETURNING id, label, make, model, compound, insert_type, COALESCE(glued_on::text, '')::text AS glued_on,
-          status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version
+          status::text AS status, sessions_total, run_seconds_total, wear_notes, created_at, version,
+          tyre_part_id, insert_part_id
 `
 
 type UpdateTyreSetParams struct {
@@ -273,6 +295,8 @@ type UpdateTyreSetRow struct {
 	WearNotes       *string
 	CreatedAt       time.Time
 	Version         int32
+	TyrePartID      *uuid.UUID
+	InsertPartID    *uuid.UUID
 }
 
 func (q *Queries) UpdateTyreSet(ctx context.Context, arg UpdateTyreSetParams) (UpdateTyreSetRow, error) {
@@ -304,6 +328,8 @@ func (q *Queries) UpdateTyreSet(ctx context.Context, arg UpdateTyreSetParams) (U
 		&i.WearNotes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.TyrePartID,
+		&i.InsertPartID,
 	)
 	return i, err
 }

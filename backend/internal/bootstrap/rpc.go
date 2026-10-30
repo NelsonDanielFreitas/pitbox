@@ -44,7 +44,7 @@ func requestMessages() []proto.Message {
 		&garagev1.CreateCarRequest{}, &garagev1.GetCarRequest{}, &garagev1.ListCarsRequest{}, &garagev1.UpdateCarRequest{}, &garagev1.DeleteCarRequest{},
 		&garagev1.CreateEngineRequest{}, &garagev1.GetEngineRequest{}, &garagev1.ListEnginesRequest{}, &garagev1.UpdateEngineRequest{}, &garagev1.DeleteEngineRequest{},
 		&garagev1.ListEngineMountsRequest{}, &garagev1.MountEngineRequest{}, &garagev1.UnmountEngineRequest{}, &garagev1.MoveEngineRequest{},
-		&garagev1.CreateTyreSetRequest{}, &garagev1.GetTyreSetRequest{}, &garagev1.ListTyreSetsRequest{}, &garagev1.UpdateTyreSetRequest{}, &garagev1.DeleteTyreSetRequest{},
+		&garagev1.CreateTyreSetRequest{}, &garagev1.GetTyreSetRequest{}, &garagev1.ListTyreSetsRequest{}, &garagev1.UpdateTyreSetRequest{}, &garagev1.DeleteTyreSetRequest{}, &garagev1.GlueTyreSetRequest{},
 		&garagev1.CreatePartRequest{}, &garagev1.GetPartRequest{}, &garagev1.ListPartsRequest{}, &garagev1.UpdatePartRequest{}, &garagev1.DeletePartRequest{},
 		&garagev1.ListStockMovementsRequest{}, &garagev1.AddStockMovementRequest{},
 		&garagev1.InstallPartRequest{}, &garagev1.RemovePartRequest{}, &garagev1.ListPartInstallsRequest{},

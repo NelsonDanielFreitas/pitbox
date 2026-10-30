@@ -3,6 +3,8 @@ package transport
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	garagev1 "github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1"
 	"github.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/garage/v1/garagev1connect"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/garage/app"
@@ -106,13 +108,50 @@ func (h *Tyres) DeleteTyreSet(ctx context.Context, req *garagev1.DeleteTyreSetRe
 	return &garagev1.DeleteTyreSetResponse{}, nil
 }
 
+func (h *Tyres) GlueTyreSet(ctx context.Context, req *garagev1.GlueTyreSetRequest) (*garagev1.GlueTyreSetResponse, error) {
+	user, team, requestID, err := callerTeamRequest(ctx, req.GetTeamId(), req.GetRequestId())
+	if err != nil {
+		return nil, err
+	}
+	tyrePart, err := parseUUID(req.GetTyrePartId())
+	if err != nil {
+		return nil, err
+	}
+	insertPart, err := parseUUID(req.GetInsertPartId())
+	if err != nil {
+		return nil, err
+	}
+	set, tyre, insert, err := h.svc.GlueTyreSet(ctx, user, team, app.GlueTyreSetInput{
+		RequestID: requestID,
+		Glue: domain.GlueInput{
+			TyrePartID: tyrePart, InsertPartID: insertPart,
+			TyreQty: req.GetTyreQty(), InsertQty: req.GetInsertQty(), Label: req.GetLabel(),
+			Make: req.Make, Model: req.Model, Compound: req.Compound, InsertType: req.InsertType,
+			GluedOn: req.GluedOn, Note: req.Note,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &garagev1.GlueTyreSetResponse{TyreSet: tyreToProto(set), TyrePart: partToProto(tyre), InsertPart: partToProto(insert)}, nil
+}
+
 func tyreToProto(t domain.TyreSet) *garagev1.TyreSet {
 	return &garagev1.TyreSet{
 		Id: t.ID.String(), Label: t.Label, Make: t.Make, Model: t.Model, Compound: t.Compound,
 		InsertType: t.InsertType, GluedOn: dateString(t.GluedOn), Status: tyreStatusToProto(t.Status),
 		SessionsTotal: t.SessionsTotal, RunSecondsTotal: t.RunSecondsTotal, WearNotes: t.WearNotes,
 		CreatedAt: timestamp(t.CreatedAt), Version: t.Version,
+		TyrePartId: uuidString(t.TyrePartID), InsertPartId: uuidString(t.InsertPartID),
 	}
+}
+
+func uuidString(id *uuid.UUID) *string {
+	if id == nil {
+		return nil
+	}
+	s := id.String()
+	return &s
 }
 
 func tyreUpdateFromProto(req *garagev1.UpdateTyreSetRequest) (domain.TyreUpdate, error) {

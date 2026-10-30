@@ -81,7 +81,9 @@ function partInput(overrides: Partial<PartCreateInput> = {}): PartCreateInput {
     reference: "P3",
     description: "Vela OS P3",
     unit: "un",
+    specs: {},
     minStockCenti: 200,
+    reorderToCenti: null,
     initialQtyCenti: 100,
     hasServiceLife: true,
     ...overrides,
@@ -226,7 +228,9 @@ describe("LocalGarageRepository", () => {
         reference: "P3",
         description: "Vela OS P3",
         unit: "un",
+        specs: {},
         minStockCenti: 100,
+        reorderToCenti: null,
         hasServiceLife: true,
       });
       expect(updated.qtyCenti).toBe(100);

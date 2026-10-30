@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
+import type { InstallFilter, ReadScope } from "../domain/models";
 import type { GarageRepository } from "./garage-repository";
 
 export const garageKeys = {
@@ -14,8 +15,16 @@ export const garageKeys = {
   tyreSets: (teamId: string) => ["garage", teamId, "tyres"] as const,
   tyreSet: (teamId: string, tyreSetId: string) =>
     ["garage", teamId, "tyres", tyreSetId] as const,
-  parts: (teamId: string) => ["garage", teamId, "parts"] as const,
-  part: (teamId: string, partId: string) => ["garage", teamId, "parts", partId] as const,
+  parts: (teamId: string, costs = false) => ["garage", teamId, "parts", { costs }] as const,
+  part: (teamId: string, partId: string, costs = false) =>
+    ["garage", teamId, "parts", partId, { costs }] as const,
+  shopping: (teamId: string, costs = false) =>
+    ["garage", teamId, "shopping", { costs }] as const,
+  count: (teamId: string) => ["garage", teamId, "count"] as const,
+  installs: (teamId: string, filter: InstallFilter, history: boolean) =>
+    ["garage", teamId, "installs", filter, history] as const,
+  movements: (teamId: string, partId: string, costs = false) =>
+    ["garage", teamId, "parts", partId, "movements", { costs }] as const,
 };
 
 const localQuery = {
@@ -96,10 +105,14 @@ export function tyreSetQueryOptions(
   });
 }
 
-export function partsQueryOptions(repository: GarageRepository, teamId: string) {
+export function partsQueryOptions(
+  repository: GarageRepository,
+  teamId: string,
+  scope: ReadScope = { costs: false },
+) {
   return queryOptions({
-    queryKey: garageKeys.parts(teamId),
-    queryFn: () => repository.listParts(teamId),
+    queryKey: garageKeys.parts(teamId, scope.costs),
+    queryFn: () => repository.listParts(teamId, scope),
     ...localQuery,
   });
 }
@@ -108,10 +121,57 @@ export function partQueryOptions(
   repository: GarageRepository,
   teamId: string,
   partId: string,
+  scope: ReadScope = { costs: false },
 ) {
   return queryOptions({
-    queryKey: garageKeys.part(teamId, partId),
-    queryFn: () => repository.getPart(teamId, partId),
+    queryKey: garageKeys.part(teamId, partId, scope.costs),
+    queryFn: () => repository.getPart(teamId, partId, scope),
+    ...localQuery,
+  });
+}
+
+export function stockMovementsQueryOptions(
+  repository: GarageRepository,
+  teamId: string,
+  partId: string,
+  scope: ReadScope = { costs: false },
+) {
+  return queryOptions({
+    queryKey: garageKeys.movements(teamId, partId, scope.costs),
+    queryFn: () => repository.listStockMovements(teamId, partId, scope),
+    ...localQuery,
+  });
+}
+
+export function installsQueryOptions(
+  repository: GarageRepository,
+  teamId: string,
+  filter: InstallFilter,
+  history = false,
+) {
+  return queryOptions({
+    queryKey: garageKeys.installs(teamId, filter, history),
+    queryFn: () => repository.listPartInstalls(teamId, filter, history),
+    ...localQuery,
+  });
+}
+
+export function countDraftQueryOptions(repository: GarageRepository, teamId: string) {
+  return queryOptions({
+    queryKey: garageKeys.count(teamId),
+    queryFn: () => repository.getCountDraft(teamId),
+    ...localQuery,
+  });
+}
+
+export function shoppingQueryOptions(
+  repository: GarageRepository,
+  teamId: string,
+  scope: ReadScope = { costs: false },
+) {
+  return queryOptions({
+    queryKey: garageKeys.shopping(teamId, scope.costs),
+    queryFn: () => repository.listShoppingList(teamId, scope),
     ...localQuery,
   });
 }

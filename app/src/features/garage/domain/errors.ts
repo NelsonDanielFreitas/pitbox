@@ -4,7 +4,10 @@ export type GarageConflictCode =
   | "mount"
   | "stale"
   | "retired"
-  | "constraint";
+  | "constraint"
+  | "undone"
+  | "install_closed"
+  | "not_serviceable";
 
 export class GarageConflictError extends Error {
   constructor(

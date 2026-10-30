@@ -19,6 +19,7 @@ import type { CarInput } from "../domain/models";
 import { GaragePageHeader, DetailRow } from "./common";
 import { garageErrorMessage } from "./errors";
 import { PickEngineSheet } from "./PickEngineSheet";
+import { MountsSection } from "./MountsSection";
 import { RetireDialog } from "./RetireDialog";
 import { AssetStatusBadge } from "./status";
 
@@ -228,6 +229,12 @@ export function CarDetailPage({
         </dl>
       </Card>
 
+      <MountsSection
+        teamId={teamId}
+        repository={repository}
+        subject={{ kind: "car", carId }}
+        canWrite={canWrite && value.status !== "retired"}
+      />
       <RetireDialog
         open={retireOpen}
         type="car"

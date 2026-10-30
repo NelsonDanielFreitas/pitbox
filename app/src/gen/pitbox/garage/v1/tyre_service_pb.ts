@@ -9,13 +9,15 @@ import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { TyreStatus } from "./garage_pb";
 import { file_pitbox_garage_v1_garage } from "./garage_pb";
+import type { Part } from "./part_service_pb";
+import { file_pitbox_garage_v1_part_service } from "./part_service_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file pitbox/garage/v1/tyre_service.proto.
  */
 export const file_pitbox_garage_v1_tyre_service: GenFile = /*@__PURE__*/
-  fileDesc("CiNwaXRib3gvZ2FyYWdlL3YxL3R5cmVfc2VydmljZS5wcm90bxIQcGl0Ym94LmdhcmFnZS52MSL9AgoHVHlyZVNldBIKCgJpZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIMCgRtYWtlGAMgASgJEg0KBW1vZGVsGAQgASgJEhUKCGNvbXBvdW5kGAUgASgJSACIAQESGAoLaW5zZXJ0X3R5cGUYBiABKAlIAYgBARIVCghnbHVlZF9vbhgHIAEoCUgCiAEBEiwKBnN0YXR1cxgIIAEoDjIcLnBpdGJveC5nYXJhZ2UudjEuVHlyZVN0YXR1cxIWCg5zZXNzaW9uc190b3RhbBgJIAEoBRIZChFydW5fc2Vjb25kc190b3RhbBgKIAEoBRIXCgp3ZWFyX25vdGVzGAsgASgJSAOIAQESLgoKY3JlYXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyc2lvbhgNIAEoBUILCglfY29tcG91bmRCDgoMX2luc2VydF90eXBlQgsKCV9nbHVlZF9vbkINCgtfd2Vhcl9ub3RlcyJNChFHZXRUeXJlU2V0UmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIdCgt0eXJlX3NldF9pZBgCIAEoCUIIukgFcgOwAQEiQQoSR2V0VHlyZVNldFJlc3BvbnNlEisKCHR5cmVfc2V0GAEgASgLMhkucGl0Ym94LmdhcmFnZS52MS5UeXJlU2V0Im0KE0xpc3RUeXJlU2V0c1JlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHQoJcGFnZV9zaXplGAIgASgFQgq6SAcaBRjIASgAEhwKCnBhZ2VfdG9rZW4YAyABKAlCCLpIBXIDGIAEIl0KFExpc3RUeXJlU2V0c1Jlc3BvbnNlEiwKCXR5cmVfc2V0cxgBIAMoCzIZLnBpdGJveC5nYXJhZ2UudjEuVHlyZVNldBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkirwMKFENyZWF0ZVR5cmVTZXRSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhwKCnJlcXVlc3RfaWQYAiABKAlCCLpIBXIDsAEBEhgKBWxhYmVsGAMgASgJQgm6SAZyBBABGBQSFwoEbWFrZRgEIAEoCUIJukgGcgQQARhQEhgKBW1vZGVsGAUgASgJQgm6SAZyBBABGFASHgoIY29tcG91bmQYBiABKAlCB7pIBHICGChIAIgBARIhCgtpbnNlcnRfdHlwZRgHIAEoCUIHukgEcgIYKEgBiAEBEjoKCGdsdWVkX29uGAggASgJQiO6SCByHjIcXlswLTldezR9LVswLTldezJ9LVswLTldezJ9JEgCiAEBEjYKBnN0YXR1cxgJIAEoDjIcLnBpdGJveC5nYXJhZ2UudjEuVHlyZVN0YXR1c0IIukgFggECEAESIQoKd2Vhcl9ub3RlcxgKIAEoCUIIukgFcgMY0A9IA4gBAUILCglfY29tcG91bmRCDgoMX2luc2VydF90eXBlQgsKCV9nbHVlZF9vbkINCgtfd2Vhcl9ub3RlcyJEChVDcmVhdGVUeXJlU2V0UmVzcG9uc2USKwoIdHlyZV9zZXQYASABKAsyGS5waXRib3guZ2FyYWdlLnYxLlR5cmVTZXQimwQKFFVwZGF0ZVR5cmVTZXRSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhwKCnJlcXVlc3RfaWQYAiABKAlCCLpIBXIDsAEBEhgKB3ZlcnNpb24YAyABKAVCB7pIBBoCKAESNwoLdXBkYXRlX21hc2sYBCABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrQga6SAPIAQESFgoFbGFiZWwYBSABKAlCB7pIBHICGBQSFQoEbWFrZRgGIAEoCUIHukgEcgIYUBIWCgVtb2RlbBgHIAEoCUIHukgEcgIYUBIeCghjb21wb3VuZBgIIAEoCUIHukgEcgIYKEgAiAEBEiEKC2luc2VydF90eXBlGAkgASgJQge6SARyAhgoSAGIAQESOgoIZ2x1ZWRfb24YCiABKAlCI7pIIHIeMhxeWzAtOV17NH0tWzAtOV17Mn0tWzAtOV17Mn0kSAKIAQESNgoGc3RhdHVzGAsgASgOMhwucGl0Ym94LmdhcmFnZS52MS5UeXJlU3RhdHVzQgi6SAWCAQIQARIhCgp3ZWFyX25vdGVzGAwgASgJQgi6SAVyAxjQD0gDiAEBEh0KC3R5cmVfc2V0X2lkGA0gASgJQgi6SAVyA7ABAUILCglfY29tcG91bmRCDgoMX2luc2VydF90eXBlQgsKCV9nbHVlZF9vbkINCgtfd2Vhcl9ub3RlcyJEChVVcGRhdGVUeXJlU2V0UmVzcG9uc2USKwoIdHlyZV9zZXQYASABKAsyGS5waXRib3guZ2FyYWdlLnYxLlR5cmVTZXQiiAEKFERlbGV0ZVR5cmVTZXRSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhwKCnJlcXVlc3RfaWQYAiABKAlCCLpIBXIDsAEBEh0KC3R5cmVfc2V0X2lkGAMgASgJQgi6SAVyA7ABARIYCgd2ZXJzaW9uGAQgASgFQge6SAQaAigBIhcKFURlbGV0ZVR5cmVTZXRSZXNwb25zZTL1AwoLVHlyZVNlcnZpY2USXAoKR2V0VHlyZVNldBIjLnBpdGJveC5nYXJhZ2UudjEuR2V0VHlyZVNldFJlcXVlc3QaJC5waXRib3guZ2FyYWdlLnYxLkdldFR5cmVTZXRSZXNwb25zZSIDkAIBEmIKDExpc3RUeXJlU2V0cxIlLnBpdGJveC5nYXJhZ2UudjEuTGlzdFR5cmVTZXRzUmVxdWVzdBomLnBpdGJveC5nYXJhZ2UudjEuTGlzdFR5cmVTZXRzUmVzcG9uc2UiA5ACARJgCg1DcmVhdGVUeXJlU2V0EiYucGl0Ym94LmdhcmFnZS52MS5DcmVhdGVUeXJlU2V0UmVxdWVzdBonLnBpdGJveC5nYXJhZ2UudjEuQ3JlYXRlVHlyZVNldFJlc3BvbnNlEmAKDVVwZGF0ZVR5cmVTZXQSJi5waXRib3guZ2FyYWdlLnYxLlVwZGF0ZVR5cmVTZXRSZXF1ZXN0GicucGl0Ym94LmdhcmFnZS52MS5VcGRhdGVUeXJlU2V0UmVzcG9uc2USYAoNRGVsZXRlVHlyZVNldBImLnBpdGJveC5nYXJhZ2UudjEuRGVsZXRlVHlyZVNldFJlcXVlc3QaJy5waXRib3guZ2FyYWdlLnYxLkRlbGV0ZVR5cmVTZXRSZXNwb25zZULXAQoUY29tLnBpdGJveC5nYXJhZ2UudjFCEFR5cmVTZXJ2aWNlUHJvdG9QAVpLZ2l0aHViLmNvbS9OZWxzb25EYW5pZWxGcmVpdGFzL3BpdGJveC9iYWNrZW5kL2dlbi9waXRib3gvZ2FyYWdlL3YxO2dhcmFnZXYxogIDUEdYqgIQUGl0Ym94LkdhcmFnZS5WMcoCEFBpdGJveFxHYXJhZ2VcVjHiAhxQaXRib3hcR2FyYWdlXFYxXEdQQk1ldGFkYXRh6gISUGl0Ym94OjpHYXJhZ2U6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_pitbox_garage_v1_garage]);
+  fileDesc("CiNwaXRib3gvZ2FyYWdlL3YxL3R5cmVfc2VydmljZS5wcm90bxIQcGl0Ym94LmdhcmFnZS52MSLZAwoHVHlyZVNldBIKCgJpZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIMCgRtYWtlGAMgASgJEg0KBW1vZGVsGAQgASgJEhUKCGNvbXBvdW5kGAUgASgJSACIAQESGAoLaW5zZXJ0X3R5cGUYBiABKAlIAYgBARIVCghnbHVlZF9vbhgHIAEoCUgCiAEBEiwKBnN0YXR1cxgIIAEoDjIcLnBpdGJveC5nYXJhZ2UudjEuVHlyZVN0YXR1cxIWCg5zZXNzaW9uc190b3RhbBgJIAEoBRIZChFydW5fc2Vjb25kc190b3RhbBgKIAEoBRIXCgp3ZWFyX25vdGVzGAsgASgJSAOIAQESLgoKY3JlYXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyc2lvbhgNIAEoBRIZCgx0eXJlX3BhcnRfaWQYDiABKAlIBIgBARIbCg5pbnNlcnRfcGFydF9pZBgPIAEoCUgFiAEBQgsKCV9jb21wb3VuZEIOCgxfaW5zZXJ0X3R5cGVCCwoJX2dsdWVkX29uQg0KC193ZWFyX25vdGVzQg8KDV90eXJlX3BhcnRfaWRCEQoPX2luc2VydF9wYXJ0X2lkIk0KEUdldFR5cmVTZXRSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEh0KC3R5cmVfc2V0X2lkGAIgASgJQgi6SAVyA7ABASJBChJHZXRUeXJlU2V0UmVzcG9uc2USKwoIdHlyZV9zZXQYASABKAsyGS5waXRib3guZ2FyYWdlLnYxLlR5cmVTZXQibQoTTGlzdFR5cmVTZXRzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIdCglwYWdlX3NpemUYAiABKAVCCrpIBxoFGMgBKAASHAoKcGFnZV90b2tlbhgDIAEoCUIIukgFcgMYgAQiXQoUTGlzdFR5cmVTZXRzUmVzcG9uc2USLAoJdHlyZV9zZXRzGAEgAygLMhkucGl0Ym94LmdhcmFnZS52MS5UeXJlU2V0EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSKvAwoUQ3JlYXRlVHlyZVNl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c3BvbnNlEisKCHR5cmVfc2V0GAEgASgLMhkucGl0Ym94LmdhcmFnZS52MS5UeXJlU2V0EikKCXR5cmVfcGFydBgCIAEoCzIWLnBpdGJveC5nYXJhZ2UudjEuUGFydBIrCgtpbnNlcnRfcGFydBgDIAEoCzIWLnBpdGJveC5nYXJhZ2UudjEuUGFydDLRBAoLVHlyZVNlcnZpY2USXAoKR2V0VHlyZVNldBIjLnBpdGJveC5nYXJhZ2UudjEuR2V0VHlyZVNldFJlcXVlc3QaJC5waXRib3guZ2FyYWdlLnYxLkdldFR5cmVTZXRSZXNwb25zZSIDkAIBEmIKDExpc3RUeXJlU2V0cxIlLnBpdGJveC5nYXJhZ2UudjEuTGlzdFR5cmVTZXRzUmVxdWVzdBomLnBpdGJveC5nYXJhZ2UudjEuTGlzdFR5cmVTZXRzUmVzcG9uc2UiA5ACARJgCg1DcmVhdGVUeXJlU2V0EiYucGl0Ym94LmdhcmFnZS52MS5DcmVhdGVUeXJlU2V0UmVxdWVzdBonLnBpdGJveC5nYXJhZ2UudjEuQ3JlYXRlVHlyZVNldFJlc3BvbnNlEmAKDVVwZGF0ZVR5cmVTZXQSJi5waXRib3guZ2FyYWdlLnYxLlVwZGF0ZVR5cmVTZXRSZXF1ZXN0GicucGl0Ym94LmdhcmFnZS52MS5VcGRhdGVUeXJlU2V0UmVzcG9uc2USYAoNRGVsZXRlVHlyZVNldBImLnBpdGJveC5nYXJhZ2UudjEuRGVsZXRlVHlyZVNldFJlcXVlc3QaJy5waXRib3guZ2FyYWdlLnYxLkRlbGV0ZVR5cmVTZXRSZXNwb25zZRJaCgtHbHVlVHlyZVNldBIkLnBpdGJveC5nYXJhZ2UudjEuR2x1ZVR5cmVTZXRSZXF1ZXN0GiUucGl0Ym94LmdhcmFnZS52MS5HbHVlVHlyZVNldFJlc3BvbnNlQtcBChRjb20ucGl0Ym94LmdhcmFnZS52MUIQVHlyZVNlcnZpY2VQcm90b1ABWktnaXRodWIuY29tL05lbHNvbkRhbmllbEZyZWl0YXMvcGl0Ym94L2JhY2tlbmQvZ2VuL3BpdGJveC9nYXJhZ2UvdjE7Z2FyYWdldjGiAgNQR1iqAhBQaXRib3guR2FyYWdlLlYxygIQUGl0Ym94XEdhcmFnZVxWMeICHFBpdGJveFxHYXJhZ2VcVjFcR1BCTWV0YWRhdGHqAhJQaXRib3g6OkdhcmFnZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_pitbox_garage_v1_garage, file_pitbox_garage_v1_part_service]);
 
 /**
  * @generated from message pitbox.garage.v1.TyreSet
@@ -85,6 +87,18 @@ export type TyreSet = Message<"pitbox.garage.v1.TyreSet"> & {
    * @generated from field: int32 version = 13;
    */
   version: number;
+
+  /**
+   * Parts the set was glued from; unset for sets created already glued.
+   *
+   * @generated from field: optional string tyre_part_id = 14;
+   */
+  tyrePartId?: string | undefined;
+
+  /**
+   * @generated from field: optional string insert_part_id = 15;
+   */
+  insertPartId?: string | undefined;
 };
 
 /**
@@ -401,8 +415,125 @@ export const DeleteTyreSetResponseSchema: GenMessage<DeleteTyreSetResponse> = /*
   messageDesc(file_pitbox_garage_v1_tyre_service, 10);
 
 /**
+ * @generated from message pitbox.garage.v1.GlueTyreSetRequest
+ */
+export type GlueTyreSetRequest = Message<"pitbox.garage.v1.GlueTyreSetRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from field: string request_id = 2;
+   */
+  requestId: string;
+
+  /**
+   * Part of kind `tyre` and part of kind `insert`, both in stock.
+   *
+   * @generated from field: string tyre_part_id = 3;
+   */
+  tyrePartId: string;
+
+  /**
+   * @generated from field: string insert_part_id = 4;
+   */
+  insertPartId: string;
+
+  /**
+   * Units taken out of each part. 0 means the default of 4.
+   *
+   * @generated from field: int32 tyre_qty = 5;
+   */
+  tyreQty: number;
+
+  /**
+   * @generated from field: int32 insert_qty = 6;
+   */
+  insertQty: number;
+
+  /**
+   * @generated from field: string label = 7;
+   */
+  label: string;
+
+  /**
+   * Default to the parts' brand and description; required when the tyre part has no brand.
+   *
+   * @generated from field: optional string make = 8;
+   */
+  make?: string | undefined;
+
+  /**
+   * @generated from field: optional string model = 9;
+   */
+  model?: string | undefined;
+
+  /**
+   * Default to the `compound` spec of the tyre part and the `insert_type` spec of the insert part.
+   *
+   * @generated from field: optional string compound = 10;
+   */
+  compound?: string | undefined;
+
+  /**
+   * @generated from field: optional string insert_type = 11;
+   */
+  insertType?: string | undefined;
+
+  /**
+   * Defaults to today (server date).
+   *
+   * @generated from field: optional string glued_on = 12;
+   */
+  gluedOn?: string | undefined;
+
+  /**
+   * @generated from field: optional string note = 13;
+   */
+  note?: string | undefined;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.GlueTyreSetRequest.
+ * Use `create(GlueTyreSetRequestSchema)` to create a new message.
+ */
+export const GlueTyreSetRequestSchema: GenMessage<GlueTyreSetRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_tyre_service, 11);
+
+/**
+ * @generated from message pitbox.garage.v1.GlueTyreSetResponse
+ */
+export type GlueTyreSetResponse = Message<"pitbox.garage.v1.GlueTyreSetResponse"> & {
+  /**
+   * @generated from field: pitbox.garage.v1.TyreSet tyre_set = 1;
+   */
+  tyreSet?: TyreSet | undefined;
+
+  /**
+   * Both parts with the stock after the movements.
+   *
+   * @generated from field: pitbox.garage.v1.Part tyre_part = 2;
+   */
+  tyrePart?: Part | undefined;
+
+  /**
+   * @generated from field: pitbox.garage.v1.Part insert_part = 3;
+   */
+  insertPart?: Part | undefined;
+};
+
+/**
+ * Describes the message pitbox.garage.v1.GlueTyreSetResponse.
+ * Use `create(GlueTyreSetResponseSchema)` to create a new message.
+ */
+export const GlueTyreSetResponseSchema: GenMessage<GlueTyreSetResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_garage_v1_tyre_service, 12);
+
+/**
  * TyreService manages sets of four wheels. Labels are unique per team among
- * non-deleted, non-retired sets. Counters are read-only in F1.
+ * non-deleted, non-retired sets. Counters are read-only in F1. GlueTyreSet turns
+ * tyres and inserts in stock into a set.
  *
  * @generated from service pitbox.garage.v1.TyreService
  */
@@ -446,6 +577,18 @@ export const TyreService: GenService<{
     methodKind: "unary";
     input: typeof DeleteTyreSetRequestSchema;
     output: typeof DeleteTyreSetResponseSchema;
+  },
+  /**
+   * GlueTyreSet creates a set from a tyre part and an insert part in stock and takes
+   * the used quantities out of the stock (`consumed` movements), all or nothing.
+   * Mechanics and owners only. A short stock is FAILED_PRECONDITION.
+   *
+   * @generated from rpc pitbox.garage.v1.TyreService.GlueTyreSet
+   */
+  glueTyreSet: {
+    methodKind: "unary";
+    input: typeof GlueTyreSetRequestSchema;
+    output: typeof GlueTyreSetResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_pitbox_garage_v1_tyre_service, 0);

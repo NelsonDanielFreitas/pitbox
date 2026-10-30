@@ -34,6 +34,8 @@ const (
 	TyreServiceUpdateTyreSetProcedure = "/pitbox.garage.v1.TyreService/UpdateTyreSet"
 	// TyreServiceDeleteTyreSetProcedure is the procedure name of the TyreService's DeleteTyreSet RPC.
 	TyreServiceDeleteTyreSetProcedure = "/pitbox.garage.v1.TyreService/DeleteTyreSet"
+	// TyreServiceGlueTyreSetProcedure is the procedure name of the TyreService's GlueTyreSet RPC.
+	TyreServiceGlueTyreSetProcedure = "/pitbox.garage.v1.TyreService/GlueTyreSet"
 )
 
 var (
@@ -74,6 +76,13 @@ var (
 			Procedure:  TyreServiceDeleteTyreSetProcedure,
 		}
 	})
+	tyreServiceGlueTyreSetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_garage_v1_tyre_service_proto.Services().ByName("TyreService").Methods().ByName("GlueTyreSet"),
+			Procedure:  TyreServiceGlueTyreSetProcedure,
+		}
+	})
 )
 
 // TyreServiceClient is a client for the pitbox.garage.v1.TyreService service.
@@ -83,6 +92,10 @@ type TyreServiceClient interface {
 	CreateTyreSet(context.Context, *v1.CreateTyreSetRequest) (*v1.CreateTyreSetResponse, error)
 	UpdateTyreSet(context.Context, *v1.UpdateTyreSetRequest) (*v1.UpdateTyreSetResponse, error)
 	DeleteTyreSet(context.Context, *v1.DeleteTyreSetRequest) (*v1.DeleteTyreSetResponse, error)
+	// GlueTyreSet creates a set from a tyre part and an insert part in stock and takes
+	// the used quantities out of the stock (`consumed` movements), all or nothing.
+	// Mechanics and owners only. A short stock is FAILED_PRECONDITION.
+	GlueTyreSet(context.Context, *v1.GlueTyreSetRequest) (*v1.GlueTyreSetResponse, error)
 }
 
 // NewTyreServiceClient constructs a client for the pitbox.garage.v1.TyreService service. Multiple
@@ -98,6 +111,10 @@ type TyreServiceHandler interface {
 	CreateTyreSet(context.Context, *v1.CreateTyreSetRequest) (*v1.CreateTyreSetResponse, error)
 	UpdateTyreSet(context.Context, *v1.UpdateTyreSetRequest) (*v1.UpdateTyreSetResponse, error)
 	DeleteTyreSet(context.Context, *v1.DeleteTyreSetRequest) (*v1.DeleteTyreSetResponse, error)
+	// GlueTyreSet creates a set from a tyre part and an insert part in stock and takes
+	// the used quantities out of the stock (`consumed` movements), all or nothing.
+	// Mechanics and owners only. A short stock is FAILED_PRECONDITION.
+	GlueTyreSet(context.Context, *v1.GlueTyreSetRequest) (*v1.GlueTyreSetResponse, error)
 }
 
 // RegisterTyreServiceHandler registers svc as the pitbox.garage.v1.TyreService implementation on
@@ -110,6 +127,7 @@ func RegisterTyreServiceHandler(server *connect.Server, svc TyreServiceHandler) 
 		connect.Method{Spec: tyreServiceCreateTyreSetSpec(), Handler: adapter.createTyreSet},
 		connect.Method{Spec: tyreServiceUpdateTyreSetSpec(), Handler: adapter.updateTyreSet},
 		connect.Method{Spec: tyreServiceDeleteTyreSetSpec(), Handler: adapter.deleteTyreSet},
+		connect.Method{Spec: tyreServiceGlueTyreSetSpec(), Handler: adapter.glueTyreSet},
 	)
 }
 
@@ -134,6 +152,10 @@ func (UnimplementedTyreServiceHandler) UpdateTyreSet(context.Context, *v1.Update
 
 func (UnimplementedTyreServiceHandler) DeleteTyreSet(context.Context, *v1.DeleteTyreSetRequest) (*v1.DeleteTyreSetResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.TyreService.DeleteTyreSet is not implemented")
+}
+
+func (UnimplementedTyreServiceHandler) GlueTyreSet(context.Context, *v1.GlueTyreSetRequest) (*v1.GlueTyreSetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.garage.v1.TyreService.GlueTyreSet is not implemented")
 }
 
 type tyreServiceClient struct {
@@ -175,6 +197,14 @@ func (c *tyreServiceClient) UpdateTyreSet(ctx context.Context, req *v1.UpdateTyr
 func (c *tyreServiceClient) DeleteTyreSet(ctx context.Context, req *v1.DeleteTyreSetRequest) (*v1.DeleteTyreSetResponse, error) {
 	var res v1.DeleteTyreSetResponse
 	if err := c.client.CallUnary(ctx, tyreServiceDeleteTyreSetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tyreServiceClient) GlueTyreSet(ctx context.Context, req *v1.GlueTyreSetRequest) (*v1.GlueTyreSetResponse, error) {
+	var res v1.GlueTyreSetResponse
+	if err := c.client.CallUnary(ctx, tyreServiceGlueTyreSetSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -236,6 +266,18 @@ func (h tyreServiceHandler) deleteTyreSet(ctx context.Context, _ connect.Spec, s
 		return err
 	}
 	res, err := h.svc.DeleteTyreSet(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tyreServiceHandler) glueTyreSet(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GlueTyreSetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GlueTyreSet(ctx, &req)
 	if err != nil {
 		return err
 	}

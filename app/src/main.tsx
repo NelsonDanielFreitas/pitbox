@@ -10,6 +10,7 @@ import "@/app/styles.css";
 
 import { installBfcacheRevalidation } from "@/app/bfcache";
 import { createAppRouter } from "@/app/router";
+import { LocalSetupRepository } from "@/features/setups/data/local-setup-repository";
 import { LocalGarageRepository } from "@/features/garage/data/local-garage-repository";
 import { AppTeamsRepository } from "@/features/teams/data/team-commands-repository";
 import { ConnectMembersRepository } from "@/features/teams/data/connect-members-repository";
@@ -51,7 +52,11 @@ function mountApp(): void {
   const teamsRepository = new AppTeamsRepository();
   const membersRepository = new ConnectMembersRepository();
   const garageRepository = new LocalGarageRepository();
-  routerRef.current = createAppRouter({ queryClient, teamsRepository, membersRepository, garageRepository });
+  const setupRepository = new LocalSetupRepository();
+  routerRef.current = createAppRouter({ queryClient, teamsRepository, membersRepository,
+    garageRepository,
+    setupRepository,
+  });
 
   installBfcacheRevalidation(queryClient);
 

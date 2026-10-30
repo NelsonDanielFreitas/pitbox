@@ -65,7 +65,11 @@ message RegisterDeviceRequest {
     max_len: 80
   }];
   string platform = 4 [(buf.validate.field).string = {
-    in: ["web", "android", "ios"]
+    in: [
+      "web",
+      "android",
+      "ios"
+    ]
   }];
   // ECDSA P-256 public key, SPKI DER (91 bytes).
   bytes public_key = 5 [(buf.validate.field).bytes.len = 91];

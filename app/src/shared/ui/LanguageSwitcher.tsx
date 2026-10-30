@@ -15,7 +15,7 @@ export function LanguageSwitcher() {
           type="button"
           aria-pressed={i18n.language === locale}
           className={cn(
-            "min-h-12 min-w-12 rounded-xl px-2 text-xs font-semibold uppercase tracking-wide transition-colors",
+            "min-h-12 min-w-11 rounded-xl px-2 text-xs font-semibold uppercase tracking-wide transition-colors",
             i18n.language === locale
               ? "bg-primary text-on-primary"
               : "text-muted hover:bg-surface-2 hover:text-fg",

@@ -22,6 +22,7 @@ import { Route as AuthenticatedTeamsTeamIdIndexRouteImport } from './routes/_aut
 import { Route as AuthenticatedTeamsTeamIdGarageRouteRouteImport } from './routes/_authenticated/teams_.$teamId/garage/route'
 import { Route as AuthenticatedTeamsTeamIdMoreRouteRouteImport } from './routes/_authenticated/teams_.$teamId/more/route'
 import { Route as AuthenticatedTeamsTeamIdSetupsRouteRouteImport } from './routes/_authenticated/teams_.$teamId/setups/route'
+import { Route as AuthenticatedTeamsTeamIdSyncRouteImport } from './routes/_authenticated/teams_.$teamId/sync'
 import { Route as AuthenticatedTeamsTeamIdGarageIndexRouteImport } from './routes/_authenticated/teams_.$teamId/garage/index'
 import { Route as AuthenticatedTeamsTeamIdGarageShoppingRouteImport } from './routes/_authenticated/teams_.$teamId/garage/shopping'
 import { Route as AuthenticatedTeamsTeamIdMoreIndexRouteImport } from './routes/_authenticated/teams_.$teamId/more/index'
@@ -116,6 +117,12 @@ const AuthenticatedTeamsTeamIdSetupsRouteRoute =
   AuthenticatedTeamsTeamIdSetupsRouteRouteImport.update({
     id: '/setups',
     path: '/setups',
+    getParentRoute: () => AuthenticatedTeamsTeamIdRouteRoute,
+  } as any)
+const AuthenticatedTeamsTeamIdSyncRoute =
+  AuthenticatedTeamsTeamIdSyncRouteImport.update({
+    id: '/sync',
+    path: '/sync',
     getParentRoute: () => AuthenticatedTeamsTeamIdRouteRoute,
   } as any)
 const AuthenticatedTeamsTeamIdGarageIndexRoute =
@@ -287,6 +294,7 @@ export interface FileRoutesByFullPath {
   '/teams/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
   '/teams/$teamId/more': typeof AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren
   '/teams/$teamId/setups': typeof AuthenticatedTeamsTeamIdSetupsRouteRouteWithChildren
+  '/teams/$teamId/sync': typeof AuthenticatedTeamsTeamIdSyncRoute
   '/teams/$teamId/': typeof AuthenticatedTeamsTeamIdIndexRoute
   '/teams/$teamId/garage/shopping': typeof AuthenticatedTeamsTeamIdGarageShoppingRoute
   '/teams/$teamId/more/team': typeof AuthenticatedTeamsTeamIdMoreTeamRoute
@@ -322,6 +330,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/teams/new': typeof AuthenticatedTeamsNewRoute
   '/teams': typeof AuthenticatedTeamsIndexRoute
+  '/teams/$teamId/sync': typeof AuthenticatedTeamsTeamIdSyncRoute
   '/teams/$teamId': typeof AuthenticatedTeamsTeamIdIndexRoute
   '/teams/$teamId/garage/shopping': typeof AuthenticatedTeamsTeamIdGarageShoppingRoute
   '/teams/$teamId/more/team': typeof AuthenticatedTeamsTeamIdMoreTeamRoute
@@ -364,6 +373,7 @@ export interface FileRoutesById {
   '/_authenticated/teams_/$teamId/garage': typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
   '/_authenticated/teams_/$teamId/more': typeof AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren
   '/_authenticated/teams_/$teamId/setups': typeof AuthenticatedTeamsTeamIdSetupsRouteRouteWithChildren
+  '/_authenticated/teams_/$teamId/sync': typeof AuthenticatedTeamsTeamIdSyncRoute
   '/_authenticated/teams_/$teamId/': typeof AuthenticatedTeamsTeamIdIndexRoute
   '/_authenticated/teams_/$teamId/garage/shopping': typeof AuthenticatedTeamsTeamIdGarageShoppingRoute
   '/_authenticated/teams_/$teamId/more/team': typeof AuthenticatedTeamsTeamIdMoreTeamRoute
@@ -406,6 +416,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId/garage'
     | '/teams/$teamId/more'
     | '/teams/$teamId/setups'
+    | '/teams/$teamId/sync'
     | '/teams/$teamId/'
     | '/teams/$teamId/garage/shopping'
     | '/teams/$teamId/more/team'
@@ -441,6 +452,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/teams/new'
     | '/teams'
+    | '/teams/$teamId/sync'
     | '/teams/$teamId'
     | '/teams/$teamId/garage/shopping'
     | '/teams/$teamId/more/team'
@@ -482,6 +494,7 @@ export interface FileRouteTypes {
     | '/_authenticated/teams_/$teamId/garage'
     | '/_authenticated/teams_/$teamId/more'
     | '/_authenticated/teams_/$teamId/setups'
+    | '/_authenticated/teams_/$teamId/sync'
     | '/_authenticated/teams_/$teamId/'
     | '/_authenticated/teams_/$teamId/garage/shopping'
     | '/_authenticated/teams_/$teamId/more/team'
@@ -610,6 +623,13 @@ declare module '@tanstack/react-router' {
       path: '/setups'
       fullPath: '/teams/$teamId/setups'
       preLoaderRoute: typeof AuthenticatedTeamsTeamIdSetupsRouteRouteImport
+      parentRoute: typeof AuthenticatedTeamsTeamIdRouteRoute
+    }
+    '/_authenticated/teams_/$teamId/sync': {
+      id: '/_authenticated/teams_/$teamId/sync'
+      path: '/sync'
+      fullPath: '/teams/$teamId/sync'
+      preLoaderRoute: typeof AuthenticatedTeamsTeamIdSyncRouteImport
       parentRoute: typeof AuthenticatedTeamsTeamIdRouteRoute
     }
     '/_authenticated/teams_/$teamId/garage/': {
@@ -931,6 +951,7 @@ interface AuthenticatedTeamsTeamIdRouteRouteChildren {
   AuthenticatedTeamsTeamIdGarageRouteRoute: typeof AuthenticatedTeamsTeamIdGarageRouteRouteWithChildren
   AuthenticatedTeamsTeamIdMoreRouteRoute: typeof AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren
   AuthenticatedTeamsTeamIdSetupsRouteRoute: typeof AuthenticatedTeamsTeamIdSetupsRouteRouteWithChildren
+  AuthenticatedTeamsTeamIdSyncRoute: typeof AuthenticatedTeamsTeamIdSyncRoute
   AuthenticatedTeamsTeamIdIndexRoute: typeof AuthenticatedTeamsTeamIdIndexRoute
 }
 
@@ -942,6 +963,7 @@ const AuthenticatedTeamsTeamIdRouteRouteChildren: AuthenticatedTeamsTeamIdRouteR
       AuthenticatedTeamsTeamIdMoreRouteRouteWithChildren,
     AuthenticatedTeamsTeamIdSetupsRouteRoute:
       AuthenticatedTeamsTeamIdSetupsRouteRouteWithChildren,
+    AuthenticatedTeamsTeamIdSyncRoute: AuthenticatedTeamsTeamIdSyncRoute,
     AuthenticatedTeamsTeamIdIndexRoute: AuthenticatedTeamsTeamIdIndexRoute,
   }
 

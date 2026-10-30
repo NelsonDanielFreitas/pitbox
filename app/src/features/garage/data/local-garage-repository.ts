@@ -1,4 +1,15 @@
 import { newId } from "@/shared/lib/id";
+import {
+  changedFields,
+  installClosedOutbox,
+  installCreatedOutbox,
+  mountClosedOutbox,
+  mountCreatedOutbox,
+  movementOutboxStatement,
+  notifyLocalWrite,
+  outboxStatement,
+} from "@/sync/outbox";
+import { OpKind } from "@/sync/signing";
 import { LocalConstraintError, CorruptLocalDataError } from "@/db/errors";
 
 import type {
@@ -36,6 +47,7 @@ import {
   engineWithMountRowSchema,
   partRowSchema,
   partInstallRowSchema,
+  shoppingItemStateRowSchema,
   shoppingLineRowSchema,
   stockMovementRowSchema,
   tyreSetRowSchema,
@@ -184,6 +196,26 @@ export class LocalGarageRepository implements GarageRepository {
     try {
       const rows = await this.writeTx(
         [
+          // First: the last statement must be the one that returns the row.
+          outboxStatement({
+            teamId,
+            entity: "garage.car",
+            entityId: id,
+            kind: OpKind.create,
+            baseVersion: null,
+            fields: {
+              make: input.make,
+              model: input.model,
+              model_year: input.modelYear,
+              serial_number: input.serialNumber,
+              nickname: input.nickname,
+              transponder_number: input.transponderNumber,
+              status: input.status,
+              scale: "1/8",
+              powertrain: "nitro",
+              notes: input.notes,
+            },
+          }),
           {
             sql: `INSERT INTO car (
                     id, team_id, make, model, model_year, serial_number, nickname,
@@ -228,9 +260,14 @@ export class LocalGarageRepository implements GarageRepository {
     if (input.status === "retired" && (await this.hasOpenCarMount(teamId, id))) {
       throw new GarageConflictError("retired", "car has an open engine mount");
     }
+    const current = await this.getCar(teamId, id);
+    if (!current) throw new GarageNotFoundError("car not found");
     try {
       const rows = await this.writeTx(
         [
+          // Before the UPDATE: it checks the state the UPDATE is about to match, and the
+          // UPDATE stays last because it returns the row.
+          ...this.carPatchStatements(teamId, id, localRev, current, input),
           {
             sql: `UPDATE car
                      SET make = $make, model = $model, model_year = $modelYear,
@@ -293,6 +330,22 @@ export class LocalGarageRepository implements GarageRepository {
     try {
       const rows = await this.writeTx(
         [
+          // First: the last statement must be the one that returns the row.
+          outboxStatement({
+            teamId,
+            entity: "garage.engine",
+            entityId: id,
+            kind: OpKind.create,
+            baseVersion: null,
+            fields: {
+              make: input.make,
+              model: input.model,
+              serial_number: input.serialNumber,
+              purchased_on: input.purchasedOn,
+              status: input.status,
+              notes: input.notes,
+            },
+          }),
           {
             sql: `INSERT INTO engine (
                     id, team_id, make, model, serial_number, purchased_on, status,
@@ -334,9 +387,26 @@ export class LocalGarageRepository implements GarageRepository {
     if (input.status === "retired" && (await this.hasOpenEngineMount(teamId, id))) {
       throw new GarageConflictError("retired", "engine has an open mount");
     }
+    const queue = this.patchQueue(
+      "garage.engine",
+      "engine",
+      teamId,
+      id,
+      localRev,
+      await this.syncRow("engine", teamId, id, "make, model, serial_number, purchased_on, status, notes"),
+      {
+        make: input.make,
+        model: input.model,
+        serial_number: input.serialNumber,
+        purchased_on: input.purchasedOn,
+        status: input.status,
+        notes: input.notes,
+      },
+    );
     try {
       await this.writeTx(
         [
+          ...queue,
           {
             sql: `UPDATE engine
                      SET make = $make, model = $model, serial_number = $serialNumber,
@@ -383,8 +453,33 @@ export class LocalGarageRepository implements GarageRepository {
     return rows.map((row) => this.mountFrom(row));
   }
 
-  async mountEngine(teamId: string, engineId: string, carId: string): Promise<void> {
-    await this.mountWrite([
+  /** The mount row the engine / car has open now, if any. */
+  private async openMountId(teamId: string, column: "engine_id" | "car_id", id: string) {
+    const rows = await this.db.query<{ id: string }>(
+      `SELECT id FROM engine_mount WHERE team_id = $teamId AND ${column} = $id AND unmounted_at IS NULL`,
+      { $teamId: teamId, $id: id },
+    );
+    return rows[0]?.id ?? null;
+  }
+
+  /** Closes a mount and queues the close. Nothing is queued when it was no longer open. */
+  private closeMountStatements(teamId: string, mountId: string, at: string): SqlStatement[] {
+    return [
+      {
+        sql: `UPDATE engine_mount SET unmounted_at = $at
+               WHERE team_id = $teamId AND id = $mountId AND unmounted_at IS NULL`,
+        params: { $teamId: teamId, $mountId: mountId, $at: at },
+      },
+      mountClosedOutbox(teamId, mountId, at),
+    ];
+  }
+
+  /**
+   * Opens a mount (only if neither the engine nor the car has one open and both are usable)
+   * and queues it. The last statement makes the transaction fail when nothing was inserted.
+   */
+  private openMountStatements(teamId: string, engineId: string, carId: string, mountId: string, at: string): SqlStatement[] {
+    return [
       {
         sql: `INSERT INTO engine_mount (
                 id, team_id, engine_id, car_id, mounted_at, unmounted_at, created_at
@@ -404,129 +499,66 @@ export class LocalGarageRepository implements GarageRepository {
                    SELECT 1 FROM engine_mount
                     WHERE team_id = $teamId AND car_id = $carId
                       AND unmounted_at IS NULL
-                 )
-              RETURNING id`,
+                 )`,
         params: {
-          $id: newId(),
+          $id: mountId,
           $teamId: teamId,
           $engineId: engineId,
           $carId: carId,
-          $mountedAt: this.now(),
-          $createdAt: this.now(),
+          $mountedAt: at,
+          $createdAt: at,
         },
       },
-    ]);
+      mountCreatedOutbox(teamId, mountId),
+      {
+        sql: "SELECT id FROM engine_mount WHERE team_id = $teamId AND id = $id",
+        params: { $teamId: teamId, $id: mountId },
+      },
+    ];
+  }
+
+  async mountEngine(teamId: string, engineId: string, carId: string): Promise<void> {
+    await this.mountWrite(this.openMountStatements(teamId, engineId, carId, newId(), this.now()));
   }
 
   async unmountEngine(teamId: string, engineId: string): Promise<void> {
+    const mountId = await this.openMountId(teamId, "engine_id", engineId);
+    if (mountId === null) throw new GarageConflictError("mount", "engine is not mounted");
+    const at = this.now();
     await this.mountWrite([
+      ...this.closeMountStatements(teamId, mountId, at),
       {
-        sql: `UPDATE engine_mount
-                 SET unmounted_at = $unmountedAt
-               WHERE team_id = $teamId AND engine_id = $engineId AND unmounted_at IS NULL
-              RETURNING id`,
-        params: {
-          $teamId: teamId,
-          $engineId: engineId,
-          $unmountedAt: this.now(),
-        },
+        sql: "SELECT id FROM engine_mount WHERE team_id = $teamId AND id = $mountId AND unmounted_at = $at",
+        params: { $teamId: teamId, $mountId: mountId, $at: at },
       },
     ]);
   }
 
   async moveEngine(teamId: string, engineId: string, toCarId: string): Promise<void> {
-    const current = await this.db.query<{ car_id: string }>(
-      `SELECT car_id FROM engine_mount
+    const current = await this.db.query<{ id: string; car_id: string }>(
+      `SELECT id, car_id FROM engine_mount
         WHERE team_id = $teamId AND engine_id = $engineId AND unmounted_at IS NULL`,
       { $teamId: teamId, $engineId: engineId },
     );
     if (current[0]?.car_id === toCarId) return;
-
+    const at = this.now();
     await this.mountWrite([
-      {
-        sql: `UPDATE engine_mount
-                 SET unmounted_at = $unmountedAt
-               WHERE team_id = $teamId AND engine_id = $engineId AND unmounted_at IS NULL`,
-        params: { $teamId: teamId, $engineId: engineId, $unmountedAt: this.now() },
-      },
-      {
-        sql: `INSERT INTO engine_mount (
-                id, team_id, engine_id, car_id, mounted_at, unmounted_at, created_at
-              )
-              SELECT $id, e.team_id, e.id, c.id, $mountedAt, NULL, $createdAt
-                FROM engine e
-                JOIN car c ON c.team_id = e.team_id AND c.id = $carId
-               WHERE e.team_id = $teamId AND e.id = $engineId
-                 AND e.deleted_at IS NULL AND c.deleted_at IS NULL
-                 AND e.status <> 'retired' AND c.status <> 'retired'
-                 AND NOT EXISTS (
-                   SELECT 1 FROM engine_mount
-                    WHERE team_id = $teamId AND engine_id = $engineId
-                      AND unmounted_at IS NULL
-                 )
-                 AND NOT EXISTS (
-                   SELECT 1 FROM engine_mount
-                    WHERE team_id = $teamId AND car_id = $carId
-                      AND unmounted_at IS NULL
-                 )
-              RETURNING id`,
-        params: {
-          $id: newId(),
-          $teamId: teamId,
-          $engineId: engineId,
-          $carId: toCarId,
-          $mountedAt: this.now(),
-          $createdAt: this.now(),
-        },
-      },
+      ...(current[0] ? this.closeMountStatements(teamId, current[0].id, at) : []),
+      ...this.openMountStatements(teamId, engineId, toCarId, newId(), at),
     ]);
   }
 
   async swapCarEngine(teamId: string, carId: string, engineId: string): Promise<void> {
-    const current = await this.db.query<{ engine_id: string }>(
-      `SELECT engine_id FROM engine_mount
+    const current = await this.db.query<{ id: string; engine_id: string }>(
+      `SELECT id, engine_id FROM engine_mount
         WHERE team_id = $teamId AND car_id = $carId AND unmounted_at IS NULL`,
       { $teamId: teamId, $carId: carId },
     );
     if (current[0]?.engine_id === engineId) return;
-
+    const at = this.now();
     await this.mountWrite([
-      {
-        sql: `UPDATE engine_mount
-                 SET unmounted_at = $unmountedAt
-               WHERE team_id = $teamId AND car_id = $carId AND unmounted_at IS NULL`,
-        params: { $teamId: teamId, $carId: carId, $unmountedAt: this.now() },
-      },
-      {
-        sql: `INSERT INTO engine_mount (
-                id, team_id, engine_id, car_id, mounted_at, unmounted_at, created_at
-              )
-              SELECT $id, e.team_id, e.id, c.id, $mountedAt, NULL, $createdAt
-                FROM engine e
-                JOIN car c ON c.team_id = e.team_id AND c.id = $carId
-               WHERE e.team_id = $teamId AND e.id = $engineId
-                 AND e.deleted_at IS NULL AND c.deleted_at IS NULL
-                 AND e.status <> 'retired' AND c.status <> 'retired'
-                 AND NOT EXISTS (
-                   SELECT 1 FROM engine_mount
-                    WHERE team_id = $teamId AND engine_id = $engineId
-                      AND unmounted_at IS NULL
-                 )
-                 AND NOT EXISTS (
-                   SELECT 1 FROM engine_mount
-                    WHERE team_id = $teamId AND car_id = $carId
-                      AND unmounted_at IS NULL
-                 )
-              RETURNING id`,
-        params: {
-          $id: newId(),
-          $teamId: teamId,
-          $carId: carId,
-          $engineId: engineId,
-          $mountedAt: this.now(),
-          $createdAt: this.now(),
-        },
-      },
+      ...(current[0] ? this.closeMountStatements(teamId, current[0].id, at) : []),
+      ...this.openMountStatements(teamId, engineId, carId, newId(), at),
     ]);
   }
 
@@ -557,6 +589,23 @@ export class LocalGarageRepository implements GarageRepository {
     try {
       const rows = await this.writeTx(
         [
+          outboxStatement({
+            teamId,
+            entity: "garage.tyre_set",
+            entityId: id,
+            kind: OpKind.create,
+            baseVersion: null,
+            fields: {
+              label: input.label,
+              make: input.make,
+              model: input.model,
+              compound: input.compound,
+              insert_type: input.insertType,
+              glued_on: input.gluedOn,
+              status: input.status,
+              wear_notes: input.wearNotes,
+            },
+          }),
           {
             sql: `INSERT INTO tyre_set (
                     id, team_id, label, make, model, compound, insert_type, glued_on,
@@ -597,9 +646,33 @@ export class LocalGarageRepository implements GarageRepository {
     localRev: number,
     input: TyreSetInput,
   ): Promise<TyreSet> {
+    const queue = this.patchQueue(
+      "garage.tyre_set",
+      "tyre_set",
+      teamId,
+      id,
+      localRev,
+      await this.syncRow(
+        "tyre_set",
+        teamId,
+        id,
+        "label, make, model, compound, insert_type, glued_on, status, wear_notes",
+      ),
+      {
+        label: input.label,
+        make: input.make,
+        model: input.model,
+        compound: input.compound,
+        insert_type: input.insertType,
+        glued_on: input.gluedOn,
+        status: input.status,
+        wear_notes: input.wearNotes,
+      },
+    );
     try {
       const rows = await this.writeTx(
         [
+          ...queue,
           {
             sql: `UPDATE tyre_set
                      SET label = $label, make = $make, model = $model, compound = $compound,
@@ -660,8 +733,29 @@ export class LocalGarageRepository implements GarageRepository {
 
   async createPart(teamId: string, input: PartCreateInput): Promise<PartWithStock> {
     const id = newId();
+    const initialMovementId = newId();
     const now = this.now();
     const statements: SqlStatement[] = [
+      // The initial quantity is NOT in this operation: it syncs with its own purchase movement.
+      outboxStatement({
+        teamId,
+        entity: "garage.part",
+        entityId: id,
+        kind: OpKind.create,
+        baseVersion: null,
+        fields: {
+          kind: input.kind,
+          brand: input.brand,
+          reference: input.reference,
+          description: input.description,
+          unit: input.unit,
+          specs: input.specs,
+          min_stock_centi: input.minStockCenti,
+          reorder_to_centi: input.reorderToCenti,
+          has_service_life: input.hasServiceLife,
+          ...(input.unitCostCents === undefined ? {} : { unit_cost_cents: input.unitCostCents }),
+        },
+      }),
       {
         sql: `INSERT INTO part (
                 id, team_id, kind, brand, reference, description, unit, specs,
@@ -700,7 +794,7 @@ export class LocalGarageRepository implements GarageRepository {
                       $now, $now, $createdBy
                     )`,
               params: {
-                $movementId: newId(),
+                $movementId: initialMovementId,
                 $teamId: teamId,
                 $partId: id,
                 $qty: input.initialQtyCenti,
@@ -709,6 +803,7 @@ export class LocalGarageRepository implements GarageRepository {
                 $createdBy: input.createdBy ?? null,
               },
             },
+            movementOutboxStatement(teamId, initialMovementId),
           ]
         : []),
       {
@@ -733,9 +828,41 @@ export class LocalGarageRepository implements GarageRepository {
     localRev: number,
     input: PartInput,
   ): Promise<PartWithStock> {
+    const row = await this.syncRow(
+      "part",
+      teamId,
+      id,
+      "kind, brand, reference, description, unit, specs, min_stock_centi, reorder_to_centi, unit_cost_cents, has_service_life",
+    );
+    const queue = this.patchQueue(
+      "garage.part",
+      "part",
+      teamId,
+      id,
+      localRev,
+      {
+        ...row,
+        specs: typeof row.specs === "string" ? (JSON.parse(row.specs) as unknown) : row.specs,
+        has_service_life: row.has_service_life === 1,
+      },
+      {
+        kind: input.kind,
+        brand: input.brand,
+        reference: input.reference,
+        description: input.description,
+        unit: input.unit,
+        specs: input.specs,
+        min_stock_centi: input.minStockCenti,
+        reorder_to_centi: input.reorderToCenti,
+        has_service_life: input.hasServiceLife,
+        // Left out when the reader may not touch costs (undefined leaves the stored value alone).
+        ...(input.unitCostCents === undefined ? {} : { unit_cost_cents: input.unitCostCents }),
+      },
+    );
     try {
       await this.writeTx(
         [
+          ...queue,
           {
             sql: `UPDATE part
                      SET kind = $kind, brand = $brand, reference = $reference,
@@ -785,9 +912,18 @@ export class LocalGarageRepository implements GarageRepository {
 
   /** Archives a part: it leaves the lists and the shopping list; its history stays. */
   async archivePart(teamId: string, id: string, localRev: number): Promise<void> {
+    const { version } = await this.syncRow("part", teamId, id, "id");
     try {
       await this.writeTx(
         [
+          outboxStatement(
+            { teamId, entity: "garage.part", entityId: id, kind: OpKind.delete, baseVersion: version, fields: {} },
+            {
+              sql: `SELECT 1 FROM part
+                     WHERE team_id = $teamId AND id = $id AND local_rev = $applied AND deleted_at IS NULL`,
+              params: { $teamId: teamId, $id: id, $applied: localRev },
+            },
+          ),
           {
             sql: `UPDATE part
                      SET deleted_at = $now, updated_at = $now, local_rev = local_rev + 1
@@ -862,6 +998,7 @@ export class LocalGarageRepository implements GarageRepository {
               $createdBy: input.createdBy,
             },
           },
+          movementOutboxStatement(teamId, id),
           afterStockChange(teamId, input.partId, input.reason === "purchase"),
           this.movementWithStock(teamId, input.partId, id),
         ],
@@ -908,6 +1045,7 @@ export class LocalGarageRepository implements GarageRepository {
               $createdBy: undo.createdBy,
             },
           },
+          movementOutboxStatement(teamId, id),
           {
             sql: `DELETE FROM shopping_item
                    WHERE team_id = $teamId AND dismissed = 1
@@ -1020,6 +1158,7 @@ export class LocalGarageRepository implements GarageRepository {
               $now: now,
             },
           },
+          installCreatedOutbox(teamId, installId),
           {
             sql: `INSERT INTO stock_movement (
                     id, team_id, part_id, qty_delta_centi, reason, note, occurred_at,
@@ -1039,6 +1178,7 @@ export class LocalGarageRepository implements GarageRepository {
               $createdBy: input.createdBy,
             },
           },
+          movementOutboxStatement(teamId, movementId),
           afterStockChange(teamId, input.partId, false),
           this.movementWithStock(teamId, input.partId, movementId),
         ],
@@ -1082,6 +1222,7 @@ export class LocalGarageRepository implements GarageRepository {
               $createdBy: input.createdBy,
             },
           },
+          movementOutboxStatement(teamId, movementId),
           {
             sql: `DELETE FROM shopping_item
                    WHERE team_id = $teamId AND dismissed = 1
@@ -1093,6 +1234,11 @@ export class LocalGarageRepository implements GarageRepository {
                               WHERE team_id = $teamId AND id = shopping_item.part_id)`,
             params: { $teamId: teamId, $installId: installId },
           },
+          installClosedOutbox(teamId, installId, {
+            at,
+            destination: input.destination,
+            reason: input.destination === "scrap" ? input.reason : null,
+          }),
           {
             sql: `UPDATE part_install
                      SET removed_at = CASE WHEN $at > installed_at THEN $at
@@ -1226,6 +1372,7 @@ export class LocalGarageRepository implements GarageRepository {
     const at = occurredAt(apply.occurredOn, now);
     const statements: SqlStatement[] = [];
     for (const partId of Object.keys(draft.lines)) {
+      const movementId = newId();
       statements.push(
         {
           // The difference is computed here, inside the transaction, against the stock at
@@ -1244,7 +1391,7 @@ export class LocalGarageRepository implements GarageRepository {
                    AND l.counted_centi <> COALESCE((SELECT SUM(qty_delta_centi) FROM stock_movement
                                                      WHERE team_id = l.team_id AND part_id = l.part_id), 0)`,
           params: {
-            $id: newId(),
+            $id: movementId,
             $teamId: teamId,
             $partId: partId,
             $note: apply.note,
@@ -1253,6 +1400,8 @@ export class LocalGarageRepository implements GarageRepository {
             $createdBy: apply.createdBy,
           },
         },
+        // Nothing is queued for a line whose count equals the stock (no movement inserted).
+        movementOutboxStatement(teamId, movementId),
         afterStockChange(teamId, partId, false),
       );
     }
@@ -1276,13 +1425,78 @@ export class LocalGarageRepository implements GarageRepository {
     return rows.map((row) => this.shoppingFrom(row));
   }
 
+  /** The stored line of a part (not the computed list), for the change the queue must describe. */
+  private async shoppingItemState(teamId: string, partId: string) {
+    const rows = await this.db.query(
+      `SELECT id, version, local_rev, qty_centi, dismissed FROM shopping_item
+        WHERE team_id = $teamId AND part_id = $partId`,
+      { $teamId: teamId, $partId: partId },
+    );
+    const row = rows[0];
+    return row === undefined ? null : parse(shoppingItemStateRowSchema, row);
+  }
+
   async setShoppingItem(teamId: string, partId: string, qtyCenti: number | null): Promise<void> {
     const now = this.now();
+    const existing = await this.shoppingItemState(teamId, partId);
+    const id = existing?.id ?? newId();
+    // The effective quantity (stored or suggested) must be positive, like the server.
+    const allowed = `SELECT 1 FROM part p
+                      WHERE p.team_id = $teamId AND p.id = $partId AND p.deleted_at IS NULL
+                        AND COALESCE($qty, MAX(0, COALESCE(p.reorder_to_centi, p.min_stock_centi)
+                              - COALESCE((SELECT SUM(qty_delta_centi) FROM stock_movement
+                                           WHERE team_id = p.team_id AND part_id = p.id), 0))) > 0`;
+    const guardParams = { $teamId: teamId, $partId: partId, $qty: qtyCenti };
+    const change = existing
+      ? changedFields(
+          { qty_centi: existing.qty_centi, dismissed: existing.dismissed === 1 },
+          { qty_centi: qtyCenti, dismissed: false },
+        )
+      : {};
+    const statements: SqlStatement[] = [];
+    if (existing === null) {
+      statements.push(
+        outboxStatement(
+          {
+            teamId,
+            entity: "garage.shopping_item",
+            entityId: id,
+            kind: OpKind.create,
+            baseVersion: null,
+            fields: { part_id: partId, qty_centi: qtyCenti, dismissed: false },
+          },
+          {
+            sql: `${allowed} AND NOT EXISTS (SELECT 1 FROM shopping_item
+                                              WHERE team_id = $teamId AND part_id = $partId)`,
+            params: guardParams,
+          },
+        ),
+      );
+    } else if (Object.keys(change).length > 0) {
+      statements.push(
+        outboxStatement(
+          {
+            teamId,
+            entity: "garage.shopping_item",
+            entityId: existing.id,
+            kind: OpKind.patch,
+            baseVersion: existing.version,
+            fields: change,
+          },
+          {
+            sql: `${allowed} AND EXISTS (SELECT 1 FROM shopping_item
+                                          WHERE team_id = $teamId AND part_id = $partId
+                                            AND local_rev = $rev)`,
+            params: { ...guardParams, $rev: existing.local_rev },
+          },
+        ),
+      );
+    }
     try {
       await this.writeTx(
         [
+          ...statements,
           {
-            // The effective quantity (stored or suggested) must be positive, like the server.
             sql: `INSERT INTO shopping_item (
                     id, team_id, part_id, qty_centi, dismissed, created_at, updated_at
                   )
@@ -1296,7 +1510,7 @@ export class LocalGarageRepository implements GarageRepository {
                      SET qty_centi = excluded.qty_centi, dismissed = 0,
                          updated_at = excluded.updated_at, local_rev = local_rev + 1
                   RETURNING id`,
-            params: { $id: newId(), $teamId: teamId, $partId: partId, $qty: qtyCenti, $now: now },
+            params: { $id: id, $teamId: teamId, $partId: partId, $qty: qtyCenti, $now: now },
           },
         ],
         true,
@@ -1313,10 +1527,74 @@ export class LocalGarageRepository implements GarageRepository {
     const onList = (await this.listShoppingList(teamId)).some((line) => line.partId === partId);
     if (!onList) throw new GarageNotFoundError("part is not on the shopping list");
     const now = this.now();
+    const existing = await this.shoppingItemState(teamId, partId);
+    const id = existing?.id ?? newId();
     const stock = `COALESCE((SELECT SUM(qty_delta_centi) FROM stock_movement
                               WHERE team_id = $teamId AND part_id = $partId), 0)`;
+    const below = `SELECT 1 FROM part WHERE team_id = $teamId AND id = $partId
+                      AND deleted_at IS NULL AND ${stock} < min_stock_centi`;
+    const notBelow = `SELECT 1 FROM part WHERE team_id = $teamId AND id = $partId
+                         AND ${stock} >= min_stock_centi`;
+    const params = { $teamId: teamId, $partId: partId };
+    const statements: SqlStatement[] = [];
+    // Below the minimum the line is automatic: hide it. Otherwise it was manual: remove it.
+    if (existing === null) {
+      statements.push(
+        outboxStatement(
+          {
+            teamId,
+            entity: "garage.shopping_item",
+            entityId: id,
+            kind: OpKind.create,
+            baseVersion: null,
+            fields: { part_id: partId, dismissed: true },
+          },
+          {
+            sql: `${below} AND NOT EXISTS (SELECT 1 FROM shopping_item
+                                            WHERE team_id = $teamId AND part_id = $partId)`,
+            params,
+          },
+        ),
+      );
+    } else {
+      const guardRev = `EXISTS (SELECT 1 FROM shopping_item
+                                 WHERE team_id = $teamId AND part_id = $partId AND local_rev = $rev)`;
+      const hide = changedFields(
+        { qty_centi: existing.qty_centi, dismissed: existing.dismissed === 1 },
+        { qty_centi: null, dismissed: true },
+      );
+      if (Object.keys(hide).length > 0) {
+        statements.push(
+          outboxStatement(
+            {
+              teamId,
+              entity: "garage.shopping_item",
+              entityId: existing.id,
+              kind: OpKind.patch,
+              baseVersion: existing.version,
+              fields: hide,
+            },
+            { sql: `${below} AND ${guardRev}`, params: { ...params, $rev: existing.local_rev } },
+          ),
+        );
+      }
+      statements.push(
+        outboxStatement(
+          {
+            teamId,
+            entity: "garage.shopping_item",
+            entityId: existing.id,
+            kind: OpKind.delete,
+            baseVersion: existing.version,
+            fields: {},
+          },
+          { sql: `${notBelow} AND ${guardRev}`, params: { ...params, $rev: existing.local_rev } },
+        ),
+      );
+    }
     try {
       await this.writeTx([
+        ...statements,
         {
           // Below the minimum the line is automatic: hide it until the stock recovers.
           sql: `INSERT INTO shopping_item (
@@ -1329,7 +1607,7 @@ export class LocalGarageRepository implements GarageRepository {
                 ON CONFLICT (team_id, part_id) DO UPDATE
                    SET qty_centi = NULL, dismissed = 1, updated_at = excluded.updated_at,
                        local_rev = local_rev + 1`,
-          params: { $id: newId(), $teamId: teamId, $partId: partId, $now: now },
+          params: { $id: id, $teamId: teamId, $partId: partId, $now: now },
         },
         {
           sql: `DELETE FROM shopping_item
@@ -1396,11 +1674,94 @@ export class LocalGarageRepository implements GarageRepository {
     };
   }
 
+  /**
+   * The row as the server model sees it (snake_case columns plus version), for diffing an edit.
+   * `table` is always one of this file's own constants, never user input.
+   */
+  private async syncRow(
+    table: "engine" | "tyre_set" | "part",
+    teamId: string,
+    id: string,
+    columns: string,
+  ): Promise<Record<string, unknown> & { version: number }> {
+    const rows = await this.db.query<Record<string, unknown> & { version: number }>(
+      `SELECT ${columns}, version FROM ${table}
+        WHERE team_id = $teamId AND id = $id AND deleted_at IS NULL`,
+      { $teamId: teamId, $id: id },
+    );
+    const row = rows[0];
+    if (!row) throw new GarageNotFoundError(`${table} not found`);
+    return row;
+  }
+
+  /** Queues an edit of `entity` with only what changed; nothing changed, nothing queued. */
+  private patchQueue(
+    entity: string,
+    table: "engine" | "tyre_set" | "part",
+    teamId: string,
+    id: string,
+    localRev: number,
+    current: Record<string, unknown> & { version: number },
+    next: Record<string, unknown>,
+  ): SqlStatement[] {
+    const fields = changedFields(current, next);
+    if (Object.keys(fields).length === 0) return [];
+    return [
+      outboxStatement(
+        { teamId, entity, entityId: id, kind: OpKind.patch, baseVersion: current.version, fields },
+        {
+          // The state the UPDATE after it is about to match.
+          sql: `SELECT 1 FROM ${table}
+                 WHERE team_id = $teamId AND id = $id AND local_rev = $applied AND deleted_at IS NULL`,
+          params: { $teamId: teamId, $id: id, $applied: localRev },
+        },
+      ),
+    ];
+  }
+
+  /**
+   * The operation for a car edit carries only the fields that changed, so two devices that
+   * touch different fields merge without a conflict (ADR 0025). Nothing changed, no operation.
+   */
+  private carPatchStatements(
+    teamId: string,
+    id: string,
+    localRev: number,
+    current: Car,
+    input: CarInput,
+  ): SqlStatement[] {
+    const fields: Record<string, unknown> = {};
+    if (current.make !== input.make) fields.make = input.make;
+    if (current.model !== input.model) fields.model = input.model;
+    if (current.modelYear !== input.modelYear) fields.model_year = input.modelYear;
+    if (current.serialNumber !== input.serialNumber) fields.serial_number = input.serialNumber;
+    if (current.nickname !== input.nickname) fields.nickname = input.nickname;
+    if (current.transponderNumber !== input.transponderNumber) {
+      fields.transponder_number = input.transponderNumber;
+    }
+    if (current.status !== input.status) fields.status = input.status;
+    if (current.notes !== input.notes) fields.notes = input.notes;
+    if (Object.keys(fields).length === 0) return [];
+    return [
+      outboxStatement(
+        { teamId, entity: "garage.car", entityId: id, kind: OpKind.patch, baseVersion: current.version, fields },
+        {
+          sql: "SELECT 1 FROM car WHERE team_id = $teamId AND id = $id AND local_rev = $applied AND deleted_at IS NULL",
+          params: { $teamId: teamId, $id: id, $applied: localRev },
+        },
+      ),
+    ];
+  }
+
   private writeTx<T = Record<string, unknown>>(
     statements: SqlStatement[],
     requireRows = false,
   ): Promise<T[]> {
-    return this.db.transaction<T>(statements, { requireRows });
+    return this.db.transaction<T>(statements, { requireRows }).then((rows) => {
+      // Wakes the sync engine; a no-op when nothing is queued.
+      notifyLocalWrite();
+      return rows;
+    });
   }
 
   private rethrowWrite(error: unknown): never {

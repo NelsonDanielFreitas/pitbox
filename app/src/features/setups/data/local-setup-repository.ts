@@ -1,6 +1,8 @@
 import { CorruptLocalDataError, LocalConstraintError } from "@/db/errors";
 import type { SqlParams, SqlStatement } from "@/db/protocol";
 import { newId } from "@/shared/lib/id";
+import { notifyLocalWrite, outboxStatement, rowOutboxStatement } from "@/sync/outbox";
+import { OpKind } from "@/sync/signing";
 
 import { compareSetupData } from "../domain/compare";
 import { normalizeData } from "../domain/data";
@@ -184,7 +186,27 @@ export class LocalSetupRepository implements SetupRepository {
           },
         };
     try {
-      const rows = await this.db.transaction([insertSetup, insertVersion], { requireRows: true });
+      const queue = outboxStatement({
+        teamId,
+        entity: "setup.setup",
+        entityId: id,
+        kind: OpKind.create,
+        baseVersion: null,
+        fields: {
+          car_id: input.carId,
+          name: input.name,
+          notes: input.notes,
+          ...(input.source
+            ? { source_setup_id: input.source.setupId, source_version: input.source.version }
+            : {}),
+        },
+      });
+      // The version statement stays last: it returns the row, and when a copy source selects
+      // nothing the whole transaction (queue included) rolls back.
+      const rows = await this.db.transaction([insertSetup, queue, insertVersion], {
+        requireRows: true,
+      });
+      notifyLocalWrite();
       const setup = await this.getSetup(teamId, id);
       if (!setup || !rows[0]) throw new CorruptLocalDataError("a new setup could not be read back");
       return { setup, version: this.versionFrom(rows[0]) };
@@ -231,6 +253,16 @@ export class LocalSetupRepository implements SetupRepository {
               $now: now,
             },
           },
+          // "Save a new version based on N" (ADR 0025): the server detects a stale base as a
+          // conflict. Before the version insert so that one stays the last, row-returning statement.
+          outboxStatement({
+            teamId,
+            entity: "setup.setup_version",
+            entityId: setupId,
+            kind: OpKind.patch,
+            baseVersion: input.baseVersion,
+            fields: { data, change_summary: input.changeSummary },
+          }),
           {
             sql: `INSERT INTO setup_version (
                     team_id, setup_id, version, data, schema_version, change_summary,
@@ -257,6 +289,7 @@ export class LocalSetupRepository implements SetupRepository {
         ],
         { requireRows: true },
       );
+      notifyLocalWrite();
       if (!rows[0]) throw new CorruptLocalDataError("a new version could not be read back");
       return this.versionFrom(rows[0]);
     } catch (error) {
@@ -326,6 +359,24 @@ export class LocalSetupRepository implements SetupRepository {
     try {
       const rows = await this.db.transaction(
         [
+          // Queued first, from the same version row the insert below reads, so nothing is
+          // queued when the version or the setup is gone (the insert then fails the transaction).
+          rowOutboxStatement({
+            entity: "setup.setup_feedback",
+            kind: OpKind.append,
+            from: `setup_version v
+                    WHERE v.team_id = $teamId AND v.setup_id = $setupId AND v.version = $version
+                      AND EXISTS (SELECT 1 FROM setup s
+                                   WHERE s.team_id = v.team_id AND s.id = v.setup_id
+                                     AND s.deleted_at IS NULL)`,
+            teamId: "v.team_id",
+            entityId: "$id",
+            fields: `json_object('setup_id', v.setup_id, 'version', v.version,
+                       ${columns.map((c) => `'${c}', $${c}`).join(", ")},
+                       'track_zone', $zone, 'note', $note, 'created_at', $now)`,
+            baseVersion: "NULL",
+            params,
+          }),
           {
             sql: `INSERT INTO setup_feedback (
                     id, team_id, setup_id, version, author_id, ${columns.join(", ")},
@@ -345,6 +396,7 @@ export class LocalSetupRepository implements SetupRepository {
         { requireRows: true },
       );
       if (!rows[0]) throw new CorruptLocalDataError("new feedback could not be read back");
+      notifyLocalWrite();
       return this.feedbackFrom(rows[0]);
     } catch (error) {
       if (isNoRows(error)) throw new SetupNotFoundError("setup version not found", { cause: error });

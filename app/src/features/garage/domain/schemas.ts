@@ -465,6 +465,17 @@ export const countLineRowSchema = z
   .object({ part_id: z.uuid(), counted_centi: z.number().int().nonnegative() })
   .strict();
 
+/** The stored exception line of a part, as the sync queue needs to see it before a change. */
+export const shoppingItemStateRowSchema = z
+  .object({
+    id: z.uuid(),
+    version: z.number().int().min(1),
+    local_rev: z.number().int().nonnegative(),
+    qty_centi: z.number().int().positive().nullable(),
+    dismissed: sqliteBool,
+  })
+  .strict();
+
 export const shoppingLineRowSchema = z
   .object({
     part_id: z.uuid(),

@@ -198,7 +198,7 @@ openfga-provision: ## Cria a store e o modelo OpenFGA local e guarda os ids no .
 smoke-auth: ## Prova o login, registo e verificação contra o Zitadel/Mailpit locais (precisa de make up e make zitadel-provision)
 	python3 -I scripts/auth-smoke.py
 
-smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)
+smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up e make zitadel-provision)
 	bash scripts/api-smoke.sh
 
 db-validate: ## Atlas: checksum (atlas.sum) e sintaxe das migrações

@@ -9,49 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_FILE=deploy/compose/.env
 
-get() { grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true; }
-
-export PITBOX_ENV=local
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:${OTLP_HTTP_PORT:-4318}"
-
-if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PITBOX_OIDC_CLIENT_SECRET)" ]; then
-  export PITBOX_OIDC_CLIENT_ID="$(get PITBOX_OIDC_CLIENT_ID)"
-  export PITBOX_OIDC_CLIENT_SECRET="$(get PITBOX_OIDC_CLIENT_SECRET)"
-  export PITBOX_AUTH_KEYS="$(get PITBOX_AUTH_KEYS)"
-  export PITBOX_SYNC_PASS_KEYS="$(get PITBOX_SYNC_PASS_KEYS)"
-  # Perfil telemóvel (ADR 0029): PITBOX_TAILNET_HOST no .env, validado por scripts/tailnet.py
-  # (uma regra só). Sem ele, tudo como sempre (localhost).
-  tailnet_host="$(python3 -I scripts/tailnet.py host)" || exit 1
-  zitadel_port="$(get ZITADEL_PORT)"; zitadel_port="${zitadel_port:-8080}"
-  if [ -n "$tailnet_host" ]; then
-    export PITBOX_PUBLIC_URL="https://${tailnet_host}"
-    export PITBOX_OIDC_ISSUER="https://${tailnet_host}:8443"
-    # O PC não alcança o próprio endereço da tailnet: a API fala com o Traefik local, com o
-    # Host do issuer. Só em PITBOX_ENV=local (a API recusa-o noutros ambientes).
-    export PITBOX_OIDC_LOCAL_DIAL="127.0.0.1:${zitadel_port}"
-  else
-    if [ -z "${PITBOX_PUBLIC_URL:-}" ]; then
-      PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"
-      PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
-    fi
-    export PITBOX_PUBLIC_URL
-    export PITBOX_OIDC_ISSUER="http://localhost:${zitadel_port}"
-  fi
-  export PITBOX_VALKEY_ADDR="127.0.0.1:$(get VALKEY_PORT)"; [ "$PITBOX_VALKEY_ADDR" = "127.0.0.1:" ] && PITBOX_VALKEY_ADDR="127.0.0.1:6379"
-  export PITBOX_VALKEY_PASSWORD="$(get VALKEY_API_PASSWORD)"
-  port="$(get POSTGRES_PORT)"; port="${port:-5432}"
-  export PITBOX_DATABASE_URL="postgres://pitbox_api:$(get PITBOX_API_PASSWORD)@127.0.0.1:${port}/pitbox?sslmode=disable"
-  if [ -n "$(get PITBOX_OPENFGA_STORE_ID)" ]; then
-    export PITBOX_OPENFGA_ADDR="$(get PITBOX_OPENFGA_ADDR)"; PITBOX_OPENFGA_ADDR="${PITBOX_OPENFGA_ADDR:-127.0.0.1:8090}"
-    export PITBOX_OPENFGA_PRESHARED_KEY="$(get OPENFGA_PRESHARED_KEY)"
-    export PITBOX_OPENFGA_STORE_ID="$(get PITBOX_OPENFGA_STORE_ID)"
-    export PITBOX_OPENFGA_MODEL_ID="$(get PITBOX_OPENFGA_MODEL_ID)"
-    echo "run-api: openfga ligado (store $(get PITBOX_OPENFGA_STORE_ID))" >&2
-  fi
-  echo "run-api: login ligado (issuer $PITBOX_OIDC_ISSUER)" >&2
-else
-  echo "run-api: sem login (corre 'make zitadel-provision' para o ligar); os RPC são todos recusados" >&2
-fi
+. scripts/api-env.sh
 
 # Aviso (não bloqueia): uma branch com migrações novas precisa de `make db-migrate`, senão a
 # API arranca mas os RPC falham com "column ... does not exist". Só lê o estado (migrate status).

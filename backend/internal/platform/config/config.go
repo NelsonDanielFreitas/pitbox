@@ -93,7 +93,11 @@ type Config struct {
 	// The OIDC redirect URI is PublicURL + "/auth/callback".
 	PublicURL string `env:"PITBOX_PUBLIC_URL" envDefault:"http://localhost:8081"`
 	// OIDCIssuer is the Zitadel issuer, compared exactly with the "iss" of the ID token.
-	OIDCIssuer       string `env:"PITBOX_OIDC_ISSUER" envDefault:"http://localhost:8080"`
+	OIDCIssuer string `env:"PITBOX_OIDC_ISSUER" envDefault:"http://localhost:8080"`
+	// OIDCLocalDial is "127.0.0.1:<port>": the local plain-HTTP door of the identity provider.
+	// Only for the phone profile (ADR 0029), where the issuer is a *.ts.net address this very
+	// machine cannot reach through the tailnet. Validate refuses it outside PITBOX_ENV=local.
+	OIDCLocalDial    string `env:"PITBOX_OIDC_LOCAL_DIAL"`
 	OIDCClientID     string `env:"PITBOX_OIDC_CLIENT_ID"`
 	OIDCClientSecret string `env:"PITBOX_OIDC_CLIENT_SECRET"`
 	// OIDCAllowedAlgs are the ID token signature algorithms accepted (cryptographic
@@ -388,6 +392,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("auth_configured", c.AuthConfigured()),
 		slog.String("public_url", c.PublicURL),
 		slog.String("oidc_issuer", c.OIDCIssuer),
+		slog.Bool("oidc_local_dial", c.OIDCLocalDial != ""),
 		slog.Duration("session_idle_timeout", c.SessionIdleTimeout),
 		slog.Duration("session_absolute_timeout", c.SessionAbsoluteTimeout),
 		slog.Int("rl_user_read_rps", c.RateLimitUserReadRPS),

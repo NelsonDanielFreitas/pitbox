@@ -83,9 +83,22 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 	origin := strings.TrimSuffix(cfg.PublicURL, "/")
 	now := time.Now
 	store := auth.NewStore(vk, sessionSealer, cfg.SessionIdleTimeout, cfg.SessionAbsoluteTimeout, now)
+	oidcClient := &http.Client{Timeout: 10 * time.Second}
+	if cfg.OIDCLocalDial != "" {
+		// Phone profile (ADR 0029): config.Validate already limited this to PITBOX_ENV=local.
+		// The warning carries no URL: only the fact and the loopback address.
+		rt, err := auth.IssuerDial(nil, cfg.OIDCIssuer, cfg.OIDCLocalDial, config.IsTailnetHost)
+		if err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("oidc local dial: %w", err)
+		}
+		oidcClient.Transport = rt
+		logger.WarnContext(ctx, "OIDC local dial is active: the identity provider is reached over plain HTTP on loopback (local phone profile only)",
+			slog.String("dial", cfg.OIDCLocalDial))
+	}
 	provider := auth.NewProvider(auth.ProviderConfig{
 		Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
-		RedirectURL: origin + auth.CallbackPath, AllowedAlgs: cfg.OIDCAllowedAlgs, Now: now,
+		RedirectURL: origin + auth.CallbackPath, AllowedAlgs: cfg.OIDCAllowedAlgs, HTTPClient: oidcClient, Now: now,
 	})
 	auditor := audit.NewWriter(pool)
 	refusals, err := auth.NewRefusalCounter(otel.GetMeterProvider().Meter("pitbox/auth"))

@@ -19,13 +19,24 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
   export PITBOX_OIDC_CLIENT_SECRET="$(get PITBOX_OIDC_CLIENT_SECRET)"
   export PITBOX_AUTH_KEYS="$(get PITBOX_AUTH_KEYS)"
   export PITBOX_SYNC_PASS_KEYS="$(get PITBOX_SYNC_PASS_KEYS)"
-  if [ -z "${PITBOX_PUBLIC_URL:-}" ]; then
-    PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"
-    PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
+  # Perfil telemóvel (ADR 0029): PITBOX_TAILNET_HOST no .env, validado por scripts/tailnet.py
+  # (uma regra só). Sem ele, tudo como sempre (localhost).
+  tailnet_host="$(python3 -I scripts/tailnet.py host)" || exit 1
+  zitadel_port="$(get ZITADEL_PORT)"; zitadel_port="${zitadel_port:-8080}"
+  if [ -n "$tailnet_host" ]; then
+    export PITBOX_PUBLIC_URL="https://${tailnet_host}"
+    export PITBOX_OIDC_ISSUER="https://${tailnet_host}:8443"
+    # O PC não alcança o próprio endereço da tailnet: a API fala com o Traefik local, com o
+    # Host do issuer. Só em PITBOX_ENV=local (a API recusa-o noutros ambientes).
+    export PITBOX_OIDC_LOCAL_DIAL="127.0.0.1:${zitadel_port}"
+  else
+    if [ -z "${PITBOX_PUBLIC_URL:-}" ]; then
+      PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"
+      PITBOX_PUBLIC_URL="${PITBOX_PUBLIC_URL:-http://localhost:8081}"
+    fi
+    export PITBOX_PUBLIC_URL
+    export PITBOX_OIDC_ISSUER="http://localhost:${zitadel_port}"
   fi
-  export PITBOX_PUBLIC_URL
-  export PITBOX_OIDC_ISSUER="http://localhost:$(get ZITADEL_PORT)"; PITBOX_OIDC_ISSUER="${PITBOX_OIDC_ISSUER%:}"
-  [ "$PITBOX_OIDC_ISSUER" = "http://localhost" ] && PITBOX_OIDC_ISSUER="http://localhost:8080"
   export PITBOX_VALKEY_ADDR="127.0.0.1:$(get VALKEY_PORT)"; [ "$PITBOX_VALKEY_ADDR" = "127.0.0.1:" ] && PITBOX_VALKEY_ADDR="127.0.0.1:6379"
   export PITBOX_VALKEY_PASSWORD="$(get VALKEY_API_PASSWORD)"
   port="$(get POSTGRES_PORT)"; port="${port:-5432}"

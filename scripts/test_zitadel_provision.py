@@ -25,6 +25,8 @@ SECRET = "segredo-do-cliente-de-teste"
 
 class FakeState:
     def __init__(self):
+        self.login_v2 = {"required": True, "baseUri": "http://localhost:8080/ui/v2/login/"}
+        self.hosts = set()  # valores do cabeçalho Host recebidos
         self.calls = []  # (método, caminho) das chamadas que mudam estado
         self.webkeys = [{"id": "1", "state": "STATE_ACTIVE", "rsa": {}}]
         self.oidc = {"accessTokenLifetime": "43200s", "idTokenLifetime": "43200s",
@@ -91,11 +93,18 @@ def make_handler(st: FakeState):
 
         def handle_any(self, method):
             path = self.path
+            st.hosts.add(self.headers.get("Host", ""))
             if path == "/.well-known/openid-configuration":
                 return self._send({})
             if self.headers.get("Authorization") != f"Bearer {PAT}":
                 return self._send({"code": 16}, 401)
             body = self._body() if method in ("POST", "PUT") else {}
+            if path.endswith("/GetInstanceFeatures"):
+                return self._send({"loginV2": st.login_v2})
+            if path.endswith("/SetInstanceFeatures"):
+                st.calls.append((method, path))
+                st.login_v2 = {"required": body["loginV2"]["required"], "baseUri": body["loginV2"]["baseUri"]}
+                return self._send({})
             if path.endswith("/ListWebKeys"):
                 return self._send({"webKeys": st.webkeys})
             if path.endswith("/CreateWebKey"):
@@ -247,8 +256,40 @@ class ProvisionTest(unittest.TestCase):
         out = io.StringIO()
         with redirect_stdout(out):
             prov.run(self.base, "http://localhost:8081", PAT, self.env, kw.get("rotate", False),
-                     log=print, rotate_smtp_password=kw.get("smtp_rotate", False))
+                     log=print, rotate_smtp_password=kw.get("smtp_rotate", False),
+                     tailnet_host=kw.get("tailnet_host", ""))
         return out.getvalue()
+
+    def test_phone_profile_sends_the_external_host_and_registers_both_origins(self):
+        self.run_once(tailnet_host="pc.tail1.ts.net")
+        self.assertEqual(self.state.hosts, {"pc.tail1.ts.net:8443"})  # Zitadel picks the instance by Host
+        cfg = self.state.apps[0]["oidcConfiguration"]
+        self.assertIn("https://pc.tail1.ts.net/auth/callback", cfg["redirectUris"])
+        self.assertIn("http://localhost:8081/auth/callback", cfg["redirectUris"])
+        self.assertIn("https://pc.tail1.ts.net/auth/signed-out", cfg["postLogoutRedirectUris"])
+        self.assertEqual(cfg["backChannelLogoutUri"], "http://localhost:8081/auth/backchannel-logout")
+        self.assertTrue(cfg["developmentMode"])
+
+    def test_login_v2_uri_follows_the_profile(self):
+        self.run_once(tailnet_host="pc.tail1.ts.net")
+        self.assertEqual(self.state.login_v2["baseUri"], "https://pc.tail1.ts.net:8443/ui/v2/login/")
+        self.state.calls.clear()
+        self.run_once(tailnet_host="pc.tail1.ts.net")  # idempotent
+        self.assertFalse(any(c[1].endswith("/SetInstanceFeatures") for c in self.state.calls))
+        self.run_once()  # back to localhost
+        self.assertEqual(self.state.login_v2["baseUri"], f"{self.base}/ui/v2/login/")
+
+    def test_localhost_profile_sends_no_host_override(self):
+        self.run_once()
+        self.assertNotIn("pc.tail1.ts.net:8443", self.state.hosts)
+        cfg = self.state.apps[0]["oidcConfiguration"]
+        self.assertFalse(any("ts.net" in u for u in cfg["redirectUris"]))
+
+    def test_phone_profile_rejects_a_bad_host(self):
+        for bad in ("http://pc.tail1.ts.net", "pc.example.com", "pc.tail1.ts.net/x"):
+            with self.subTest(bad=bad), self.assertRaises(Exception):
+                self.run_once(tailnet_host=bad)
+        self.assertEqual(self.state.apps, [])
 
     def test_first_run_reaches_the_desired_state(self):
         out = self.run_once()
@@ -394,6 +435,21 @@ class PureTest(unittest.TestCase):
                 "http://localhost:5173/auth/callback",
             ],
         )
+
+    def test_phone_profile_adds_the_tailnet_origin_after_the_local_ones(self):
+        cfg = prov.desired_oidc_config("http://localhost:8081", "pc.tail1.ts.net")
+        self.assertEqual(
+            cfg["redirectUris"],
+            [
+                "http://localhost:8081/auth/callback",
+                "http://localhost:5173/auth/callback",
+                "https://pc.tail1.ts.net/auth/callback",
+            ],
+        )
+
+    def test_phone_profile_refuses_a_bad_host(self):
+        with self.assertRaises(Exception):
+            prov.desired_oidc_config("http://localhost:8081", "http://pc.tail1.ts.net")
 
     def test_production_registers_only_its_origin(self):
         cfg = prov.desired_oidc_config("https://app.pitbox.pt")

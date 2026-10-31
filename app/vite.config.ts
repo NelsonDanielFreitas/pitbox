@@ -7,8 +7,14 @@ import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 import { DEV_NONCE, securityHeaders } from "./security-headers.ts";
+import { parseTailnetHost } from "./tailnet-host.ts";
 
 const apiTarget = process.env.PITBOX_API_URL ?? "http://127.0.0.1:8081";
+
+// Phone profile (ADR 0029): `make serve-phone` exposes this server on the tailnet through
+// "tailscale serve". Vite refuses unknown Host headers (DNS rebinding), so the one tailnet name
+// is allowed explicitly. A bad value stops the server instead of widening the allow-list.
+const tailnetHost = parseTailnetHost(process.env.PITBOX_TAILNET_HOST);
 
 const proxy = {
   "/auth": { target: apiTarget, changeOrigin: false },
@@ -82,6 +88,7 @@ export default defineConfig(({ command }) => {
       host: "127.0.0.1",
       port: 4173,
       strictPort: true,
+      allowedHosts: tailnetHost ? [tailnetHost] : [],
       headers: securityHeaders("production"),
       proxy,
     },

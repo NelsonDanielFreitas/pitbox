@@ -206,8 +206,14 @@ test("a tampered last user does not open any data", async () => {
     JSON.stringify({ user_id: "../../pitbox" }),
     "not json",
   ]) {
-    await page.evaluate(([key, value]) => localStorage.setItem(key ?? "", value ?? ""), [lastUserKey, tampered]);
+    // Tamper before the app reads the value, in the page itself. Writing it and then closing the
+    // browser raced with Chromium flushing localStorage to disk: when the write was lost, the real
+    // last user opened an offline session and the test failed about one run in six.
     page = await reopen();
+    await context.addInitScript(
+      ([key, value]) => localStorage.setItem(key ?? "", value ?? ""),
+      [lastUserKey, tampered],
+    );
     await context.setOffline(true);
     await page.goto(`${app}/teams`);
     await expect(page.getByRole("heading", { name: "Sem rede" })).toBeVisible();

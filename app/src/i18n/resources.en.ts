@@ -806,6 +806,20 @@ export const en = {
     "pt-PT": "Português",
     en: "English",
   },
+  offline: {
+    blockedTitle: "No network",
+    blockedBody: "No network. Connect to continue.",
+    retry: "Try again",
+    banner: "Offline session: working with the data stored on this phone. Connect to sync.",
+  },
+  pwa: {
+    updateAvailable: "A new version is available — update",
+    update: "Update",
+    updateBusy: "Syncing… the update becomes available when it finishes.",
+    persistDenied:
+      "The browser may delete local data when storage runs low. Install the app on your home screen to protect it.",
+    dismiss: "Dismiss",
+  },
   local: {
     loading: "Preparing local data…",
     errorTitle: "Could not open the local database",

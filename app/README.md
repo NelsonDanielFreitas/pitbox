@@ -73,7 +73,8 @@ axe sem violações graves/críticas.
 - Nenhum token no JavaScript: a sessão é um cookie `HttpOnly` gerido pelo BFF.
 - Os ecrãs nunca importam `@connectrpc/*` nem `src/gen/**/*_service_pb`; só `data/` fala com a
   API. O ESLint verifica esta fronteira.
-- `localStorage`/`sessionStorage` só são permitidos em `src/i18n/` (preferência de idioma);
+- `localStorage`/`sessionStorage` só são permitidos em `src/i18n/` (preferência de idioma) e,
+  para o «último utilizador» do ADR 0028 (só o `user_id`), em `src/auth/last-user.ts`;
   `navigator.storage` só em `src/db/`.
 - `dangerouslySetInnerHTML`, `eval` e `new Function` estão proibidos.
 - CSP de produção: `script-src 'self' 'wasm-unsafe-eval'`, `worker-src 'self'`, sem inline
@@ -93,5 +94,35 @@ axe sem violações graves/críticas.
   o movimento `purchase` inicial; o resto do inventário é F1-11b.
 - `version` é a versão do servidor; `local_rev` é a concorrência entre abas.
 - Piloto lê; só Dono/Mecânico vê ações de escrita. O servidor continua a ser a barreira real.
-- Sem rede, a garagem funciona dentro de uma sessão já autenticada. Abrir a app do zero sem
-  rede continua dependente do passe offline do F1-13.
+- Sem rede, a garagem funciona dentro de uma sessão já autenticada. Abrir a app a frio sem rede
+  funciona com a sessão offline do F1-14b (secção seguinte).
+
+## Instalar no telemóvel e abrir sem rede (F1-14b, ADR 0028)
+
+O service worker só existe no build: em `pnpm dev` não há service worker. Para o testar:
+
+```bash
+pnpm build && pnpm preview     # http://localhost:4173 (com a API/BFF local, ver «Desenvolvimento»)
+```
+
+1. Abre `http://localhost:4173`, entra e deixa a app sincronizar uma vez (é isso que guarda o
+   passe offline de 72 h na base local).
+2. Instala: no Chrome, menu → «Instalar app» (no Android, «Adicionar ao ecrã inicial»).
+   Em DevTools → Application → Manifest/Service Workers confirma «activated and is running».
+3. DevTools → Network → **Offline**, fecha a app e volta a abri-la: mostra os dados locais com
+   o aviso «Sessão offline». Sem passe válido (expirado ou nunca sincronizado) mostra «Sem
+   rede. Liga-te para continuar.» e nenhum dado.
+4. Quando a rede volta a app pede `/auth/session` outra vez: mesmo utilizador segue; outro
+   utilizador começa limpo; 401 vai para o login sem apagar a base nem a fila.
+
+Notas:
+
+- O service worker faz pré-cache só dos ficheiros do build (incluindo o WASM do wa-sqlite).
+  `/auth/*` e `/pitbox.*` nunca ficam em cache. Uma versão nova mostra «Há uma versão nova —
+  atualizar» e só ativa quando tocas (e não durante um envio).
+- O «último utilizador» é só o `user_id` numa chave `localStorage`; apaga-se no logout e em 401.
+  O passe local só decide se a base abre: o servidor verifica o passe e as assinaturas no `Push`.
+- Com o telemóvel desbloqueado os dados locais abrem até 72 h depois do último sync (TM-DEV-01);
+  a cifra nativa chega no F2-06.
+- Instalabilidade: o Lighthouse 12 já não tem a categoria PWA. Verifica no DevTools →
+  Application e com `pnpm e2e` (`tests/e2e/offline-start.spec.ts`).

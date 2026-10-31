@@ -49,7 +49,7 @@ O pacote `wa-sqlite` do npm está em 1.0.0 (jan/2024). O repositório oficial es
 
 - Uma base por utilizador: `pitbox/<sha256(user_id)>/db.sqlite3` na OPFS. O hash separa
   contas; não é uma medida de privacidade.
-- A base é aberta depois de `/auth/session`; `user_id` nunca vem de URL ou storage.
+- A base é aberta depois de `/auth/session`; `user_id` nunca vem da URL; do armazenamento local só para a sessão offline do [ADR 0028](0028-app-instalavel-e-arranque-sem-rede.md), e só com um passe offline não expirado.
 - No logout, escreve-se `pitbox/<hash>/.logout-pending`, fecha-se o worker, publica-se
   `logout` em `BroadcastChannel("pitbox-db")` e apaga-se a pasta inteira. Outras abas fecham
   a ligação e voltam ao login.
@@ -117,8 +117,9 @@ O pacote `wa-sqlite` do npm está em 1.0.0 (jan/2024). O repositório oficial es
 
 - A matriz de browsers da especificação §14 (Chrome, Safari e Firefox nas duas últimas
   versões; iOS 16+) tem de ser validada com OPFS; não há fallback para memória.
-- O login continua a exigir `/auth/session`; abrir a app sem rede leva ao login até ao passe
-  offline do F1-13, mesmo que os dados locais existam.
+- O login continua a exigir `/auth/session`. Sem rede, a app só abre com a sessão offline do
+  [ADR 0028](0028-app-instalavel-e-arranque-sem-rede.md) (último utilizador e passe offline não expirado); sem passe
+  mostra «Sem rede» e nenhum dado.
 - O bootstrap de equipas é uma ponte temporária; não há resolução de conflitos nem escrita
   offline antes do F1-13.
 - O lock multi-aba e o marcador `.logout-pending` são testados em E2E; não são uma garantia

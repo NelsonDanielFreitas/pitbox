@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { VitePWA } from "vite-plugin-pwa";
 
 import { DEV_NONCE, securityHeaders } from "./security-headers.ts";
 
@@ -47,6 +48,23 @@ export default defineConfig(({ command }) => {
       }),
       react(),
       tailwindcss(),
+      // ADR 0028: the service worker only pre-caches the build (hashed files). No
+      // runtimeCaching, so nothing from /auth/* or /pitbox.* can reach the Cache Storage, and
+      // no skipWaiting: a new version waits until the user accepts it.
+      VitePWA({
+        strategies: "generateSW",
+        registerType: "prompt",
+        injectRegister: false,
+        manifest: false, // app/public/manifest.webmanifest, linked from index.html
+        workbox: {
+          globPatterns: ["**/*.{html,js,css,wasm,woff2,png,webmanifest}"],
+          navigateFallback: "index.html",
+          navigateFallbackDenylist: [/^\/auth\//, /^\/pitbox\./],
+          cleanupOutdatedCaches: true,
+          skipWaiting: false,
+          clientsClaim: false,
+        },
+      }),
     ],
     resolve: {
       alias: {

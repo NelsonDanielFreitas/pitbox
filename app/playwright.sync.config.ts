@@ -6,6 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
 // containers. `pnpm e2e` keeps using the mock BFF; this one needs Docker.
 const port = 4174;
 const baseURL = `http://localhost:${port}`;
+// Its own port: `make run-api` uses 8081 and must not collide with the test server.
+const apiAddr = "127.0.0.1:18081";
 const stateFile = path.resolve(import.meta.dirname, ".e2e/state.json");
 
 export default defineConfig({
@@ -32,14 +34,14 @@ export default defineConfig({
       gracefulShutdown: { signal: "SIGTERM", timeout: 30_000 },
       stdout: "pipe",
       stderr: "pipe",
-      env: { PITBOX_E2E_ORIGIN: baseURL, PITBOX_E2E_STATE: stateFile },
+      env: { PITBOX_E2E_ORIGIN: baseURL, PITBOX_E2E_STATE: stateFile, PITBOX_E2E_API_ADDR: apiAddr },
     },
     {
       command: `pnpm preview --host 127.0.0.1 --port ${port} --strictPort`,
       url: baseURL,
       reuseExistingServer: false,
       timeout: 30_000,
-      env: { PITBOX_API_URL: "http://127.0.0.1:8081" },
+      env: { PITBOX_API_URL: `http://${apiAddr}` },
     },
   ],
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 390, height: 844 } } }],

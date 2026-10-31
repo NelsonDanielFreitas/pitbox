@@ -784,7 +784,7 @@
         "app"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Feito",
       "todo": "Listas e formulários de carros, motores, pneus e peças, a ler e escrever na base local",
       "done_when": [
         "Registar um carro completo em menos de 1 min no telemóvel"
@@ -840,7 +840,7 @@
         "security"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Feito",
       "todo": "`SyncService` Push/Pull, fila de operações com UUIDv7, assinatura por dispositivo, resolução de conflitos por campo (§8)",
       "done_when": [
         "Reenviar a mesma fila não duplica nada",
@@ -871,7 +871,7 @@
         "app"
       ],
       "gate": false,
-      "status": "Por fazer",
+      "status": "Em curso",
       "todo": "Playwright: criar setup offline, voltar a ligar, verificar no servidor",
       "done_when": [
         "Teste E2E verde no CI"
@@ -887,6 +887,46 @@
       "security_notes": "",
       "pull_request": null,
       "adrs": []
+    },
+    {
+      "id": "F1-14b",
+      "title": "App instalável e arranque sem rede",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "app",
+        "security"
+      ],
+      "gate": false,
+      "status": "Em curso",
+      "todo": "Service worker só para o shell (vite-plugin-pwa, generateSW, registerType prompt, sem runtimeCaching nem skipWaiting), manifest, aviso de atualização e storage.persist(); sessão offline (último utilizador só com user_id, abre a base só com passe offline não expirado), ecrã «Sem rede», recuperação quando a rede volta; ADR 0028 e emenda ao ADR 0018",
+      "done_when": [
+        "App instalada e aberta a frio em modo avião mostra os dados locais se houver passe válido",
+        "sem passe mostra «Sem rede» e nenhum dado",
+        "401 leva ao login sem apagar a base",
+        "/auth/* e /pitbox.* fora da Cache Storage",
+        "versão nova não ativa sozinha",
+        "logout limpa o último utilizador",
+        "pnpm e2e e pnpm e2e:sync verdes"
+      ],
+      "done_when_raw": "App instalada e aberta a frio em modo avião mostra os dados locais se houver passe válido; sem passe mostra «Sem rede» e nenhum dado; 401 leva ao login sem apagar a base; `/auth/*` e `/pitbox.*` fora da Cache Storage; versão nova não ativa sozinha; logout limpa o último utilizador; `pnpm e2e` e `pnpm e2e:sync` verdes",
+      "doc_references": [
+        "§3",
+        "§5.2"
+      ],
+      "suggested_branch": "f1-14b-app-instalavel-e-arranque-sem-rede",
+      "issue_title": "F1-14b — App instalável e arranque sem rede",
+      "labels": [
+        "fase-1",
+        "area:app",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0028",
+        "0018"
+      ]
     },
     {
       "id": "F1-15",

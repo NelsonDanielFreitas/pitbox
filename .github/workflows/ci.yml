@@ -40,7 +40,7 @@ jobs:
       - name: Install tools (mise.toml / mise.lock)
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
 
       - name: Cache buf modules
@@ -91,7 +91,7 @@ jobs:
       - name: Install Node and pnpm only
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked node pnpm
 
       - name: Cache pnpm store
@@ -166,7 +166,7 @@ jobs:
       - name: Install tools (mise.toml / mise.lock)
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
 
       - name: Cache Go modules and build cache
@@ -207,7 +207,7 @@ jobs:
       - name: Install tools (mise.toml / mise.lock)
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
 
       - name: OpenFGA model assertions
@@ -229,7 +229,7 @@ jobs:
       - name: Install tools (mise.toml / mise.lock)
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
 
       # Deteta, não previne: se falhar, o segredo já está no GitHub e tem de ser rodado.
@@ -251,7 +251,7 @@ jobs:
       - name: Install tools (mise.toml / mise.lock)
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
 
       - name: actionlint and zizmor
@@ -275,7 +275,7 @@ jobs:
       - name: Install tools (mise.toml / mise.lock)
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked # exige o mise.lock (a ação já o faz sozinha com lockfile; explícito)
 
       # O checkout de um PR só tem origin/main; o db-lint compara com o branch local main.
@@ -308,7 +308,7 @@ jobs:
       - name: Install Go, Node and pnpm only
         uses: jdx/mise-action@08ae2a091c038e1e05ec6f5115dc5c69d5a2a6b8 # v5.1.2
         with:
-          version: 2026.10.8 # renovate: datasource=github-releases depName=jdx/mise
+          version: 2026.10.21 # renovate: datasource=github-releases depName=jdx/mise
           install_args: --locked go node pnpm
 
       - name: Cache pnpm store

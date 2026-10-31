@@ -30,5 +30,5 @@ Os testes Playwright corriam contra `mock-bff.ts`, que não tem `SyncService`: p
 - O login real (redirecionamento, PKCE, Zitadel) **não** é exercitado aqui; continua coberto por `login.spec.ts` (mock), pelos testes de `platform/auth` e pelo `make smoke-auth`.
 - O E2E tem de manter o `runAPI` e a semente alinhados com o resto do código: usa os construtores reais, por isso um módulo novo ligado em `runAPI` fica logo no E2E.
 - O job precisa de Docker no runner (já existe) e demora cerca de 5 minutos.
-- Os traces, só em falha e com 3 dias de retenção, contêm a sessão sintética de um ambiente que já não existe.
+- O CI só permite as ações `checkout`, `cache` e `mise-action`, por isso o job não carrega artefactos: uma falha reproduz-se em local com `pnpm e2e:sync` (os traces ficam em `app/test-results`, ignorado pelo Git).
 - O E2E encontrou um defeito real do F1-13: o motor pedia os conflitos em todos os ciclos, mas só dono e mecânico os podem listar, por isso o dispositivo de um piloto ficava em «Erro de sincronização». Corrigido neste cartão.

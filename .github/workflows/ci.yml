@@ -352,17 +352,6 @@ jobs:
         run: pnpm e2e:sync
         working-directory: app
 
-      # Only on failure, kept briefly. The traces hold the session of a synthetic user of a
-      # throwaway environment, nothing else.
-      - name: Upload traces
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: e2e-sync-traces
-          path: app/test-results
-          retention-days: 3
-          if-no-files-found: ignore
-
   ci-ok:
     name: ci-ok
     # always(): sem isto, se um job falhar o ci-ok fica "skipped" e um check

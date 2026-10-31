@@ -333,7 +333,10 @@ export class SyncEngine {
     await this.push(teamId, deviceId, pass);
     await this.pull(teamId);
     await this.drainHeld(teamId);
-    await this.refreshConflicts(teamId);
+    // Only the owner and the mechanic can see and resolve conflicts (the server refuses the
+    // list to anyone else, which would leave a pilot's device in a permanent error state).
+    const role = (await this.db.query<{ role: string }>("SELECT role FROM team WHERE id = $id", { $id: teamId }))[0]?.role;
+    if (role === "owner" || role === "mechanic") await this.refreshConflicts(teamId);
   }
 
   // --- device and pass ------------------------------------------------------------------

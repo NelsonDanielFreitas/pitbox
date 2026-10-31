@@ -136,7 +136,15 @@ class FakeServer implements SyncApi {
     });
   }
 
+  conflictCalls = 0;
+  /** The real server only lists conflicts for the owner and the mechanic. */
+  conflictsDenied = false;
+
   listConflicts() {
+    this.conflictCalls++;
+    if (this.conflictsDenied) {
+      return Promise.reject(new ConnectError("mechanic role", Code.PermissionDenied));
+    }
     return Promise.resolve(this.conflicts);
   }
 
@@ -421,6 +429,16 @@ describe("pull", () => {
     expect(engine.getSnapshot().conflicts).toBe(1);
     await engine.resolveConflict(teamId, server.conflicts[0]?.id ?? "", "server");
     expect(engine.getSnapshot().conflicts).toBe(0);
+  });
+
+  it("does not ask a pilot for conflicts: only the mechanic can resolve them", async () => {
+    await db.query("UPDATE team SET role = 'pilot' WHERE id = $id", { $id: teamId });
+    server.conflictsDenied = true;
+    server.conflictCalls = 0;
+    await engine.syncNow();
+    expect(server.conflictCalls).toBe(0);
+    expect(engine.getSnapshot().phase).toBe("idle");
+    expect(engine.getSnapshot().problem).toBeNull();
   });
 });
 

@@ -9,7 +9,7 @@ rust = { version = "1.99.0", profile = "minimal", components = "rustfmt,clippy" 
 buf = "1.73.0"
 "github:sqlc-dev/sqlc" = "1.31.1"   # backend github: o registo aqua do sqlc não dá checksum para o mise.lock
 atlas-community = "1.3.0"   # edição Apache 2.0 (ADR 0010): sem funcionalidades Pro nem login
-golangci-lint = "2.14.0"
+golangci-lint = "2.15.0"
 protoc-gen-go = "1.36.12"          # tem de coincidir com google.golang.org/protobuf (backend/go.mod); verificado por make gen-check
 # Caminho explícito: o nome curto "protoc-gen-connect-go" do registo do mise aponta para a v1.
 # Compilado pelo Go (sem checksum no mise.lock; protegido pelo checksum database do Go).

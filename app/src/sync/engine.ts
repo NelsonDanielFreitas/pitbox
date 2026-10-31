@@ -551,7 +551,15 @@ export class SyncEngine {
         );
       }
       const cursorStatement = this.setMeta(cursorKey, response.nextCursor);
-      const changes = response.changes.filter((c) => c.entity in syncEntities);
+      // The server sends one entry per entity, in the order of its last change, so a setup
+      // updated after its version arrives after it, and a child can come before its parent.
+      // Parents first (the registry order), or the child is skipped or held and, for
+      // append-only rows such as feedback, lost. The sort is stable: the order within an
+      // entity is kept.
+      const order = Object.keys(syncEntities);
+      const changes = response.changes
+        .filter((c) => c.entity in syncEntities)
+        .sort((a, b) => order.indexOf(a.entity) - order.indexOf(b.entity));
       const statements = changes.flatMap((change) => this.changeStatements(teamId, change, pending));
 
       try {

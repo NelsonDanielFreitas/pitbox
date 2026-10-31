@@ -419,6 +419,41 @@ describe("pull", () => {
     expect(await cars.getCar(teamId, otherCar)).toBeUndefined();
   });
 
+  it("applies a child after its parent even when the page lists it first", async () => {
+    // A setup with a second version is updated after its version row was written, and the
+    // server lists entities by their last change: versions, setup, then the feedback.
+    const car = await cars.createCar(teamId, carInput());
+    await engine.syncNow();
+    const setupId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b5001";
+    const feedbackId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b5002";
+    const at = "2026-10-30T12:00:00.123456Z";
+    const scales = {
+      steering_entry: null, steering_mid: null, steering_exit: null, traction: 4,
+      jump_stability: null, braking: null, engine_low_end: null, engine_top_end: null,
+    };
+    server.changes = [
+      {
+        entity: "setup.setup_version", entityId: setupId, deleted: false,
+        data: {
+          setup_id: setupId,
+          versions: [{ version: 1, schema_version: 1, based_on_setup_id: null, based_on_version: null, change_summary: null, created_at: at, data: {} }],
+        },
+      },
+      {
+        entity: "setup.setup", entityId: setupId, deleted: false,
+        data: { car_id: car.id, name: "Seco", current_version: 1, notes: null, created_at: at, updated_at: at, version: 2 },
+      },
+      {
+        entity: "setup.setup_feedback", entityId: feedbackId, deleted: false,
+        data: { setup_id: setupId, version: 1, author_id: userId, ...scales, track_zone: null, note: "ok", created_at: at },
+      },
+    ];
+    await engine.syncNow();
+    expect(await db.query("SELECT 1 FROM setup_version WHERE setup_id = $s", { $s: setupId })).toHaveLength(1);
+    const rows = await db.query<{ traction: number }>("SELECT traction FROM setup_feedback WHERE id = $f", { $f: feedbackId });
+    expect(rows[0]?.traction).toBe(4);
+  });
+
   it("stores the open conflicts for the screen", async () => {
     server.conflicts = [{
       id: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4f01", opId: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4f02",

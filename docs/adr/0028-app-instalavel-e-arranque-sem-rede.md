@@ -1,6 +1,6 @@
 # 0028 — App instalável e arranque sem rede
 
-- **Estado:** Proposto
+- **Estado:** Aceite (Nelson, 2026-10-31)
 - **Data:** 2026-10-31
 - **Cartão:** F1-14b (novo; pré-condição do F1-15)
 - **Relacionado:** [ADR 0003](0003-app-offline-first-sync-proprio.md), [ADR 0013](0013-sessoes-bff-e-tokens.md), [ADR 0017](0017-app-web-bff-mesma-origem.md), [ADR 0018](0018-base-local-web.md) (altera uma regra), [ADR 0025](0025-formato-de-assinatura-e-cursor-do-sync.md); arquitetura §3 e §5.2; ameaças TM-DEV-01, TM-DEV-02.

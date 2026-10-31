@@ -90,6 +90,17 @@ func (p Postgres) Exec(t testing.TB, sql string) string {
 	return strings.TrimSpace(string(out))
 }
 
+// TryExec is Exec for callers that cannot fail a test (an HTTP handler of a test server):
+// it returns the error instead.
+func (p Postgres) TryExec(sql string) (string, error) {
+	out, err := exec.Command("docker", "exec", "-e", "PGPASSWORD="+p.superPassword, p.container, //nolint:noctx,gosec // test helper with a container this test started
+		"psql", "-X", "-At", "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1", "-U", "postgres", "-d", "pitbox", "-c", sql).Output()
+	if err != nil {
+		return "", fmt.Errorf("psql: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func startPostgresContainer(t testing.TB, root, image string, env []string) (name, addr string) {
 	t.Helper()
 	name = "pitbox-test-pg-" + randomHex(t)[:12]

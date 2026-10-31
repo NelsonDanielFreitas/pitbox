@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -151,6 +151,9 @@ app-build: ## Build de produção da app
 app-e2e: app-build ## Playwright sobre o build de produção
 	cd app && pnpm e2e
 
+app-e2e-sync: app-build ## Playwright contra a API real e contentores descartáveis (precisa de Docker; F1-14)
+	cd app && pnpm e2e:sync
+
 secrets: ## gitleaks sobre o histórico completo do Git
 	gitleaks git --config .gitleaks.toml --redact --no-banner
 
@@ -206,7 +209,7 @@ db-migrate: ## Aplica as migrações ao Postgres do compose (make up) como pitbo
 authz-test: ## Asserções do modelo OpenFGA
 	fga model test --tests backend/authz/model.fga.yaml
 
-ci: lint test gen-check sqlc-check app-install app-typecheck app-test app-build app-e2e secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
+ci: lint test gen-check sqlc-check app-install app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows db-test authz-test ## Corre localmente o mesmo que o CI
 
 hooks: ## Ativa os hooks de .githooks (pre-push: gitleaks antes de cada push)
 	git config core.hooksPath .githooks

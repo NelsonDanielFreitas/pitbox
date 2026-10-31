@@ -16,6 +16,7 @@ coverage.out
 node_modules/
 /app/dist/
 /app/test-results/
+/app/.e2e/
 /app/playwright-report/
 /app/coverage/
 /app/android/app/build/

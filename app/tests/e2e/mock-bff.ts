@@ -25,6 +25,17 @@ import {
   TeamService,
 } from "@/gen/pitbox/identity/v1/team_service_pb";
 
+import {
+  IssueOfflinePassResponseSchema,
+  ListConflictsResponseSchema,
+  OperationResultSchema,
+  OpStatus,
+  PullResponseSchema,
+  PushResponseSchema,
+  RegisterDeviceResponseSchema,
+  SyncService,
+} from "@/gen/pitbox/sync/v1/sync_service_pb";
+
 const port = Number(process.env.PITBOX_E2E_BFF_PORT ?? 4010);
 const appOrigin = process.env.PITBOX_E2E_ORIGIN ?? "http://localhost:4173";
 const cookieName = "__Host-pitbox_session";
@@ -54,6 +65,11 @@ interface MockInvitation {
   state: "pending" | "used" | "revoked";
 }
 
+// How long a freshly issued offline pass lasts, in seconds (negative = already expired).
+const defaultPassTtlSeconds = 72 * 3600;
+let passTtlSeconds = defaultPassTtlSeconds;
+// A Pull comes after the pass is issued and stored, so a test can wait for "pulls > 0".
+let pulls = 0;
 let expireRpc = false;
 let offlineRpc = false;
 let weakFactor = false;
@@ -88,6 +104,8 @@ function resetState(): void {
   expireRpc = false;
   offlineRpc = false;
   weakFactor = false;
+  passTtlSeconds = defaultPassTtlSeconds;
+  pulls = 0;
   nextCookie = defaultCookie;
   teamRecords = seedTeams();
   members = seedMembers();
@@ -250,6 +268,38 @@ const rpcHandler = connectNodeAdapter({
         return create(CreateTeamResponseSchema, { team });
       },
     });
+    // Just enough of the sync server for the app to register a device, hold an offline pass
+    // and sync nothing: the real protocol is covered by the e2e-sync suite against the real API.
+    router.service(SyncService, {
+      registerDevice(_request, context) {
+        requireUser(context);
+        return create(RegisterDeviceResponseSchema, { deviceId: randomUUID() });
+      },
+      issueOfflinePass(_request, context) {
+        requireUser(context);
+        return create(IssueOfflinePassResponseSchema, {
+          token: randomBytes(24).toString("base64url"),
+          expiresAt: timestampFromDate(new Date(Date.now() + passTtlSeconds * 1000)),
+        });
+      },
+      push(request, context) {
+        requireUser(context);
+        return create(PushResponseSchema, {
+          results: request.operations.map((operation) =>
+            create(OperationResultSchema, { opId: operation.opId, status: OpStatus.APPLIED, version: 1 }),
+          ),
+        });
+      },
+      pull(_request, context) {
+        requireUser(context);
+        pulls += 1;
+        return create(PullResponseSchema, { nextCursor: "0", hasMore: false });
+      },
+      listConflicts(_request, context) {
+        requireUser(context);
+        return create(ListConflictsResponseSchema, {});
+      },
+    });
     router.service(MemberService, {
       listMembers(request, context) {
         const user = requireUser(context);
@@ -351,6 +401,23 @@ const server = createServer((req, res) => {
 
   if (url.pathname === "/__test/offline-rpc" && req.method === "POST") {
     offlineRpc = true;
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
+  if (url.pathname === "/__test/stats" && req.method === "GET") {
+    json(res, 200, { pulls });
+    return;
+  }
+
+  if (url.pathname === "/__test/pass-ttl" && req.method === "POST") {
+    const seconds = Number(url.searchParams.get("seconds"));
+    if (!Number.isFinite(seconds)) {
+      json(res, 400, { error: "seconds must be a number" });
+      return;
+    }
+    passTtlSeconds = seconds;
     res.writeHead(204, { "Cache-Control": "no-store" });
     res.end();
     return;

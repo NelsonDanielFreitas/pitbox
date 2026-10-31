@@ -128,6 +128,31 @@ export default tseslint.config(
     },
   },
   {
+    // ADR 0028: the "last user" (only a user id, never a token) is the one other value kept in
+    // localStorage, so a cold start without network knows which local database to try.
+    files: ["src/auth/last-user.ts", "src/auth/*.test.ts"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "sessionStorage", message: "sessionStorage is not allowed." },
+        { name: "indexedDB", message: "indexedDB is not allowed here." },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.name='window'][property.name='sessionStorage']",
+          message: "sessionStorage is not allowed.",
+        },
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: "Do not inject HTML into the app.",
+        },
+        { selector: "CallExpression[callee.name='eval']", message: "eval is forbidden." },
+        { selector: "NewExpression[callee.name='Function']", message: "new Function is forbidden." },
+      ],
+    },
+  },
+  {
     // The device key is a non-extractable CryptoKey: it can sign but never be read back, which
     // is why it may live in IndexedDB (nothing sensitive is stored there in clear).
     files: ["src/sync/device-key.ts"],

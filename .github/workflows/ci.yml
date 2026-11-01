@@ -289,6 +289,11 @@ jobs:
       - name: Database tests
         run: make db-test
 
+      # F1-14d: backup e restauro em contentores descartáveis (o passo da cifra com age é saltado
+      # se o binário não existir).
+      - name: Backup and restore tests
+        run: make db-backup-test
+
   # Único check obrigatório no ruleset: quando entrarem jobs da app e do firmware
   # basta acrescentá-los a `needs`, sem mexer nas regras do GitHub.
   e2e-sync:

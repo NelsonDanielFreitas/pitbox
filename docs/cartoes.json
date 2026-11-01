@@ -965,6 +965,40 @@
       ]
     },
     {
+      "id": "F1-14d",
+      "title": "Backup e restauro locais",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "platform",
+        "security"
+      ],
+      "gate": false,
+      "status": "Em curso",
+      "todo": "make db-backup / db-restore / db-restore-live das bases pitbox (com o esquema fga do OpenFGA) e zitadel para uma pasta fora do volume Docker (700/600, soma de controlo, rotação, cifra opcional com age); restauro com a ordem do TimescaleDB; make db-backup-test no CI",
+      "done_when": [
+        "Restauro completo das duas bases com contagens, DDL, RLS e privilégios iguais à origem",
+        "dump adulterado recusado",
+        "dumps nunca entram no Git",
+        "cifra decidida (opcional, age)",
+        "o .env documentado como parte do backup"
+      ],
+      "done_when_raw": "Restauro completo das duas bases com contagens, DDL, RLS e privilégios iguais à origem; dump adulterado recusado; dumps nunca entram no Git; cifra decidida (opcional, age); o `.env` documentado como parte do backup",
+      "doc_references": [
+        "§11"
+      ],
+      "suggested_branch": "f1-14d-backup-restauro-local",
+      "issue_title": "F1-14d — Backup e restauro locais",
+      "labels": [
+        "fase-1",
+        "area:db",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
       "id": "F1-15",
       "title": "Gate v0.1",
       "phase": "1",

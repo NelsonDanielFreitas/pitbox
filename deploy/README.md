@@ -92,7 +92,24 @@ Sem `PITBOX_TAILNET_HOST` tudo funciona como antes (`localhost`): CI, E2E e `mak
 
 **Passkeys: mudar o domínio do Zitadel invalida as passkeys existentes.** O Zitadel usa como RP ID da passkey o domínio com que o pedido chega (`RPID` = `RequestedDomain()` e origem = `Origin()`, em `internal/webauthn/webauthn.go` do Zitadel), e o browser só usa uma passkey no RP ID em que foi criada. Uma passkey criada em `localhost` deixa de servir em `<host>.ts.net` (o erro típico é «não foi possível obter»/*NotAllowedError*). Isto vem do domínio, não de um defeito: voltar ao perfil localhost faz as antigas voltarem a funcionar, porque o RP ID é só o nome (sem porta). Para migrar: entra por outro método (palavra-passe), regista uma passkey nova no domínio ts.net (e MFA se for dono) e apaga a antiga. Se a conta só tiver passkey: (a) abre a consola do Zitadel `https://<host>:8443/ui/console` a partir de outro dispositivo da tailnet (o PC não alcança o próprio endereço), entra com o administrador (`ZITADEL_ADMIN_USERNAME`, por palavra-passe), abre o utilizador e, em autenticação, apaga a passkey e envia um email de recuperação da palavra-passe (o Mailpit local mostra-o); ou (b) remove `PITBOX_TAILNET_HOST` do `.env`, `make up` e `make zitadel-provision`, e entra em `localhost` com a passkey antiga. As passkeys de produção (F5) devem usar um domínio estável para nunca passar por isto.
 
-**Backup antes de mexer no Zitadel** (até haver `make db-backup`): `pg_dump -Fc` das bases `zitadel` e `pitbox`. Restauro de `pitbox` (TimescaleDB): criar os papéis, `CREATE EXTENSION timescaledb`, `SELECT timescaledb_pre_restore()`, `pg_restore --no-owner --no-acl`, `SELECT timescaledb_post_restore()`. Sem o pré/pós-restauro falham as hypertables. Testado num contentor isolado (contagens iguais à origem).
+### Backup e restauro (F1-14d)
+
+```bash
+make db-backup                       # pitbox + zitadel -> ~/pitbox-backups (pasta 700, ficheiros 600, fora do volume Docker)
+make db-backup DB=zitadel            # só uma base
+make db-restore                      # VERIFICA o mais recente das duas bases num contentor descartável (não toca em nada)
+make db-restore FILE=~/pitbox-backups/pitbox-AAAAMMDD-HHMMSS.dump DB=pitbox
+make db-restore-live DB=pitbox CONFIRM=yes   # RESTAURA no compose: APAGA a base e recria-a (pára o Zitadel se for a base zitadel)
+make db-backup-test                  # prova automática em contentores descartáveis (corre no CI)
+```
+
+- **O que entra:** a base `pitbox` (dados, RLS, hypertable de telemetria e o esquema `fga` do OpenFGA, ou seja, as relações de autorização) e a base `zitadel` (contas, passkeys, sessões). Cada dump é `pg_dump -Fc`, verificado com `pg_restore --list`, com um `.sha256` ao lado. O restauro recusa um dump cuja soma não confere.
+- **O que NÃO entra, e tens de guardar à parte:** o `deploy/compose/.env`. O dump do Zitadel só é utilizável com a `ZITADEL_MASTERKEY` (cifra os segredos lá dentro), e a app precisa de `PITBOX_AUTH_KEYS` e `PITBOX_SYNC_PASS_KEYS`. Guarda-o num sítio seguro (gestor de palavras-passe), não ao lado dos dumps. O SeaweedFS (S3) também não entra: ainda não guarda nada da v0.1.
+- **Segurança dos dumps:** têm emails e hashes. A pasta é 700 e os ficheiros 600; o script recusa uma pasta dentro do repositório; `*.dump*` está no `.gitignore`. Para guardar cópias noutro sítio, cifra-os: com `PITBOX_BACKUP_AGE_RECIPIENT=<chave pública age>` o backup sai como `.dump.age` (precisa do binário [`age`](https://github.com/FiloSottile/age), `mise exec age@1.3.1 -- ...`), e o restauro usa `PITBOX_BACKUP_AGE_IDENTITY=<ficheiro da chave privada>`. A chave privada nunca fica junto dos dumps. Sem `age`, os dumps ficam em claro, protegidos só pelas permissões e pela cifra de disco do teu PC.
+- **Rotação:** `PITBOX_BACKUP_KEEP` (por omissão 14) dumps por base; só apaga ficheiros com o nome `<base>-AAAAMMDD-HHMMSS.dump[.age]`. `PITBOX_BACKUP_DIR` muda a pasta.
+- **Restauro (porquê o `pre_restore`):** a base `pitbox` usa TimescaleDB. Um `pg_restore` simples falha nas hypertables. O script cria a extensão, corre `timescaledb_pre_restore()`, faz `pg_restore --exit-on-error` (donos e privilégios incluídos, os papéis vêm do bootstrap do compose) e fecha com `timescaledb_post_restore()`.
+- **Recuperar de um `make reset`:** `make reset`, `make up`, depois `make db-restore-live DB=pitbox CONFIRM=yes` e `make db-restore-live DB=zitadel CONFIRM=yes` (com o mesmo `.env` de antes!), `make up`, `make zitadel-provision`.
+- **Limites:** é um instantâneo manual do ambiente local, sem PITR nem cópia noutra conta. Isso é o F5-08.
 
 ### Papéis do Postgres
 

@@ -52,6 +52,37 @@ provision = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(provision)
 
 
+SUBJECT_RE = re.compile(r"\d{1,32}")  # os ids do Zitadel (o `sub` do IdP) são numéricos
+
+
+def psql(env: dict, query: str) -> str:
+    """Corre uma consulta como superutilizador no Postgres local (só para o smoke, nunca em produção).
+
+    A palavra-passe vai pelo ambiente do `docker` (`-e PGPASSWORD` sem valor), não na linha de
+    comandos, para não aparecer na lista de processos.
+    """
+    return subprocess.run(
+        ["docker", "exec", "-e", "PGPASSWORD", "pitbox-postgres-1", "psql", "-X", "-At", "-h", "127.0.0.1", "-U", "postgres", "-d", "pitbox", "-c", query],
+        env={**os.environ, "PGPASSWORD": env["POSTGRES_SUPERUSER_PASSWORD"]},
+        capture_output=True, text=True, check=True).stdout.strip()
+
+
+def cleanup_user_accounts(run_sql, subjects) -> int:
+    """Apaga de identity.user_account só as linhas dos utilizadores de teste, pelo idp_subject.
+
+    Fail closed: sem ids não corre SQL (nunca um DELETE sem WHERE) e um id fora do formato
+    numérico recusa tudo em vez de ser colado no SQL. Devolve quantas linhas apagou.
+    """
+    subjects = list(dict.fromkeys(subjects))
+    if not subjects:
+        return 0
+    if not all(isinstance(x, str) and SUBJECT_RE.fullmatch(x) for x in subjects):
+        raise ValueError("idp_subject inválido; nada foi apagado")
+    in_list = ", ".join(f"'{x}'" for x in subjects)
+    return int(run_sql(
+        f"WITH d AS (DELETE FROM identity.user_account WHERE idp_subject IN ({in_list}) RETURNING 1) SELECT count(*) FROM d"))
+
+
 def fail(msg: str) -> None:
     print(f"auth-smoke: FALHOU: {msg}", file=sys.stderr)
     raise SystemExit(1)
@@ -183,6 +214,8 @@ def main() -> int:
         fail("a porta 8081 já está ocupada (pára o make run-api)")
     except OSError:
         pass
+
+    accounts_before = int(psql(env, "SELECT count(*) FROM identity.user_account"))
 
     work = tempfile.mkdtemp(prefix="pitbox-auth-smoke-")
     binary, logpath = os.path.join(work, "api"), os.path.join(work, "log")
@@ -359,9 +392,7 @@ def main() -> int:
         shortened = False
 
         print("== 7. Auditoria, logs e Valkey")
-        sql = lambda q: subprocess.run(
-            ["docker", "exec", "-e", f"PGPASSWORD={env['POSTGRES_SUPERUSER_PASSWORD']}", "pitbox-postgres-1", "psql", "-X", "-At", "-h", "127.0.0.1", "-U", "postgres", "-d", "pitbox", "-c", q],
-            capture_output=True, text=True, check=True).stdout.strip()
+        sql = lambda q: psql(env, q)
         rows = sql(f"SELECT action||':'||coalesce(after->>'reason','') FROM audit.audit_log WHERE actor_id='{user_id}' OR (actor_id='anonymous' AND occurred_at > now() - interval '5 minutes') ORDER BY id")
         got = rows.splitlines()
         check(got.count("auth.login:") == 3 and got.count("auth.logout:") == 1, "auditoria: 3 logins e 1 logout do utilizador")
@@ -524,6 +555,21 @@ def main() -> int:
                     admin.call(f"/v2/users/{uid}", method="DELETE")
                 except Exception:  # noqa: BLE001 — limpeza; não esconde o resultado do teste
                     print("auth-smoke: aviso: não consegui apagar um utilizador de teste", file=sys.stderr)
+        # Linhas criadas pelo primeiro login: pelo idp_subject (= id no Zitadel) dos utilizadores
+        # que ESTE script criou, também em falha. Nunca por email nem por padrão.
+        failing = sys.exc_info()[0] is not None
+        try:
+            removed = cleanup_user_accounts(lambda q: psql(env, q), locals().get("test_users", []))
+            accounts_after = int(psql(env, "SELECT count(*) FROM identity.user_account"))
+            print(f"auth-smoke: limpeza: {removed} linha(s) de user_account apagadas; contagem {accounts_before} -> {accounts_after}")
+            if accounts_after != accounts_before:
+                msg = "a contagem de identity.user_account mudou (uso em paralelo ou linha por limpar?)"
+                if failing:
+                    print(f"auth-smoke: AVISO: {msg}", file=sys.stderr)
+                else:
+                    fail(msg)
+        except (subprocess.CalledProcessError, ValueError, OSError):  # sem detalhes: o erro do psql pode ter dados
+            print("auth-smoke: AVISO: não consegui limpar identity.user_account", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -125,9 +125,9 @@ url = "https://github.com/protocolbuffers/protobuf-go/releases/download/v1.36.12
 url_api = "https://api.github.com/repos/protocolbuffers/protobuf-go/releases/assets/508915445"
 
 [[tools.rust]]
-version = "1.99.0"
+version = "1.99.1"
 backend = "core:rust"
-specifiers = ["1.99.0"]
+specifiers = ["1.99.1"]
 
 [tools.rust.options]
 components = "clippy,rustfmt"

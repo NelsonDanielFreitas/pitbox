@@ -69,7 +69,7 @@ make down | reset  # para | apaga volumes e recria
 make run-api       # pitbox-api local (127.0.0.1:8081), traces para o Jaeger
 make smoke-api     # prova ponta a ponta do pitbox-api (precisa de make up)
 make gen           # buf generate + sqlc generate
-make lint          # buf lint, golangci-lint, eslint, cargo clippy
+make lint          # buf lint, golangci-lint, eslint (o cargo clippy só entra quando existir firmware/Cargo.toml)
 make test          # backend + scripts; app: make app-test
 make db-new name=<nome>    # migração nova (SQL à mão; atlas.sum) — editar também schema.sql
 make db-test       # migrações + schema.sql em contentores, testes SQL de RLS e restrições, teste de desvio

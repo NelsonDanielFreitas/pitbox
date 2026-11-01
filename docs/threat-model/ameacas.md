@@ -123,9 +123,10 @@ Elementos: app, SQLite local, chave do dispositivo.
 
 | ID | STRIDE | Ameaça | Mitigação | Estado | Prova ou cartão | Prio |
 | --- | --- | --- | --- | --- | --- | --- |
-| TM-DEV-01 | I | Ler a base local de um telemóvel ou browser roubado | SQLCipher no telemóvel, chave no armazenamento seguro; bloqueio da app; no browser, dados mínimos, sem segredos e apagados no logout explícito | parcial (web mínima; cifra nativa no F2-06) | `app/src/db`, E2E de persistência/logout; F1-10, F2-06 | A |
+| TM-DEV-01 | I | Ler a base local de um telemóvel ou browser roubado | SQLCipher no telemóvel, chave no armazenamento seguro; bloqueio da app; no browser, dados mínimos, sem segredos e apagados no logout explícito | parcial (web mínima; cifra nativa no F2-06). Com o telemóvel desbloqueado, os dados locais abrem até 72 h depois do último sync, sem rede e sem login (sessão offline, ADR 0028: último utilizador + passe não expirado); a revogação do dispositivo impede o `Push` mas não apaga os dados locais | `app/src/db`, `app/src/auth/offline-session.ts`, E2E de persistência/logout e `offline-start.spec.ts`; F1-10, F1-14b, F2-06 | A |
 | TM-DEV-02 | E | Usar o passe offline de 72 h de um dispositivo roubado | Revogação do dispositivo, validade de 72 h, assinaturas rejeitadas após revogação | parcial (revogação, validade de 72 h e rejeição no servidor; a app pára em `device_revoked` e só volta a registar por ação explícita; passe renovado online com 24 h de antecedência; o logout não apaga dados por enviar) | F1-13a; `TestRejections/revoked_device` | A |
 | TM-DEV-03 | I | Armazenamento de tokens no dispositivo | Keychain/Keystore (AppAuth); nenhum token em localStorage | planeado | F2-06 | M |
+| TM-DEV-04 | T | Service worker serve um shell antigo ou envenenado, ou guarda respostas autenticadas | Só pré-cache com hash do build, sem `runtimeCaching`, mesma origem, CSP inalterada (`worker-src 'self'`), `/auth/*` e `/pitbox.*` fora do fallback; atualização com aviso, sem `skipWaiting` automático | implementado | `app/vite.config.ts`; `offline-start.spec.ts` (Cache Storage sem `/auth` nem `/pitbox.`; versão nova não ativa sozinha); F1-14b | M |
 
 ## Links de partilha (público)
 

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AuthUnavailableError,
   ContractError,
+  NetworkError,
   OriginMismatchError,
 } from "@/shared/lib/errors";
 
@@ -66,6 +67,29 @@ describe("fetchSession", () => {
   it("maps 503 to a recoverable unavailable error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(fixture("session_unavailable.json"), 503)));
     await expect(fetchSession()).rejects.toBeInstanceOf(AuthUnavailableError);
+  });
+
+  it("maps a fetch that never got an answer to NetworkError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    await expect(fetchSession()).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  it("does not treat a cancelled fetch as missing network", async () => {
+    const abort = new DOMException("aborted", "AbortError");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
+    await expect(fetchSession()).rejects.toBe(abort);
+
+    const controller = new AbortController();
+    controller.abort();
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("cancelled")));
+    await expect(fetchSession(controller.signal)).rejects.not.toBeInstanceOf(NetworkError);
+  });
+
+  it("never turns a server answer into NetworkError", async () => {
+    for (const status of [401, 403, 500, 503]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(JSON.stringify({ error: "x" }), status)));
+      await expect(fetchSession()).rejects.not.toBeInstanceOf(NetworkError);
+    }
   });
 
   it("rejects malformed JSON with a contract error", async () => {

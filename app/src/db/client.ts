@@ -75,6 +75,19 @@ export async function hashUserId(userId: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+// Same layout as worker.ts (`pitbox/<sha256(user_id)>/`). Read-only, so it never creates
+// the folder: a made-up user id must not leave an empty database behind.
+export async function localDatabaseExists(userId: string): Promise<boolean> {
+  try {
+    const root = await navigator.storage.getDirectory();
+    const pitbox = await root.getDirectoryHandle("pitbox");
+    await pitbox.getDirectoryHandle(await hashUserId(userId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function openDatabase(userId: string): Promise<void> {
   const userHash = await hashUserId(userId);
   if (openedHash === userHash) return;

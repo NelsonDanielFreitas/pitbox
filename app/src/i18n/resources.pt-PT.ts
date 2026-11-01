@@ -806,6 +806,20 @@ export const ptPT = {
     "pt-PT": "Português",
     en: "English",
   },
+  offline: {
+    blockedTitle: "Sem rede",
+    blockedBody: "Sem rede. Liga-te para continuar.",
+    retry: "Tentar outra vez",
+    banner: "Sessão offline: a trabalhar com os dados guardados neste telemóvel. Liga-te para sincronizar.",
+  },
+  pwa: {
+    updateAvailable: "Há uma versão nova — atualizar",
+    update: "Atualizar",
+    updateBusy: "A sincronizar… a atualização fica disponível quando terminar.",
+    persistDenied:
+      "O browser pode apagar os dados locais se faltar espaço. Instala a app no ecrã inicial para os proteger.",
+    dismiss: "Fechar",
+  },
   local: {
     loading: "A preparar os dados locais…",
     errorTitle: "Não foi possível abrir a base local",

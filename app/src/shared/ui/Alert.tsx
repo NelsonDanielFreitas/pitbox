@@ -16,15 +16,18 @@ export function Alert({
   title,
   children,
   className,
+  role,
 }: {
   tone?: AlertTone;
   title?: string;
   children: ReactNode;
   className?: string;
+  /** `note` for standing information that must not compete with live regions (`status`). */
+  role?: "alert" | "status" | "note";
 }) {
   return (
     <div
-      role={tone === "crit" ? "alert" : "status"}
+      role={role ?? (tone === "crit" ? "alert" : "status")}
       className={cn("rounded-xl border px-4 py-3 text-sm", toneClasses[tone], className)}
     >
       {title ? <h2 className="font-semibold">{title}</h2> : null}

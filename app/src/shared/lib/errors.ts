@@ -18,3 +18,11 @@ export class ContractError extends Error {
     this.name = "ContractError";
   }
 }
+
+/** The request never got an answer (offline, DNS, refused). Not an answer from the server. */
+export class NetworkError extends Error {
+  constructor() {
+    super("no network");
+    this.name = "NetworkError";
+  }
+}

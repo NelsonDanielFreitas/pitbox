@@ -88,7 +88,7 @@ A app guarda os dados de negócio localmente numa base SQLite no dispositivo e t
 | Rotas e dados | TanStack Router + TanStack Query |
 | Base local | SQLite via wa-sqlite/`OPFSCoopSyncVFS` no browser; plugin SQLite nativo no Capacitor |
 | Cliente API | @connectrpc/connect-web gerado a partir dos `.proto` (Buf) |
-| Offline | Service Worker (Workbox) para os ficheiros da app; fila de escrita própria em SQLite |
+| Offline | Service Worker (`vite-plugin-pwa`, Workbox `generateSW`, só pré-cache do shell, ADR 0028) para os ficheiros da app; fila de escrita própria em SQLite |
 | Nativo | Capacitor: vibração, ecrã sempre ligado, notificações locais, Bluetooth LE (módulo), armazenamento seguro, biometria |
 | Gráficos | uPlot (séries longas de telemetria) e Recharts (resumos) |
 | Testes | Vitest, Testing Library, Playwright (E2E, incluindo modo avião) |
@@ -98,6 +98,13 @@ A app guarda os dados de negócio localmente numa base SQLite no dispositivo e t
 - `features/setups`, `features/engines`, `features/events`, `features/final`, `features/telemetry`, `features/auth`
 - Cada funcionalidade tem: repositório local (SQL), serviço de domínio, ecrãs; nenhum ecrã chama a API diretamente
 - **Exceção F1-09b:** a criação de equipas, aceitação de convites e gestão de membros/convites é online-only. Os repositórios fazem os RPCs, e só atualizam a lista local de equipas após confirmação; não há fila offline nem cache local de tokens, convites ou emails (ADR 0020).
+
+**Instalação e arranque sem rede (ADR 0028)**
+
+- O service worker faz pré-cache só dos ficheiros do build (HTML, JS, CSS, fontes, ícones e o WASM do wa-sqlite); não há `runtimeCaching`, por isso `/auth/*` e `/pitbox.*` nunca passam pela Cache Storage; `navigateFallbackDenylist` cobre os dois prefixos
+- Uma versão nova fica em espera e a app mostra «Há uma versão nova — atualizar»; só ativa quando o utilizador toca e nunca durante um envio (sem `skipWaiting` automático)
+- `manifest.webmanifest` (`display: "standalone"`) permite instalar a app; depois do primeiro login a app pede `navigator.storage.persist()`
+- Arranque a frio sem rede: se `/auth/session` não obtiver resposta (erro de rede, não 401/403/503), a app abre a base do «último utilizador» (só o `user_id`, em `localStorage`) e mostra os dados se existir um passe offline não expirado; senão mostra «Sem rede». Quando a rede volta, repete `/auth/session` (mesmo utilizador segue; outro utilizador começa limpo; 401 vai para o login sem apagar a base)
 
 **Modo final**
 

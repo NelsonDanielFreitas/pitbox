@@ -6,6 +6,7 @@ import { AuthUnavailableError, OriginMismatchError } from "@/shared/lib/errors";
 import { ErrorState } from "@/shared/ui/ErrorState";
 import { NotFound } from "@/shared/ui/NotFound";
 
+import { UpdatePrompt } from "../UpdatePrompt";
 import type { RouterContext } from "../router-context";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
@@ -15,7 +16,12 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function Root() {
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <UpdatePrompt />
+    </>
+  );
 }
 
 export function RootError({ error }: Pick<ErrorComponentProps, "error">) {

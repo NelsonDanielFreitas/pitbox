@@ -1,0 +1,44 @@
+{
+  "_comment": "Exemplo do formato proposto, feito a partir de parte da ficha enviada (Mugen MTX7R, ver. 2908-1). Valores e referências por confirmar no PDF oficial; não é um modelo pronto.",
+  "id": "mugen-mtx7r",
+  "version": 1,
+  "make": "Mugen Seiki",
+  "model": "MTX7R",
+  "sheet_revision": "2908-1",
+  "source_url": null,
+  "scale": "1/10",
+  "powertrain": "nitro",
+  "groups": [
+    {
+      "key": "front_suspension",
+      "label": {"pt": "Suspensão dianteira", "en": "Front suspension"},
+      "fields": [
+        {"key": "front_shock_pos", "label": {"pt": "Posição do amortecedor", "en": "Shock pos."}, "type": "choice", "options": ["1", "2", "3"], "kit": "1"},
+        {"key": "front_upper_arm_pin", "label": {"pt": "Pino do braço superior", "en": "Upper arm pin"}, "type": "choice", "options": ["inside", "middle", "outside"], "kit": "middle"},
+        {"key": "front_shim_under_t2157a_mm", "label": {"pt": "Calço sob T2157A", "en": "Shim under T2157A"}, "type": "number", "unit": "mm", "min": 0, "max": 5, "step": 0.5, "kit": 0, "part_ref": "T2157A"},
+        {"key": "front_caster_mm", "label": {"pt": "Caster", "en": "Caster"}, "type": "number", "unit": "mm", "min": 0, "max": 6, "step": 0.5, "kit": 2},
+        {"key": "front_steering_block", "label": {"pt": "Manga de direção", "en": "Steering block"}, "type": "choice", "options": ["kit", "T2131", "T2132"], "kit": "kit"},
+        {"key": "front_disk", "label": {"pt": "T2128 (disco)", "en": "T2128 (disk)"}, "type": "flag", "part_ref": "T2128", "kit": false},
+        {"key": "front_camber_deg", "label": {"pt": "Camber", "en": "Camber"}, "type": "number", "unit": "deg", "min": -5, "max": 5, "step": 0.5, "kit": 1, "canonical": "geometry.front_camber_deg"},
+        {"key": "front_toe_out_deg", "label": {"pt": "Abertura (toe out)", "en": "Toe out"}, "type": "number", "unit": "deg", "min": -5, "max": 5, "step": 0.5, "kit": 1, "canonical": "geometry.front_toe_deg"},
+        {"key": "front_ride_height_mm", "label": {"pt": "Altura ao solo", "en": "Ride height"}, "type": "number", "unit": "mm", "min": 0, "max": 30, "step": 0.5, "kit": 7, "canonical": "geometry.ride_height_mm"},
+        {"key": "front_track_width_mm", "label": {"pt": "Largura de via", "en": "Track width"}, "type": "number", "unit": "mm", "min": 150, "max": 250, "step": 1, "kit": 199}
+      ]
+    },
+    {
+      "key": "differentials",
+      "label": {"pt": "Diferenciais", "en": "Differentials"},
+      "fields": [
+        {"key": "front_diff_oil_cst", "label": {"pt": "Óleo dif. dianteiro", "en": "Front diff oil"}, "type": "int", "unit": "cSt", "min": 100, "max": 2000000, "kit": 1000000, "canonical": "diffs.front_cst"},
+        {"key": "rear_diff_oil_cst", "label": {"pt": "Óleo dif. traseiro", "en": "Rear diff oil"}, "type": "int", "unit": "cSt", "min": 100, "max": 2000000, "kit": 50000, "canonical": "diffs.rear_cst"}
+      ]
+    },
+    {
+      "key": "chassis",
+      "label": {"pt": "Chassis", "en": "Chassis"},
+      "fields": [
+        {"key": "chassis_stiffener", "label": {"pt": "Reforço do chassis", "en": "Chassis stiffener"}, "type": "choice", "options": ["original", "T2311", "T2236"], "kit": "original"}
+      ]
+    }
+  ]
+}

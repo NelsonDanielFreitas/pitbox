@@ -19,4 +19,4 @@ gitleaks = "8.30.1"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"   # compilado pelo Go; protegido pelo checksum database do Go
 actionlint = "1.7.12"
 zizmor = "1.30.1"
-"github:openfga/cli" = "0.8.1"   # fga model test; binários oficiais do GitHub
+"github:openfga/cli" = "v0.8.2"   # fga model test; binários oficiais do GitHub

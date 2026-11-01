@@ -6,6 +6,10 @@
 *.key
 *.p12
 *.pat
+# Backups da base de dados (emails e hashes): nunca no Git (F1-14d)
+*.dump
+*.dump.age
+*.dump.sha256
 
 # Go
 /backend/bin/

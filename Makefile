@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate app-preview serve-phone serve-phone-off run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate db-backup db-restore db-restore-live db-backup-test app-preview serve-phone serve-phone-off run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -74,7 +74,7 @@ down: ## Para os contentores (mantém os volumes)
 
 reset: ## APAGA OS VOLUMES (Postgres, S3...) e recria. Obrigatório se mudares segredos no .env
 	@if [ "$(CONFIRM)" != "yes" ]; then \
-	  printf "Isto apaga TODOS os volumes (Postgres, Zitadel, SeaweedFS). Escreve 'yes' para continuar: "; \
+	  printf "Isto apaga TODOS os volumes (Postgres, Zitadel, SeaweedFS). Fizeste make db-backup? Escreve 'yes' para continuar: "; \
 	  read ans; [ "$$ans" = "yes" ] || { echo "Cancelado."; exit 1; }; \
 	fi
 	@if [ -n "$(TAILNET_HOST)" ]; then echo "Perfil telemóvel ($(TAILNET_HOST)): o Zitadel novo nasce com o domínio ts.net e as contas atuais perdem-se (restaura dos dumps, ver deploy/README.md)."; fi
@@ -213,6 +213,18 @@ db-test: ## Contentores descartáveis: migrações (Atlas) + schema.sql + testes
 db-new: ## Nova migração vazia: make db-new name=<nome>; escreve o SQL e edita também schema.sql
 	@test -n "$(name)" || { echo "uso: make db-new name=<nome>"; exit 1; }
 	atlas migrate new $(name) --env local
+
+db-backup: ## Backup das bases pitbox e zitadel para ~/pitbox-backups (fora do volume Docker; 700/600; precisa de make up). DB=pitbox|zitadel para uma só
+	bash scripts/db-backup.sh $(DB)
+
+db-restore: ## Verifica o backup mais recente restaurando-o num contentor descartável (não toca no ambiente). DB=... FILE=... opcionais
+	bash scripts/db-restore.sh $(if $(FILE),--file $(FILE)) $(DB)
+
+db-restore-live: ## RESTAURA um backup no Postgres do compose, APAGANDO a base: make db-restore-live DB=pitbox|zitadel [FILE=...] CONFIRM=yes
+	CONFIRM=$(CONFIRM) bash scripts/db-restore.sh --live $(if $(FILE),--file $(FILE)) $(DB)
+
+db-backup-test: ## Prova backup+restauro em contentores descartáveis (dados, hypertable, RLS, privilégios, adulteração, rotação)
+	bash scripts/db-backup-test.sh
 
 db-migrate: ## Aplica as migrações ao Postgres do compose (make up) como pitbox_migrator; não apaga nada
 	@test -f $(ENV_FILE) || { echo "Falta $(ENV_FILE): corre 'make init'."; exit 1; }

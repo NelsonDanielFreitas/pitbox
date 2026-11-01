@@ -1,3 +1,7 @@
 # Fixture "B" x 43 used as a fake invitation token in a unit test (not a secret).
 # The line was reworded in the following commit; this fingerprint covers the history only.
 68be6c09173df1aa8b74faa7dab8fbedf53da089:app/src/features/teams/data/connect-members-repository.test.ts:generic-api-key:110
+
+# ADR 0030 example: the setup field key "front_t2128_disk" (a part number, not a secret)
+# matched generic-api-key. The key was renamed in the following commit; this covers the history only.
+355e8052d208045a82cb9af035377639cde574a4:docs/adr/0030-exemplo-modelo-ficha.json:generic-api-key:21

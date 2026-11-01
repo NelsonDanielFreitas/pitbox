@@ -18,7 +18,7 @@
         {"key": "front_shim_under_t2157a_mm", "label": {"pt": "Calço sob T2157A", "en": "Shim under T2157A"}, "type": "number", "unit": "mm", "min": 0, "max": 5, "step": 0.5, "kit": 0, "part_ref": "T2157A"},
         {"key": "front_caster_mm", "label": {"pt": "Caster", "en": "Caster"}, "type": "number", "unit": "mm", "min": 0, "max": 6, "step": 0.5, "kit": 2},
         {"key": "front_steering_block", "label": {"pt": "Manga de direção", "en": "Steering block"}, "type": "choice", "options": ["kit", "T2131", "T2132"], "kit": "kit"},
-        {"key": "front_t2128_disk", "label": {"pt": "T2128 (disco)", "en": "T2128 (disk)"}, "type": "flag", "part_ref": "T2128", "kit": false},
+        {"key": "front_disk", "label": {"pt": "T2128 (disco)", "en": "T2128 (disk)"}, "type": "flag", "part_ref": "T2128", "kit": false},
         {"key": "front_camber_deg", "label": {"pt": "Camber", "en": "Camber"}, "type": "number", "unit": "deg", "min": -5, "max": 5, "step": 0.5, "kit": 1, "canonical": "geometry.front_camber_deg"},
         {"key": "front_toe_out_deg", "label": {"pt": "Abertura (toe out)", "en": "Toe out"}, "type": "number", "unit": "deg", "min": -5, "max": 5, "step": 0.5, "kit": 1, "canonical": "geometry.front_toe_deg"},
         {"key": "front_ride_height_mm", "label": {"pt": "Altura ao solo", "en": "Ride height"}, "type": "number", "unit": "mm", "min": 0, "max": 30, "step": 0.5, "kit": 7, "canonical": "geometry.ride_height_mm"},

@@ -1,6 +1,6 @@
 {
   "source": "docs/03-plano-de-trabalho.md",
-  "generated": "2026-10-24",
+  "generated": "2026-11-01",
   "phases": {
     "0": {
       "title": "Fase 0 — Preparação",
@@ -1027,30 +1027,159 @@
       "adrs": []
     },
     {
+      "id": "F2-00",
+      "title": "Fichas de setup por modelo de carro",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "backend",
+        "app",
+        "db"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Modelos de ficha por modelo de carro (como a ficha do fabricante), com versões imutáveis, valores do kit, posições e peças opcionais, campos canonical para análise; catálogo global revisto em PR + modelos da equipa; setup v2 validado contra o modelo; v1 lido como modelo genérico; ficha na app desenhada a partir do modelo; E2E do conflito herdado do F1-14",
+      "done_when": [
+        "Um setup do teu carro preenchido no telemóvel com a ficha do fabricante, em menos de 2 min, sem rede",
+        "Uma versão v1 existente abre e compara-se com uma v2; nenhuma linha de `setup_version` foi alterada (teste)",
+        "Setup com chave desconhecida, opção inexistente ou valor fora do intervalo é recusado com `rule_id`, sem ecoar o valor (teste)",
+        "Modelo acima dos limites é recusado; fuzzing ≥ 1 min do validador do modelo e do setup sem falhas",
+        "Modelo privado de outra equipa não pode ser ligado a um carro nem usado num setup (`NOT_FOUND`, teste)",
+        "Fila offline com uma operação v1 pendente aplica-se depois da atualização (teste); E2E do conflito verde no `e2e-sync`"
+      ],
+      "done_when_raw": "Um setup do teu carro preenchido no telemóvel com a ficha do fabricante, em menos de 2 min, sem rede; Uma versão v1 existente abre e compara-se com uma v2; nenhuma linha de `setup_version` foi alterada (teste); Setup com chave desconhecida, opção inexistente ou valor fora do intervalo é recusado com `rule_id`, sem ecoar o valor (teste); Modelo acima dos limites é recusado; fuzzing ≥ 1 min do validador do modelo e do setup sem falhas; Modelo privado de outra equipa não pode ser ligado a um carro nem usado num setup (`NOT_FOUND`, teste); Fila offline com uma operação v1 pendente aplica-se depois da atualização (teste); E2E do conflito verde no `e2e-sync`",
+      "doc_references": [
+        "§5"
+      ],
+      "suggested_branch": "f2-00-fichas-por-modelo",
+      "issue_title": "F2-00 — Fichas de setup por modelo de carro",
+      "labels": [
+        "fase-2",
+        "area:backend",
+        "area:app",
+        "area:db"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0030",
+        "0016",
+        "0024",
+        "0026",
+        "0027"
+      ]
+    },
+    {
+      "id": "F2-00b",
+      "title": "Catálogo de fichas: fontes e recolha",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "docs",
+        "backend"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Investigar os carros mais usados e onde está a ficha oficial de cada um, com os termos de uso; processo em três níveis (genérico, catálogo curado, modelo da equipa); guia de escrita, make template-check no CI; primeiros modelos",
+      "done_when": [
+        "Documento de investigação com a tabela \"modelo → nº de pilotos que o usam → fonte oficial → termos → decisão (catálogo / genérico)\", com fontes e datas",
+        "Guia de escrita de modelos e `make template-check` no CI",
+        "Pelo menos o modelo do vosso carro e mais 2 dos mais usados no catálogo, cada um com a fonte",
+        "Nenhum PDF, desenho ou logótipo de fabricante no repositório (verificação no CI por extensão e tamanho)"
+      ],
+      "done_when_raw": "Documento de investigação com a tabela \"modelo → nº de pilotos que o usam → fonte oficial → termos → decisão (catálogo / genérico)\", com fontes e datas; Guia de escrita de modelos e `make template-check` no CI; Pelo menos o modelo do vosso carro e mais 2 dos mais usados no catálogo, cada um com a fonte; Nenhum PDF, desenho ou logótipo de fabricante no repositório (verificação no CI por extensão e tamanho)",
+      "doc_references": [
+        "§5"
+      ],
+      "suggested_branch": "f2-00b-catalogo-de-fichas",
+      "issue_title": "F2-00b — Catálogo de fichas: fontes e recolha",
+      "labels": [
+        "fase-2",
+        "area:docs",
+        "area:backend"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0030",
+        "0016"
+      ]
+    },
+    {
       "id": "F2-01",
       "title": "Provas e sessões no backend",
       "phase": "2",
       "phase_title": "Fase 2 — v0.2 Box",
       "areas": [
-        "backend"
+        "backend",
+        "db",
+        "security"
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "`EventService` e `SessionService`: pistas, campeonatos, provas, sessões com carro, motor, pneus, setup e condições",
+      "todo": "Migração de alinhamento do esquema events (pista de outra equipa, supersedes_id composta, UNIQUE (team_id, id), regra das voltas); EventService e SessionService; sessão ligada a carro, motor, pneus, versão de setup e condições; aplicadores do sync e fuzzing",
       "done_when": [
-        "Sessão ligada a uma versão de setup imutável"
+        "Sessão ligada a uma versão de setup imutável; mudar o setup da sessão não altera nenhuma `setup_version` (teste)",
+        "Sessão com pista privada de outra equipa, motor de outra equipa ou motor não montado no carro é recusada (testes)",
+        "Correção de paragem não consegue apontar para uma paragem de outra equipa ou sessão (teste SQL)",
+        "Utilizador de outra equipa recebe `NOT_FOUND` em cada RPC; piloto recebe `PERMISSION_DENIED` ao criar ou editar uma prova (testes)",
+        "Reenviar a mesma operação de sessão pelo `Push` não duplica (teste)",
+        "`make db-test`, `go test -race ./...`, `make lint`, `make authz-test`, CI verdes; fuzzing ≥ 1 min sem falhas"
       ],
-      "done_when_raw": "Sessão ligada a uma versão de setup imutável",
-      "doc_references": [],
+      "done_when_raw": "Sessão ligada a uma versão de setup imutável; mudar o setup da sessão não altera nenhuma `setup_version` (teste); Sessão com pista privada de outra equipa, motor de outra equipa ou motor não montado no carro é recusada (testes); Correção de paragem não consegue apontar para uma paragem de outra equipa ou sessão (teste SQL); Utilizador de outra equipa recebe `NOT_FOUND` em cada RPC; piloto recebe `PERMISSION_DENIED` ao criar ou editar uma prova (testes); Reenviar a mesma operação de sessão pelo `Push` não duplica (teste); `make db-test`, `go test -race ./...`, `make lint`, `make authz-test`, CI verdes; fuzzing ≥ 1 min sem falhas",
+      "doc_references": [
+        "§5.2",
+        "§7"
+      ],
       "suggested_branch": "f2-01-provas-e-sessoes-no-backend",
       "issue_title": "F2-01 — Provas e sessões no backend",
       "labels": [
         "fase-2",
-        "area:backend"
+        "area:backend",
+        "area:db",
+        "area:security"
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0024",
+        "0025",
+        "0026"
+      ]
+    },
+    {
+      "id": "F2-01b",
+      "title": "Provas e sessões na app",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Migração local e sync das entidades events, calendário, prova, sessão com material e condições, feedback do piloto na sessão, indicador «pronto para offline»",
+      "done_when": [
+        "Criar uma prova com 6 sessões e ligar o material, tudo em modo avião, e ver tudo no servidor depois do sync sem duplicados (E2E `e2e-sync`)",
+        "Piloto vê as provas e dá feedback, mas não vê botões de editar (E2E) e o servidor recusa se forçar (`PERMISSION_DENIED`)",
+        "Dados de outra equipa nunca chegam ao Pull (teste do servidor já existente estendido às entidades novas)",
+        "`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`, `pnpm audit` verdes"
+      ],
+      "done_when_raw": "Criar uma prova com 6 sessões e ligar o material, tudo em modo avião, e ver tudo no servidor depois do sync sem duplicados (E2E `e2e-sync`); Piloto vê as provas e dá feedback, mas não vê botões de editar (E2E) e o servidor recusa se forçar (`PERMISSION_DENIED`); Dados de outra equipa nunca chegam ao Pull (teste do servidor já existente estendido às entidades novas); `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`, `pnpm audit` verdes",
+      "doc_references": [
+        "§7",
+        "§11"
+      ],
+      "suggested_branch": "f2-01b-provas-e-sessoes-na-app",
+      "issue_title": "F2-01b — Provas e sessões na app",
+      "labels": [
+        "fase-2",
+        "area:app"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0018"
+      ]
     },
     {
       "id": "F2-02",
@@ -1062,12 +1191,18 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Lista de sessões, contagem decrescente, aviso a 15 e 5 min, ajuste de atraso global",
+      "todo": "Lista de sessões, contagem decrescente, aviso a 15 e 5 min com notificação local nativa, ajuste de atraso global (schedule_offset_min), fuso Europe/Lisbon",
       "done_when": [
-        "Notificação local dispara com o telemóvel bloqueado"
+        "Notificação local dispara com o telemóvel bloqueado e em modo avião (teste manual no APK, com captura do horário real de disparo)",
+        "Mudar o atraso reagenda todas as notificações seguintes (teste unitário do agendador + manual)",
+        "A contagem está certa no dia da mudança de hora (teste)",
+        "Testes e CI verdes"
       ],
-      "done_when_raw": "Notificação local dispara com o telemóvel bloqueado",
-      "doc_references": [],
+      "done_when_raw": "Notificação local dispara com o telemóvel bloqueado e em modo avião (teste manual no APK, com captura do horário real de disparo); Mudar o atraso reagenda todas as notificações seguintes (teste unitário do agendador + manual); A contagem está certa no dia da mudança de hora (teste); Testes e CI verdes",
+      "doc_references": [
+        "§7.2",
+        "§12"
+      ],
       "suggested_branch": "f2-02-horario-do-dia-na-app",
       "issue_title": "F2-02 — Horário do dia na app",
       "labels": [
@@ -1088,12 +1223,17 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Introdução rápida de resultado e voltas; incidentes por volta",
+      "todo": "Introdução rápida de resultado, voltas e incidentes por volta; sessão passa a terminada; voltas por depósito calculadas",
       "done_when": [
-        "Resultado de uma manga registado em menos de 1 min"
+        "Resultado de uma manga registado em menos de 1 min (cronometrado no telemóvel, 3 tentativas)",
+        "Resultado e incidentes gravados offline chegam uma vez ao servidor (E2E `e2e-sync`)",
+        "Piloto não consegue gravar o resultado (UI e servidor); outra equipa recebe `NOT_FOUND`",
+        "Testes e CI verdes"
       ],
-      "done_when_raw": "Resultado de uma manga registado em menos de 1 min",
-      "doc_references": [],
+      "done_when_raw": "Resultado de uma manga registado em menos de 1 min (cronometrado no telemóvel, 3 tentativas); Resultado e incidentes gravados offline chegam uma vez ao servidor (E2E `e2e-sync`); Piloto não consegue gravar o resultado (UI e servidor); outra equipa recebe `NOT_FOUND`; Testes e CI verdes",
+      "doc_references": [
+        "§7.3"
+      ],
       "suggested_branch": "f2-03-resultado-manual-e-voltas",
       "issue_title": "F2-03 — Resultado manual e voltas",
       "labels": [
@@ -1105,30 +1245,77 @@
       "adrs": []
     },
     {
+      "id": "F2-04a",
+      "title": "River e papel do worker",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "backend",
+        "db",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "ADR 0031 (River vs poller), migrações do River pelo Atlas, papel pitbox_worker com GRANT mínimos, contrato de jobs idempotentes, métricas e runbook",
+      "done_when": [
+        "ADR 0031 aceite por ti",
+        "Um job de exemplo agendado corre uma vez com duas instâncias do worker (teste)",
+        "O worker arranca como `pitbox_worker` e falha de forma fechada se o papel tiver `BYPASSRLS` ou for superutilizador (teste)",
+        "TM-AUTHZ-13 passa a \"implementado\" com a prova; `make db-test` e CI verdes"
+      ],
+      "done_when_raw": "ADR 0031 aceite por ti; Um job de exemplo agendado corre uma vez com duas instâncias do worker (teste); O worker arranca como `pitbox_worker` e falha de forma fechada se o papel tiver `BYPASSRLS` ou for superutilizador (teste); TM-AUTHZ-13 passa a \"implementado\" com a prova; `make db-test` e CI verdes",
+      "doc_references": [],
+      "suggested_branch": "f2-04a-river-e-papel-do-worker",
+      "issue_title": "F2-04a — River e papel do worker",
+      "labels": [
+        "fase-2",
+        "area:backend",
+        "area:db",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0031",
+        "0015"
+      ]
+    },
+    {
       "id": "F2-04",
       "title": "Manutenção",
       "phase": "2",
       "phase_title": "Fase 2 — v0.2 Box",
       "areas": [
-        "backend"
+        "backend",
+        "app"
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "`MaintenanceService`: intervenções com peças do stock, regras, vista de estado; contadores do motor atualizados por eventos (outbox + River)",
+      "todo": "MaintenanceService: regras, intervenções com peças do stock, estado por componente; contadores do motor idempotentes a partir de session.finished; ecrãs",
       "done_when": [
-        "Motor passa a \"vencido\" ao atingir o limite de depósitos"
+        "Motor passa a \"vencido\" ao atingir o limite de depósitos (teste de ponta a ponta: sessões → evento → estado)",
+        "A mesma sessão sincronizada duas vezes ou corrigida não conta duas vezes (teste)",
+        "Intervenção com peças tira do stock e, se falhar, não deixa nada a meio (teste)",
+        "Piloto não vê custos (resposta e Pull) e não regista intervenções; outra equipa recebe `NOT_FOUND` (testes)",
+        "Estado calculado na app igual ao do servidor para o mesmo conjunto de dados (teste com vetores partilhados Go ↔ TS)",
+        "CI verde"
       ],
-      "done_when_raw": "Motor passa a \"vencido\" ao atingir o limite de depósitos",
-      "doc_references": [],
+      "done_when_raw": "Motor passa a \"vencido\" ao atingir o limite de depósitos (teste de ponta a ponta: sessões → evento → estado); A mesma sessão sincronizada duas vezes ou corrigida não conta duas vezes (teste); Intervenção com peças tira do stock e, se falhar, não deixa nada a meio (teste); Piloto não vê custos (resposta e Pull) e não regista intervenções; outra equipa recebe `NOT_FOUND` (testes); Estado calculado na app igual ao do servidor para o mesmo conjunto de dados (teste com vetores partilhados Go ↔ TS); CI verde",
+      "doc_references": [
+        "§6"
+      ],
       "suggested_branch": "f2-04-manutencao",
       "issue_title": "F2-04 — Manutenção",
       "labels": [
         "fase-2",
-        "area:backend"
+        "area:backend",
+        "area:app"
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0015"
+      ]
     },
     {
       "id": "F2-05",
@@ -1141,12 +1328,19 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Modelos de checklist pré-prova e pré-sessão; itens obrigatórios bloqueiam o \"pronto\"",
+      "todo": "Modelos pré-prova e pré-sessão; pré-prova gerada das regras vencidas + falta comprar; itens obrigatórios bloqueiam o «pronto» na app e no servidor",
       "done_when": [
-        "Checklist pré-prova gerada a partir das regras vencidas"
+        "Checklist pré-prova gerada a partir das regras vencidas (teste com regras e contadores de exemplo)",
+        "Sessão não passa a \"pronta\" com um item obrigatório por marcar, nem por Push direto (teste do servidor)",
+        "Cada item marcado mostra quem e quando, também depois do sync (E2E)",
+        "Outra equipa recebe `NOT_FOUND`; piloto recebe `PERMISSION_DENIED` ao editar um modelo",
+        "CI verde"
       ],
-      "done_when_raw": "Checklist pré-prova gerada a partir das regras vencidas",
-      "doc_references": [],
+      "done_when_raw": "Checklist pré-prova gerada a partir das regras vencidas (teste com regras e contadores de exemplo); Sessão não passa a \"pronta\" com um item obrigatório por marcar, nem por Push direto (teste do servidor); Cada item marcado mostra quem e quando, também depois do sync (E2E); Outra equipa recebe `NOT_FOUND`; piloto recebe `PERMISSION_DENIED` ao editar um modelo; CI verde",
+      "doc_references": [
+        "§6.4",
+        "§7.4"
+      ],
       "suggested_branch": "f2-05-checklists",
       "issue_title": "F2-05 — Checklists",
       "labels": [
@@ -1169,13 +1363,18 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Empacotar a app; plugins de vibração, ecrã sempre ligado, notificações locais, armazenamento seguro, SQLite nativo cifrado; login móvel com AppAuth e caminho `Authorization: Bearer` no backend (ADR 0013: `client_id` permitido, rejeitar tokens com `nonce`, `at_hash` ou `auth_time`, JWKS com TTL e limite de pedidos, revogação da família de refresh tokens, que o Zitadel não faz)",
+      "todo": "Empacotar a app; plugins de vibração, ecrã sempre ligado, notificações locais, armazenamento seguro; SQLite nativo cifrado (SQLCipher) com chave no Keystore; chave do dispositivo do sync no Keystore; APK de teste",
       "done_when": [
-        "App instalada no teu telemóvel por APK de teste",
-        "ID token apresentado como Bearer é rejeitado num teste"
+        "App instalada no teu telemóvel por APK de teste e abre em modo avião com os dados locais",
+        "Ficheiro da base copiado do telemóvel (via `adb` num emulador com root) não abre sem a chave (teste manual documentado)",
+        "Operação assinada com a chave do Keystore é aceite pelo servidor; a chave não é exportável (teste)",
+        "Migrações locais verdes no motor nativo; `pnpm test`, `pnpm e2e` (web) e CI verdes"
       ],
-      "done_when_raw": "App instalada no teu telemóvel por APK de teste; ID token apresentado como Bearer é rejeitado num teste",
-      "doc_references": [],
+      "done_when_raw": "App instalada no teu telemóvel por APK de teste e abre em modo avião com os dados locais; Ficheiro da base copiado do telemóvel (via `adb` num emulador com root) não abre sem a chave (teste manual documentado); Operação assinada com a chave do Keystore é aceite pelo servidor; a chave não é exportável (teste); Migrações locais verdes no motor nativo; `pnpm test`, `pnpm e2e` (web) e CI verdes",
+      "doc_references": [
+        "§3",
+        "§7.4"
+      ],
       "suggested_branch": "f2-06-capacitor-no-android",
       "issue_title": "F2-06 — Capacitor no Android",
       "labels": [
@@ -1186,8 +1385,87 @@
       "security_notes": "",
       "pull_request": null,
       "adrs": [
-        "0013"
+        "0017",
+        "0018",
+        "0025",
+        "0028"
       ]
+    },
+    {
+      "id": "F2-06b",
+      "title": "Login móvel e Bearer",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app",
+        "backend",
+        "security"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "ADR 0032; AppAuth com App Link; caminho Authorization: Bearer (client_id permitido, rejeitar nonce/at_hash/auth_time, JWKS com TTL e limite); CORS sem credenciais; revogação da família de refresh tokens; inclui #154 e #158",
+      "done_when": [
+        "Login no telemóvel pelo browser do sistema, com passkey, e a app chama a API com Bearer",
+        "ID token apresentado como Bearer é rejeitado (teste); token de outro `client_id`, outro emissor, `alg` `none`/HS256 ou expirado também (tabela de testes como o `TestIDTokenValidation`)",
+        "`kid` desconhecido em rajada não gera mais do que N pedidos ao JWKS por minuto (teste)",
+        "Reutilização de um refresh token tem o efeito decidido no ADR 0032 (teste)",
+        "TM-AUTH-03 e TM-AUTH-04 atualizados com prova; CI verde"
+      ],
+      "done_when_raw": "Login no telemóvel pelo browser do sistema, com passkey, e a app chama a API com Bearer; ID token apresentado como Bearer é rejeitado (teste); token de outro `client_id`, outro emissor, `alg` `none`/HS256 ou expirado também (tabela de testes como o `TestIDTokenValidation`); `kid` desconhecido em rajada não gera mais do que N pedidos ao JWKS por minuto (teste); Reutilização de um refresh token tem o efeito decidido no ADR 0032 (teste); TM-AUTH-03 e TM-AUTH-04 atualizados com prova; CI verde",
+      "doc_references": [
+        "§5.1"
+      ],
+      "suggested_branch": "f2-06b-login-movel-e-bearer",
+      "issue_title": "F2-06b — Login móvel e Bearer",
+      "labels": [
+        "fase-2",
+        "area:app",
+        "area:backend",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0032",
+        "0004",
+        "0013",
+        "0017"
+      ]
+    },
+    {
+      "id": "F2-06c",
+      "title": "Build móvel seguro e MASVS",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "app",
+        "security",
+        "infra"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Manifest endurecido, chave de assinatura fora do Git, build no CI com wrapper Gradle validado e verificação de dependências, SBOM, MobSF, checklist MASVS",
+      "done_when": [
+        "O CI produz um APK com SBOM; o wrapper Gradle é validado; nenhum segredo no repositório (gitleaks)",
+        "MobSF sem achados altos por resolver",
+        "`masvs.md` revisto por ti",
+        "`adb backup`/backup automático não leva a base nem as chaves (teste manual documentado)"
+      ],
+      "done_when_raw": "O CI produz um APK com SBOM; o wrapper Gradle é validado; nenhum segredo no repositório (gitleaks); MobSF sem achados altos por resolver; `masvs.md` revisto por ti; `adb backup`/backup automático não leva a base nem as chaves (teste manual documentado)",
+      "doc_references": [
+        "§14"
+      ],
+      "suggested_branch": "f2-06c-build-movel-seguro",
+      "issue_title": "F2-06c — Build móvel seguro e MASVS",
+      "labels": [
+        "fase-2",
+        "area:app",
+        "area:security",
+        "area:infra"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
     },
     {
       "id": "F2-07",
@@ -1199,12 +1477,14 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Funções puras em TypeScript: número de paragens, volta de aviso (fórmula §9.1), recálculo após flameout; testes de propriedades",
+      "todo": "Funções puras em TypeScript: número de paragens, volta de aviso (fórmula §9.1), recálculo após flameout, cenários; testes de propriedades com fast-check",
       "done_when": [
-        "Cobertura total",
-        "casos de 30 e 45 min verificados à mão"
+        "100% de cobertura de linhas e ramos no módulo",
+        "Casos de 30 e 45 min verificados à mão (folha anexada ao PR)",
+        "Propriedades `fast-check` com pelo menos 10 000 execuções por propriedade no CI, sem falhas",
+        "`pnpm test` e CI verdes"
       ],
-      "done_when_raw": "Cobertura total; casos de 30 e 45 min verificados à mão",
+      "done_when_raw": "100% de cobertura de linhas e ramos no módulo; Casos de 30 e 45 min verificados à mão (folha anexada ao PR); Propriedades `fast-check` com pelo menos 10 000 execuções por propriedade no CI, sem falhas; `pnpm test` e CI verdes",
       "doc_references": [
         "§9.1"
       ],
@@ -1228,12 +1508,18 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Máquina de estados (XState), cronómetro, contador de voltas por toque, botões grandes, avisos com vibração e som",
+      "todo": "Máquina de estados (XState), eventos gravados antes do estado (recuperação depois de a app morrer), cronómetro monotónico, contador de voltas, botões de 96 px, avisos com vibração e som",
       "done_when": [
-        "Simulação de 45 min em modo avião sem falhas nem atrasos"
+        "Simulação de 45 min em modo avião sem falhas nem atrasos (Playwright com relógio simulado na web + uma final real de 45 min no APK)",
+        "Matar a app a meio da simulação e reabrir: estado, voltas e cronómetro corretos (teste)",
+        "Toque ≤ 100 ms (medido) e bateria ≤ 15% numa hora (medido)",
+        "axe sem violações; contraste verificado",
+        "CI verde"
       ],
-      "done_when_raw": "Simulação de 45 min em modo avião sem falhas nem atrasos",
-      "doc_references": [],
+      "done_when_raw": "Simulação de 45 min em modo avião sem falhas nem atrasos (Playwright com relógio simulado na web + uma final real de 45 min no APK); Matar a app a meio da simulação e reabrir: estado, voltas e cronómetro corretos (teste); Toque ≤ 100 ms (medido) e bateria ≤ 15% numa hora (medido); axe sem violações; contraste verificado; CI verde",
+      "doc_references": [
+        "§9.2"
+      ],
       "suggested_branch": "f2-08-ecra-do-modo-final",
       "issue_title": "F2-08 — Ecrã do modo final",
       "labels": [
@@ -1250,21 +1536,30 @@
       "phase": "2",
       "phase_title": "Fase 2 — v0.2 Box",
       "areas": [
-        "app"
+        "app",
+        "backend"
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Registo de paragens só de acrescento; plano antes da final com cenários",
+      "todo": "Plano de estratégia guardado (race_strategy); paragens só de acrescento com supersedes_id; sync APPEND; limites de timestamps no servidor",
       "done_when": [
-        "Paragem corrigida fica como nova linha, a original mantém-se"
+        "Paragem corrigida fica como nova linha e a original mantém-se (teste SQL + E2E)",
+        "`UPDATE`/`DELETE` direto numa paragem falha na base (teste já existente mantém-se)",
+        "Paragens feitas offline chegam ao servidor uma vez e na ordem certa (`seq`) (E2E `e2e-sync`)",
+        "Piloto não regista paragens; outra equipa recebe `NOT_FOUND`",
+        "CI verde"
       ],
-      "done_when_raw": "Paragem corrigida fica como nova linha, a original mantém-se",
-      "doc_references": [],
+      "done_when_raw": "Paragem corrigida fica como nova linha e a original mantém-se (teste SQL + E2E); `UPDATE`/`DELETE` direto numa paragem falha na base (teste já existente mantém-se); Paragens feitas offline chegam ao servidor uma vez e na ordem certa (`seq`) (E2E `e2e-sync`); Piloto não regista paragens; outra equipa recebe `NOT_FOUND`; CI verde",
+      "doc_references": [
+        "§9.1",
+        "§9.2"
+      ],
       "suggested_branch": "f2-09-paragens-e-plano",
       "issue_title": "F2-09 — Paragens e plano",
       "labels": [
         "fase-2",
-        "area:app"
+        "area:app",
+        "area:backend"
       ],
       "security_notes": "",
       "pull_request": null,
@@ -1280,12 +1575,17 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Linha do tempo da corrida, tempo na box vs plano, atualização de voltas por depósito",
+      "todo": "Linha do tempo da corrida, tempo na box vs plano, voltas por depósito desta final, texto partilhável sem custos",
       "done_when": [
-        "Relatório gerado automaticamente ao terminar a final"
+        "Relatório gerado automaticamente ao terminar a final, em modo avião (E2E)",
+        "Os números batem com um cálculo à mão numa final de exemplo (teste)",
+        "O piloto vê o relatório; outra equipa recebe `NOT_FOUND` no servidor",
+        "CI verde"
       ],
-      "done_when_raw": "Relatório gerado automaticamente ao terminar a final",
-      "doc_references": [],
+      "done_when_raw": "Relatório gerado automaticamente ao terminar a final, em modo avião (E2E); Os números batem com um cálculo à mão numa final de exemplo (teste); O piloto vê o relatório; outra equipa recebe `NOT_FOUND` no servidor; CI verde",
+      "doc_references": [
+        "§9.3"
+      ],
       "suggested_branch": "f2-10-relatorio-pos-final",
       "issue_title": "F2-10 — Relatório pós-final",
       "labels": [
@@ -1306,17 +1606,52 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Treino com final simulada de 30 min: tu na box com a app, o teu pai a pilotar",
+      "todo": "Treino com final simulada de 30 min com o APK: tu na box com a app, o teu pai a pilotar; gate F1-15 no mesmo treino",
       "done_when": [
-        "Lista de melhorias anotada e as críticas resolvidas"
+        "Lista de melhorias anotada e transformada em issues",
+        "As críticas resolvidas (cada uma com PR fundido)",
+        "Avisos de reabastecimento chegaram a tempo em todas as paragens (anotar a volta de cada aviso)",
+        "Dados do dia completos no servidor"
       ],
-      "done_when_raw": "Lista de melhorias anotada e as críticas resolvidas",
+      "done_when_raw": "Lista de melhorias anotada e transformada em issues; As críticas resolvidas (cada uma com PR fundido); Avisos de reabastecimento chegaram a tempo em todas as paragens (anotar a volta de cada aviso); Dados do dia completos no servidor",
       "doc_references": [],
       "suggested_branch": "f2-11-ensaio-com-o-teu-pai",
       "issue_title": "F2-11 — Ensaio com o teu pai",
       "labels": [
         "fase-2",
         "area:pista"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": []
+    },
+    {
+      "id": "F2-12a",
+      "title": "Revisão de segurança da Fase 2",
+      "phase": "2",
+      "phase_title": "Fase 2 — v0.2 Box",
+      "areas": [
+        "security",
+        "docs"
+      ],
+      "gate": false,
+      "status": "Por fazer",
+      "todo": "Threat model e ADRs revistos com prova; ASVS L2 dos RPCs novos; CI falha se um RPC não tiver teste de outra equipa; ZAP baseline local; resumo da fase para o portfólio",
+      "done_when": [
+        "Lista de falhas corrigidas ou aceites por escrito",
+        "O CI falha se um RPC novo não tiver teste de outra equipa",
+        "Threat model e ADRs no `main`"
+      ],
+      "done_when_raw": "Lista de falhas corrigidas ou aceites por escrito; O CI falha se um RPC novo não tiver teste de outra equipa; Threat model e ADRs no `main`",
+      "doc_references": [
+        "§12"
+      ],
+      "suggested_branch": "f2-12a-revisao-de-seguranca-fase-2",
+      "issue_title": "F2-12a — Revisão de segurança da Fase 2",
+      "labels": [
+        "fase-2",
+        "area:security",
+        "area:docs"
       ],
       "security_notes": "",
       "pull_request": null,
@@ -1334,10 +1669,11 @@
       "status": "Por fazer",
       "todo": "Gerir uma prova real inteira, incluindo a final, só na app",
       "done_when": [
-        "Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência",
-        "nenhum dado perdido"
+        "Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência (tabela anotada)",
+        "Nenhum dado perdido (contagens no telemóvel = contagens no servidor)",
+        "Nenhum registo em papel nesse fim de semana"
       ],
-      "done_when_raw": "Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência; nenhum dado perdido",
+      "done_when_raw": "Todos os avisos de reabastecimento chegaram com ≥ 2 voltas de antecedência (tabela anotada); Nenhum dado perdido (contagens no telemóvel = contagens no servidor); Nenhum registo em papel nesse fim de semana",
       "doc_references": [],
       "suggested_branch": "f2-12-gate-v0-2",
       "issue_title": "F2-12 — Gate v0.2",
@@ -2315,7 +2651,7 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "Templates versionados de `setup.field_definition` por `(scale, powertrain)`, ligados aos catálogos do F1-07a; fallback por família",
+      "todo": "Encolhido pelo ADR 0030 (F2-00): mais modelos de ficha (elétricos e outras escalas) e editor de modelos na app; o genérico por `(scale, powertrain)` é o fallback",
       "done_when": [
         "Fichas diferentes para nitro e elétrico (teste)",
         "Copiar um setup copia só os campos comuns (teste)",
@@ -2335,7 +2671,9 @@
       ],
       "security_notes": "",
       "pull_request": null,
-      "adrs": []
+      "adrs": [
+        "0030"
+      ]
     },
     {
       "id": "F6-02",

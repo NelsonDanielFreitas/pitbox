@@ -871,7 +871,7 @@
         "app"
       ],
       "gate": false,
-      "status": "Em curso",
+      "status": "Feito",
       "todo": "Playwright: criar setup offline, voltar a ligar, verificar no servidor",
       "done_when": [
         "Teste E2E verde no CI"
@@ -898,7 +898,7 @@
         "security"
       ],
       "gate": false,
-      "status": "Em curso",
+      "status": "Feito",
       "todo": "Service worker só para o shell (vite-plugin-pwa, generateSW, registerType prompt, sem runtimeCaching nem skipWaiting), manifest, aviso de atualização e storage.persist(); sessão offline (último utilizador só com user_id, abre a base só com passe offline não expirado), ecrã «Sem rede», recuperação quando a rede volta; ADR 0028 e emenda ao ADR 0018",
       "done_when": [
         "App instalada e aberta a frio em modo avião mostra os dados locais se houver passe válido",
@@ -938,7 +938,7 @@
         "security"
       ],
       "gate": false,
-      "status": "Em curso",
+      "status": "Feito",
       "todo": "Perfil telemóvel opt-in (PITBOX_TAILNET_HOST): Tailscale Serve (nunca Funnel) para a app (443) e o Zitadel (8443), Zitadel com domínio externo ts.net, redirect URIs ts.net sem tirar os de localhost, desvio local ao Zitadel só em PITBOX_ENV=local, make serve-phone/serve-phone-off/app-preview; ADR 0029",
       "done_when": [
         "Login completo no telemóvel por HTTPS",
@@ -974,7 +974,7 @@
         "security"
       ],
       "gate": false,
-      "status": "Em curso",
+      "status": "Feito",
       "todo": "make db-backup / db-restore / db-restore-live das bases pitbox (com o esquema fga do OpenFGA) e zitadel para uma pasta fora do volume Docker (700/600, soma de controlo, rotação, cifra opcional com age); restauro com a ordem do TimescaleDB; make db-backup-test no CI",
       "done_when": [
         "Restauro completo das duas bases com contagens, DDL, RLS e privilégios iguais à origem",
@@ -1007,7 +1007,7 @@
         "pista"
       ],
       "gate": true,
-      "status": "Por fazer",
+      "status": "Adiado",
       "todo": "Usar a app num treino ou prova real para registar todos os setups",
       "done_when": [
         "Nenhum setup registado em papel nesse dia",

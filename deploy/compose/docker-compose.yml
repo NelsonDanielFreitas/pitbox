@@ -173,9 +173,11 @@ services:
     environment:
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:?}
       ZITADEL_PORT: 8080
-      ZITADEL_EXTERNALDOMAIN: localhost
-      ZITADEL_EXTERNALPORT: ${ZITADEL_PORT:-8080}
-      ZITADEL_EXTERNALSECURE: "false"
+      # Perfil telemóvel (ADR 0029): `make` exporta PITBOX_ZITADEL_* a partir de PITBOX_TAILNET_HOST
+      # (scripts/tailnet.py). Sem isso, tudo como antes: localhost em HTTP.
+      ZITADEL_EXTERNALDOMAIN: ${PITBOX_ZITADEL_DOMAIN:-localhost}
+      ZITADEL_EXTERNALPORT: ${PITBOX_ZITADEL_EXTERNAL_PORT:-${ZITADEL_PORT:-8080}}
+      ZITADEL_EXTERNALSECURE: ${PITBOX_ZITADEL_EXTERNAL_SECURE:-false}
       ZITADEL_TLS_ENABLED: "false"
       # O Zitadel recusa `localhost` no back-channel logout (denylist HTTP), mesmo em
       # developmentMode e mesmo com a app OIDC a permitir redirects para localhost. Esta
@@ -210,10 +212,10 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: PitBox provisioner (local)
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: ${ZITADEL_PROVISIONER_PAT_EXPIRATION:?usa 'make up' ou 'make reset'}
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
-      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/
-      ZITADEL_OIDC_DEFAULTLOGINURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/login?authRequest=
-      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/logout?post_logout_redirect=
-      ZITADEL_SAML_DEFAULTLOGINURLV2: http://localhost:${ZITADEL_PORT:-8080}/ui/v2/login/login?samlRequest=
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: ${PITBOX_ZITADEL_ORIGIN:-http://localhost:${ZITADEL_PORT:-8080}}/ui/v2/login/
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: ${PITBOX_ZITADEL_ORIGIN:-http://localhost:${ZITADEL_PORT:-8080}}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: ${PITBOX_ZITADEL_ORIGIN:-http://localhost:${ZITADEL_PORT:-8080}}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: ${PITBOX_ZITADEL_ORIGIN:-http://localhost:${ZITADEL_PORT:-8080}}/ui/v2/login/login?samlRequest=
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:rw
       - zitadel-provisioner:/zitadel/provisioner:rw
@@ -242,7 +244,7 @@ services:
       # abrir. O login v2 passa a enviar o código e a exigir a verificação antes de
       # concluir o pedido de autorização.
       EMAIL_VERIFICATION: "true"
-      CUSTOM_REQUEST_HEADERS: Host:localhost:${ZITADEL_PORT:-8080},X-Forwarded-Proto:http
+      CUSTOM_REQUEST_HEADERS: Host:${PITBOX_ZITADEL_LOGIN_HOST:-localhost:${ZITADEL_PORT:-8080}},X-Forwarded-Proto:${PITBOX_ZITADEL_LOGIN_PROTO:-http}
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:ro
     depends_on:

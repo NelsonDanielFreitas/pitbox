@@ -21,6 +21,7 @@ Uso: python3 -I scripts/zitadel-provision.py [--rotate-secret] [--rotate-smtp-pa
 Só usa a biblioteca padrão.
 """
 import argparse
+import importlib.util
 import io
 import json
 import os
@@ -38,6 +39,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / "deploy" / "compose" / ".env"
+
+# Perfil «telemóvel» (ADR 0029): a regra de PITBOX_TAILNET_HOST vive em scripts/tailnet.py. Com
+# `python3 -I` a pasta do script não está no sys.path, por isso carrega-se pelo caminho.
+_tn_spec = importlib.util.spec_from_file_location("pitbox_tailnet", Path(__file__).with_name("tailnet.py"))
+tailnet = importlib.util.module_from_spec(_tn_spec)
+_tn_spec.loader.exec_module(tailnet)
+
 PAT_IN_CONTAINER = "/zitadel/provisioner/provisioner.pat"
 
 PROJECT_NAME = "pitbox"
@@ -89,8 +97,13 @@ class ProvisionError(Exception):
 # --------------------------------------------------------------------------- puro
 
 
-def desired_oidc_config(public_url: str) -> dict:
-    """Configuração OIDC desejada da aplicação, a partir do URL público do pitbox-api."""
+def desired_oidc_config(public_url: str, tailnet_host: str = "") -> dict:
+    """Configuração OIDC desejada da aplicação, a partir do URL público do pitbox-api.
+
+    Com `tailnet_host` (perfil telemóvel, ADR 0029) acrescenta os URIs https://<host> SEM tirar os
+    de localhost: o mesmo registo serve o PC (CI, E2E, smoke) e o telemóvel. O back-channel logout
+    fica em localhost: o Zitadel bloqueia URLs ts.net (#154, TM-AUTH-20).
+    """
     base = public_url.rstrip("/")
     origins = [base]
     # The app dev server and the direct BFF are both used locally. Registering
@@ -99,6 +112,8 @@ def desired_oidc_config(public_url: str) -> dict:
     # `--public-url http://localhost:9000` must not lose its redirect URI.
     if base.startswith("http://localhost") or base.startswith("http://127.0.0.1"):
         origins = list(dict.fromkeys([base, "http://localhost:8081", "http://localhost:5173"]))
+    if tailnet_host:
+        origins.append(f"https://{tailnet.validate_host(tailnet_host)}")
     return {
         "redirectUris": [f"{origin}/auth/callback" for origin in origins],
         "postLogoutRedirectUris": [f"{origin}/auth/signed-out" for origin in origins],
@@ -119,6 +134,13 @@ def desired_oidc_config(public_url: str) -> dict:
         # http só é aceite em modo de desenvolvimento; um URL https não precisa dele.
         "developmentMode": base.startswith("http://"),
     }
+
+
+def desired_login_base_uri(base_url: str, tailnet_host: str = "") -> str:
+    """URI do login v2 que o Zitadel usa nos redirects: tem de ser o que o browser alcança."""
+    if tailnet_host:
+        return f"https://{tailnet.validate_host(tailnet_host)}:{tailnet.ZITADEL_TAILNET_PORT}/ui/v2/login/"
+    return f"{base_url.rstrip('/')}/ui/v2/login/"
 
 
 def config_drift(current: dict, desired: dict) -> list:
@@ -186,11 +208,14 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class Zitadel:
-    def __init__(self, base_url: str, pat: str):
+    def __init__(self, base_url: str, pat: str, host_header: str = ""):
         host = urllib.parse.urlparse(base_url).hostname
         if host not in ("localhost", "127.0.0.1", "::1"):
             raise ProvisionError(f"recuso falar com {host!r}: este script é só para o Zitadel local")
         self.base = base_url.rstrip("/")
+        # O Zitadel escolhe a instância (e o issuer) pelo Host. No perfil telemóvel a instância
+        # tem o domínio ts.net, por isso liga-se a localhost mas envia esse Host.
+        self.host_header = host_header
         self._pat = pat
         self._opener = urllib.request.build_opener(_NoRedirect)
 
@@ -205,6 +230,7 @@ class Zitadel:
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 "Connect-Protocol-Version": "1",
+                **({"Host": self.host_header} if self.host_header else {}),
             },
         )
         try:
@@ -549,9 +575,23 @@ def ensure_project(z: Zitadel, log) -> str:
     return created["projectId"]
 
 
-def ensure_app(z: Zitadel, project_id: str, public_url: str, env: dict, rotate: bool, log) -> dict:
+def ensure_login_v2(z: Zitadel, base_uri: str, log) -> None:
+    """A feature loginV2 guarda o URI na instância no primeiro arranque; trocar de perfil
+    (localhost <-> telemóvel) sem recriar o volume exige corrigi-lo aqui."""
+    feat = z.call("/zitadel.feature.v2.FeatureService/GetInstanceFeatures", {}).get("loginV2", {})
+    if feat.get("required") is True and feat.get("baseUri") == base_uri:
+        log("login v2: já correto")
+        return
+    z.call(
+        "/zitadel.feature.v2.FeatureService/SetInstanceFeatures",
+        {"loginV2": {"required": True, "baseUri": base_uri}},
+    )
+    log("login v2: URI corrigido")
+
+
+def ensure_app(z: Zitadel, project_id: str, public_url: str, env: dict, rotate: bool, log, tailnet_host: str = "") -> dict:
     """Devolve as chaves de .env a escrever (vazio se nada mudou)."""
-    desired = desired_oidc_config(public_url)
+    desired = desired_oidc_config(public_url, tailnet_host)
     apps = z.call(
         "/zitadel.application.v2.ApplicationService/ListApplications",
         {"filters": [{"projectIdFilter": {"projectId": project_id}}]},
@@ -596,7 +636,11 @@ def ensure_app(z: Zitadel, project_id: str, public_url: str, env: dict, rotate: 
 def wait_ready(z: Zitadel) -> None:
     for _ in range(30):
         try:
-            urllib.request.urlopen(z.base + "/.well-known/openid-configuration", timeout=3).close()
+            req = urllib.request.Request(
+                z.base + "/.well-known/openid-configuration",
+                headers={"Host": z.host_header} if z.host_header else {},
+            )
+            urllib.request.urlopen(req, timeout=3).close()
             return
         except OSError:
             time.sleep(2)
@@ -611,8 +655,11 @@ def run(
     rotate: bool,
     log=print,
     rotate_smtp_password: bool = False,
+    tailnet_host: str = "",
 ) -> None:
-    z = Zitadel(base_url, pat)
+    if tailnet_host:
+        tailnet.validate_host(tailnet_host)
+    z = Zitadel(base_url, pat, f"{tailnet_host}:{tailnet.ZITADEL_TAILNET_PORT}" if tailnet_host else "")
     wait_ready(z)
     env_text = env_file.read_text(encoding="utf-8") if env_file.exists() else ""
     env = parse_env(env_text)
@@ -623,11 +670,12 @@ def run(
     ensure_lockout(z, log)
     ensure_secret_generators(z, log)
     ensure_default_language(z, log)
+    ensure_login_v2(z, desired_login_base_uri(base_url, tailnet_host), log)
     ensure_message_text(z, "verifyemail", VERIFY_EMAIL_TEXT, log)
     ensure_message_text(z, "passwordreset", PASSWORD_RESET_TEXT, log)
     changes = ensure_smtp(z, env, rotate_smtp_password, log)
     project_id = ensure_project(z, log)
-    changes.update(ensure_app(z, project_id, public_url, env, rotate, log))
+    changes.update(ensure_app(z, project_id, public_url, env, rotate, log, tailnet_host))
     if changes:
         write_private(env_file, update_env(env_text, changes))
         log(f"escrito em {env_file.name}: {', '.join(sorted(changes))}")
@@ -645,9 +693,13 @@ def main(argv=None) -> int:
     base = args.base_url or f"http://localhost:{env.get('ZITADEL_PORT', '8080')}"
     public = args.public_url or env.get("PITBOX_PUBLIC_URL", "http://localhost:8081")
     try:
+        host = env.get("PITBOX_TAILNET_HOST", "")
+        if host:
+            tailnet.validate_host(host)
+            print(f"zitadel-provision: perfil telemóvel ({host})", file=sys.stderr)
         pat = read_pat_file(args.pat_file) if args.pat_file else read_pat_from_container()
-        run(base, public, pat, ENV_FILE, args.rotate_secret, rotate_smtp_password=args.rotate_smtp_password)
-    except ProvisionError as e:
+        run(base, public, pat, ENV_FILE, args.rotate_secret, rotate_smtp_password=args.rotate_smtp_password, tailnet_host=host)
+    except (ProvisionError, tailnet.TailnetError) as e:
         print(f"zitadel-provision: {e}", file=sys.stderr)
         return 1
     print("zitadel-provision: OK")

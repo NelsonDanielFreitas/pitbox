@@ -505,6 +505,10 @@ A segurança segue o modelo de defesa em profundidade: cada camada assume que a 
 | Denial of service | Flood à API; ficheiro de telemetria gigante; página de timing maliciosa | WAF e rate limiting; limites de tamanho; ingestão isolada; parsers com limites e fuzzing |
 | Elevation of privilege | Piloto edita estratégia; convidado vê motores | Papéis no OpenFGA testados por asserções; step-up para operações de dono |
 
+### 12.2a Acesso do telemóvel ao ambiente local (ADR 0029, F1-14c)
+
+Até haver produção (F5), o telemóvel usa o PC por **Tailscale Serve** (nunca Funnel): `https://<host>` (443) para o `vite preview`, que serve a app e faz o proxy de `/auth` e `/pitbox.` para o `pitbox-api`, e `https://<host>:8443` para o Traefik do Zitadel. O `tailscale serve` termina o TLS; os serviços continuam só em `127.0.0.1`. O perfil é opt-in por `PITBOX_TAILNET_HOST`; sem ele, `localhost`. O Zitadel usa o domínio externo `ts.net` (issuer `https://<host>:8443`), o `pitbox-api` recebe `PITBOX_PUBLIC_URL`/`PITBOX_OIDC_ISSUER` em HTTPS e, como o PC não alcança o próprio endereço da tailnet, um desvio só-local ao Zitadel (`PITBOX_OIDC_LOCAL_DIAL`, recusado fora de `PITBOX_ENV=local`). Ameaças: TM-LOCAL-04 a 10.
+
 ### 12.3 Processo
 
 - Threat model revisto em cada versão do roadmap

@@ -929,6 +929,42 @@
       ]
     },
     {
+      "id": "F1-14c",
+      "title": "Acesso do telemóvel pela tailnet",
+      "phase": "1",
+      "phase_title": "Fase 1 — v0.1 Fundações",
+      "areas": [
+        "platform",
+        "security"
+      ],
+      "gate": false,
+      "status": "Em curso",
+      "todo": "Perfil telemóvel opt-in (PITBOX_TAILNET_HOST): Tailscale Serve (nunca Funnel) para a app (443) e o Zitadel (8443), Zitadel com domínio externo ts.net, redirect URIs ts.net sem tirar os de localhost, desvio local ao Zitadel só em PITBOX_ENV=local, make serve-phone/serve-phone-off/app-preview; ADR 0029",
+      "done_when": [
+        "Login completo no telemóvel por HTTPS",
+        "a PWA instala e sincroniza",
+        "make serve-phone-off corta o acesso",
+        "Postgres, Valkey, OpenFGA, Jaeger, Mailpit, SeaweedFS e a porta do pitbox-api só em 127.0.0.1",
+        "o perfil localhost (CI, E2E, make smoke-*) continua verde"
+      ],
+      "done_when_raw": "Login completo no telemóvel por HTTPS; a PWA instala e sincroniza; `make serve-phone-off` corta o acesso; Postgres, Valkey, OpenFGA, Jaeger, Mailpit, SeaweedFS e a porta do `pitbox-api` só em 127.0.0.1; o perfil localhost (CI, E2E, `make smoke-*`) continua verde",
+      "doc_references": [
+        "§12"
+      ],
+      "suggested_branch": "f1-14c-tailnet-access",
+      "issue_title": "F1-14c — Acesso do telemóvel pela tailnet",
+      "labels": [
+        "fase-1",
+        "area:platform",
+        "area:security"
+      ],
+      "security_notes": "",
+      "pull_request": null,
+      "adrs": [
+        "0029"
+      ]
+    },
+    {
       "id": "F1-15",
       "title": "Gate v0.1",
       "phase": "1",

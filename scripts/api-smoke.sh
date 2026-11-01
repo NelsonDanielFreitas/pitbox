@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# F1-01: prova ponta a ponta do pitbox-api contra o Jaeger local (precisa de `make up`).
+# F1-01: prova ponta a ponta do pitbox-api contra o Jaeger local (precisa de `make up` e `make zitadel-provision`).
 #  1. arranca o binário com a configuração local (porta livre, OTLP -> Jaeger);
 #  2. /healthz responde 200 e NÃO cria trace; um pedido normal (404) cria;
 #  3. o trace aparece na API de consulta do Jaeger;
@@ -23,6 +23,11 @@ cleanup() {
   rm -rf "$WORK"
 }
 trap cleanup EXIT
+
+# O Valkey local exige autenticação e a API recusa uma configuração parcial: usa o mesmo ambiente
+# que o `make run-api` (credenciais lidas do .env, nunca afrouxadas). Precisa de `make zitadel-provision`.
+. scripts/api-env.sh
+[ "$LOGIN_CONFIGURED" = 1 ] || fail "falta o login configurado no .env (corre 'make up' e 'make zitadel-provision')"
 
 (cd backend && go build -o "$WORK/api" ./cmd/api)
 

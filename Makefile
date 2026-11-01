@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate app-preview serve-phone serve-phone-off run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -11,6 +11,15 @@ ifeq ($(origin ZITADEL_PROVISIONER_PAT_EXPIRATION), undefined)
 ZITADEL_PROVISIONER_PAT_EXPIRATION := $(shell date -u -d '+30 days' +%Y-%m-%dT%H:%M:%SZ)
 endif
 export ZITADEL_PROVISIONER_PAT_EXPIRATION
+# Perfil «telemóvel» (ADR 0029, F1-14c): com PITBOX_TAILNET_HOST no .env, o compose recebe o
+# domínio externo ts.net do Zitadel; sem ele, nada muda (localhost). A regra de validação vive
+# em scripts/tailnet.py; um valor inválido pára tudo em vez de ser ignorado.
+TAILNET_ENV := $(shell python3 -I scripts/tailnet.py compose-env 2>&1 || echo TAILNET_ERROR)
+ifneq ($(findstring TAILNET_ERROR,$(TAILNET_ENV)),)
+$(error $(subst TAILNET_ERROR,,$(TAILNET_ENV)))
+endif
+$(foreach kv,$(TAILNET_ENV),$(eval export $(kv)))
+TAILNET_HOST := $(shell python3 -I scripts/tailnet.py host 2>/dev/null)
 COMPOSE     := docker compose --project-directory $(COMPOSE_DIR) --env-file $(ENV_FILE) -f $(COMPOSE_DIR)/docker-compose.yml
 
 help: ## Mostra os alvos disponíveis
@@ -68,6 +77,7 @@ reset: ## APAGA OS VOLUMES (Postgres, S3...) e recria. Obrigatório se mudares s
 	  printf "Isto apaga TODOS os volumes (Postgres, Zitadel, SeaweedFS). Escreve 'yes' para continuar: "; \
 	  read ans; [ "$$ans" = "yes" ] || { echo "Cancelado."; exit 1; }; \
 	fi
+	@if [ -n "$(TAILNET_HOST)" ]; then echo "Perfil telemóvel ($(TAILNET_HOST)): o Zitadel novo nasce com o domínio ts.net e as contas atuais perdem-se (restaura dos dumps, ver deploy/README.md)."; fi
 	$(COMPOSE) down -v
 	$(MAKE) up
 
@@ -164,6 +174,15 @@ workflows: ## actionlint + zizmor aos workflows (zizmor online se houver GH_TOKE
 	actionlint
 	zizmor $(if $(GH_TOKEN),,--offline) .github/workflows
 
+app-preview: ## Build de produção da app + vite preview em 127.0.0.1:4173 (é o que o `make serve-phone` expõe; Ctrl+C para parar)
+	cd app && pnpm build && PITBOX_TAILNET_HOST="$(TAILNET_HOST)" pnpm exec vite preview
+
+serve-phone: ## Expõe a app e o Zitadel SÓ na tailnet (tailscale serve, nunca funnel); precisa de PITBOX_TAILNET_HOST no .env
+	@bash scripts/serve-phone.sh on
+
+serve-phone-off: ## Corta o acesso do telemóvel (tailscale serve reset) e mostra o estado
+	@bash scripts/serve-phone.sh off
+
 run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger; com login se `make zitadel-provision` já correu (Ctrl+C para parar)
 	@bash scripts/run-api.sh
 
@@ -179,7 +198,7 @@ openfga-provision: ## Cria a store e o modelo OpenFGA local e guarda os ids no .
 smoke-auth: ## Prova o login, registo e verificação contra o Zitadel/Mailpit locais (precisa de make up e make zitadel-provision)
 	python3 -I scripts/auth-smoke.py
 
-smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up)
+smoke-api: ## Prova ponta a ponta: /healthz, trace no Jaeger e paragem limpa (precisa de make up e make zitadel-provision)
 	bash scripts/api-smoke.sh
 
 db-validate: ## Atlas: checksum (atlas.sum) e sintaxe das migrações

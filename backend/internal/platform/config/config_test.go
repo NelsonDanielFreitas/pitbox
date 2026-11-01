@@ -390,3 +390,49 @@ func TestValidateRefusesEmptyAlgorithmsAndValkeyUser(t *testing.T) {
 		t.Errorf("no valkey user: %v", err)
 	}
 }
+
+func TestOIDCLocalDial(t *testing.T) {
+	t.Parallel()
+
+	const issuer = "https://pc.tail1234.ts.net:8443"
+	tests := []struct {
+		name    string
+		env     map[string]string
+		wantErr string // empty = valid
+	}{
+		{"off by default", localAuth(nil), ""},
+		{"local, ts.net issuer, loopback", localAuth(map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}), ""},
+		{"not local: refused", hosted("staging", map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}), "only allowed when PITBOX_ENV=local"},
+		{"production: refused", hosted("production", map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}), "only allowed when PITBOX_ENV=local"},
+		{"another IP", localAuth(map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "10.0.0.5:8080"}), "must be 127.0.0.1"},
+		{"name instead of IP", localAuth(map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "localhost:8080"}), "must be 127.0.0.1"},
+		{"bad port", localAuth(map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:99999"}), "invalid port"},
+		{"issuer is localhost", localAuth(map[string]string{"PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}), "*.ts.net"},
+		{"issuer is another domain", localAuth(map[string]string{"PITBOX_OIDC_ISSUER": "https://example.com", "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}), "*.ts.net"},
+		{"ts.net lookalike", localAuth(map[string]string{"PITBOX_OIDC_ISSUER": "https://pc.ts.net.evil.example", "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}), "*.ts.net"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := LoadFrom(tt.env)
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
+				t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestIsTailnetHost(t *testing.T) {
+	t.Parallel()
+	for h, want := range map[string]bool{
+		"pc.tail1234.ts.net": true, "PC.Tail1234.TS.net": true, "ts.net": false, ".ts.net": false,
+		"pc.ts.net.evil.example": false, "evilts.net": false, "localhost": false, "": false,
+	} {
+		if got := IsTailnetHost(h); got != want {
+			t.Errorf("IsTailnetHost(%q) = %v, want %v", h, got, want)
+		}
+	}
+}

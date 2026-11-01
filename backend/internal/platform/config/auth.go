@@ -4,9 +4,11 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -73,6 +75,10 @@ func (c Config) validateAuth() []error {
 		errs = append(errs, err)
 	}
 	if err := c.validateOrigin("PITBOX_OIDC_ISSUER", c.OIDCIssuer, true); err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := c.validateOIDCLocalDial(); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -194,4 +200,36 @@ func validateDatabaseURL(env, databaseURL string) error {
 		}
 	}
 	return nil
+}
+
+// validateOIDCLocalDial guards the phone-profile override (ADR 0029). It is a way to talk to
+// the identity provider over plain HTTP, so it is only acceptable on the developer machine,
+// to a fixed loopback address, for a *.ts.net issuer served over https.
+func (c Config) validateOIDCLocalDial() error {
+	if c.OIDCLocalDial == "" {
+		return nil
+	}
+	const name = "PITBOX_OIDC_LOCAL_DIAL"
+	if c.Env != EnvLocal {
+		return fmt.Errorf("%s: only allowed when PITBOX_ENV=local", name)
+	}
+	host, port, err := net.SplitHostPort(c.OIDCLocalDial)
+	if err != nil || host != "127.0.0.1" {
+		return fmt.Errorf("%s: must be 127.0.0.1:<port>", name)
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 || port != strconv.Itoa(n) {
+		return fmt.Errorf("%s: invalid port", name)
+	}
+	u, err := url.Parse(c.OIDCIssuer)
+	if err != nil || u.Scheme != "https" || !IsTailnetHost(u.Hostname()) {
+		return fmt.Errorf("%s: only valid with an https PITBOX_OIDC_ISSUER on a *.ts.net host", name)
+	}
+	return nil
+}
+
+// IsTailnetHost reports whether h is a name under ts.net (at least one label before it).
+func IsTailnetHost(h string) bool {
+	h = strings.ToLower(h)
+	label := strings.TrimSuffix(h, ".ts.net")
+	return label != h && label != "" && !strings.HasPrefix(label, ".") && !strings.Contains(h, "..")
 }

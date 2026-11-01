@@ -34,14 +34,14 @@ url_api = "https://api.github.com/repos/bufbuild/buf/releases/assets/557280270"
 provenance = "minisign"
 
 [[tools."github:openfga/cli"]]
-version = "0.8.1"
+version = "0.8.2"
 backend = "github:openfga/cli"
-specifiers = ["0.8.1"]
+specifiers = ["v0.8.2"]
 
 [tools."github:openfga/cli"."platforms.linux-x64"]
-checksum = "sha256:e0414ad70850f8070540ad1be7a1e2e861edd6d6e73f6ed2b959c3277f98a54c"
-url = "https://github.com/openfga/cli/releases/download/v0.8.1/fga_0.8.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/openfga/cli/releases/assets/585078168"
+checksum = "sha256:e48c4a73cf68031fe9fc0827f1462a9b2d6981e3d2e9b82f1e1c2e120c293443"
+url = "https://github.com/openfga/cli/releases/download/v0.8.2/fga_0.8.2_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/openfga/cli/releases/assets/644301303"
 provenance = "github-attestations"
 
 [[tools."github:sqlc-dev/sqlc"]]

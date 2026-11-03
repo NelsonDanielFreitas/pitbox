@@ -12,14 +12,18 @@ import { FormField, FormRootError } from "@/shared/ui/FormField";
 import { TextInput } from "@/shared/ui/TextInput";
 
 import { setupQueryOptions, versionQueryOptions } from "../data/setup-queries";
+import { templateQueryOptions } from "../data/template-queries";
+import { defaultTemplateRepository, type TemplateRepository } from "../data/template-repository";
 import type { SetupRepository } from "../data/setup-repository";
 import { applyTexts, changesPerGroup, initialTexts, totalChanges, type FieldTexts } from "../domain/form";
 import type { SetupData } from "../domain/models";
 import { canWriteSetups } from "../domain/roles";
+import { templateRef } from "../domain/template";
 import { changeSummarySchema } from "../domain/schemas";
 import { SetupsForbidden, SetupsLoading, SetupsNotFound, SetupsPageHeader } from "./common";
 import { setupErrorMessage } from "./errors";
 import { SetupFieldsForm } from "./SetupFieldsForm";
+import { TemplateEditor } from "./TemplateEditor";
 import { useGarageChoices } from "./use-choices";
 
 export function SetupEditPage({
@@ -28,17 +32,24 @@ export function SetupEditPage({
   role,
   repository,
   garageRepository,
+  templateRepository = defaultTemplateRepository,
 }: {
   teamId: string;
   setupId: string;
   role: TeamRole;
   repository: SetupRepository;
   garageRepository: GarageRepository;
+  templateRepository?: TemplateRepository;
 }) {
   const { t } = useTranslation();
   const setup = useQuery(setupQueryOptions(repository, teamId, setupId));
   const current = useQuery(versionQueryOptions(repository, teamId, setupId));
   const { choices } = useGarageChoices(garageRepository, teamId);
+  const ref = current.data?.schemaVersion === 2 ? templateRef(current.data.data) : undefined;
+  const template = useQuery({
+    ...templateQueryOptions(templateRepository, teamId, ref?.id ?? "", ref?.version),
+    enabled: ref !== undefined,
+  });
 
   if (!canWriteSetups(role)) return <SetupsForbidden />;
   if (setup.isPending || current.isPending) return <SetupsLoading />;
@@ -53,6 +64,24 @@ export function SetupEditPage({
     );
   }
   if (!setup.data || !current.data) return <SetupsNotFound />;
+
+  if (current.data.schemaVersion === 2) {
+    if (template.isPending) return <SetupsLoading />;
+    // The sheet this version was made with is not stored on this phone: it cannot be edited here.
+    if (!template.data) return <SetupsNotFound onRetry={() => void template.refetch()} />;
+    return (
+      <TemplateEditor
+        key={`${setupId}:${current.data.version}`}
+        teamId={teamId}
+        setupId={setupId}
+        name={setup.data.name}
+        baseVersion={current.data.version}
+        baseData={current.data.data}
+        template={template.data}
+        repository={repository}
+      />
+    );
+  }
 
   // Keyed by the version being edited: a new version starts a fresh form.
   return (

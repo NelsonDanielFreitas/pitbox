@@ -1,0 +1,307 @@
+{
+  "format": 1,
+  "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4e77",
+  "slug": "exemplo-acme-a8",
+  "version": 1,
+  "make": "Acme",
+  "model": "A8 Exemplo",
+  "sheet_revision": "2026",
+  "scale": "1/8",
+  "powertrain": "nitro",
+  "name": {
+    "pt": "Acme A8 — ficha de exemplo",
+    "en": "Acme A8 — example sheet"
+  },
+  "groups": [
+    {
+      "key": "front",
+      "label": {
+        "pt": "Suspensão da frente",
+        "en": "Front suspension"
+      },
+      "fields": [
+        {
+          "key": "front_shock_pos",
+          "label": {
+            "pt": "Posição do amortecedor",
+            "en": "Shock position"
+          },
+          "type": "choice",
+          "options": [
+            "1",
+            "2",
+            "3"
+          ],
+          "kit": "2",
+          "diagram": {
+            "kind": "hole_row",
+            "count": 3
+          },
+          "help": {
+            "pt": "Furo da torre onde prende o amortecedor. 1 = mais para dentro.",
+            "en": "Furo da torre onde prende o amortecedor. 1 = mais para dentro."
+          }
+        },
+        {
+          "key": "front_arm_pos",
+          "label": {
+            "pt": "Posição do braço",
+            "en": "Arm position"
+          },
+          "type": "choice",
+          "options": [
+            "a",
+            "b",
+            "c",
+            "d"
+          ],
+          "diagram": {
+            "kind": "hole_grid",
+            "rows": 2,
+            "cols": 2
+          }
+        },
+        {
+          "key": "front_caster",
+          "label": {
+            "pt": "Caster",
+            "en": "Caster"
+          },
+          "type": "number",
+          "unit": "°",
+          "min": 0,
+          "max": 10,
+          "step": 0.5,
+          "kit": 2,
+          "diagram": {
+            "kind": "angle",
+            "axis": "caster"
+          },
+          "help": {
+            "pt": "<script>alert(1)</script> Ângulo do caster, em graus.",
+            "en": "<script>alert(1)</script> Ângulo do caster, em graus."
+          }
+        },
+        {
+          "key": "front_camber",
+          "label": {
+            "pt": "Camber",
+            "en": "Camber"
+          },
+          "type": "number",
+          "unit": "°",
+          "min": -5,
+          "max": 5,
+          "step": 0.5,
+          "kit": -1,
+          "diagram": {
+            "kind": "angle",
+            "axis": "camber"
+          }
+        },
+        {
+          "key": "front_ride_height",
+          "label": {
+            "pt": "Altura ao solo",
+            "en": "Ride height"
+          },
+          "type": "number",
+          "unit": "mm",
+          "min": 0,
+          "max": 30,
+          "step": 0.5,
+          "diagram": {
+            "kind": "length",
+            "measure": "ride_height"
+          }
+        },
+        {
+          "key": "front_disk",
+          "label": {
+            "pt": "Disco",
+            "en": "Disk"
+          },
+          "type": "flag",
+          "part_ref": "T2128",
+          "kit": false,
+          "diagram": {
+            "kind": "part",
+            "shape": "disk"
+          }
+        }
+      ]
+    },
+    {
+      "key": "diffs",
+      "label": {
+        "pt": "Diferenciais",
+        "en": "Differentials"
+      },
+      "fields": [
+        {
+          "key": "front_diff_oil",
+          "label": {
+            "pt": "Óleo diferencial da frente",
+            "en": "Front diff oil"
+          },
+          "type": "int",
+          "unit": "cSt",
+          "min": 100,
+          "max": 1000000,
+          "kit": 5000,
+          "canonical": "diffs.front_cst"
+        },
+        {
+          "key": "rear_diff_oil",
+          "label": {
+            "pt": "Óleo diferencial de trás",
+            "en": "Rear diff oil"
+          },
+          "type": "int",
+          "unit": "cSt",
+          "min": 100,
+          "max": 1000000,
+          "kit": 5000,
+          "canonical": "diffs.rear_cst"
+        }
+      ]
+    },
+    {
+      "key": "shocks",
+      "label": {
+        "pt": "Amortecedores",
+        "en": "Amortecedores"
+      },
+      "table": {
+        "columns": [
+          {
+            "pt": "Frente",
+            "en": "Frente"
+          },
+          {
+            "pt": "Trás",
+            "en": "Trás"
+          }
+        ],
+        "rows": [
+          {
+            "label": {
+              "pt": "Óleo dos amortecedores",
+              "en": "Óleo dos amortecedores"
+            },
+            "cells": [
+              "shock_oil_front",
+              "shock_oil_rear"
+            ]
+          },
+          {
+            "label": {
+              "pt": "Mola",
+              "en": "Mola"
+            },
+            "cells": [
+              "spring_front",
+              "spring_rear"
+            ]
+          }
+        ]
+      },
+      "fields": [
+        {
+          "key": "shock_oil_front",
+          "label": {
+            "pt": "Óleo amortecedor frente",
+            "en": "Óleo amortecedor frente"
+          },
+          "type": "int",
+          "unit": "cSt",
+          "min": 100,
+          "max": 2000
+        },
+        {
+          "key": "shock_oil_rear",
+          "label": {
+            "pt": "Óleo amortecedor trás",
+            "en": "Óleo amortecedor trás"
+          },
+          "type": "int",
+          "unit": "cSt",
+          "min": 100,
+          "max": 2000
+        },
+        {
+          "key": "spring_front",
+          "label": {
+            "pt": "Mola frente",
+            "en": "Mola frente"
+          },
+          "type": "number",
+          "unit": "mm",
+          "min": 0,
+          "max": 20
+        },
+        {
+          "key": "spring_rear",
+          "label": {
+            "pt": "Mola trás",
+            "en": "Mola trás"
+          },
+          "type": "number",
+          "unit": "mm",
+          "min": 0,
+          "max": 20
+        }
+      ]
+    },
+    {
+      "key": "chassis",
+      "label": {
+        "pt": "Chassis",
+        "en": "Chassis"
+      },
+      "fields": [
+        {
+          "key": "stiffener",
+          "label": {
+            "pt": "Reforço do chassis",
+            "en": "Chassis stiffener"
+          },
+          "type": "choice",
+          "options": [
+            "original",
+            "T2311",
+            "T2236"
+          ],
+          "kit": "original"
+        },
+        {
+          "key": "pivot_parts",
+          "label": {
+            "pt": "Peças do pivô",
+            "en": "Peças do pivô"
+          },
+          "type": "multi",
+          "options": [
+            "E0160",
+            "E0159",
+            "E2218",
+            "E2146"
+          ],
+          "kit": [
+            "E0160",
+            "E0159"
+          ]
+        },
+        {
+          "key": "remarks",
+          "label": {
+            "pt": "Notas",
+            "en": "Notes"
+          },
+          "type": "text",
+          "max_len": 120
+        }
+      ]
+    }
+  ]
+}

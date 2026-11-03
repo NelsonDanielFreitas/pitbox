@@ -11,6 +11,7 @@ import {
   feedbackScales,
   SCHEMA_VERSION,
   type Setup,
+  type SetupData,
   type SetupFeedback,
   type SetupFeedbackInput,
   type SetupVersion,
@@ -24,9 +25,12 @@ import {
   setupVersionRowSchema,
   versionFromRow,
 } from "../domain/schemas";
+import { SCHEMA_VERSION_V2, validateSetupV2 } from "../domain/template";
 import { validateSetupData } from "../domain/validate";
+import { withoutCanonical } from "../domain/values";
 
 import { defaultSetupDatabase, type SetupDatabase } from "./setup-database";
+import { LocalTemplateRepository } from "./template-repository";
 import type { CreateSetupInput, CreateVersionInput, SetupRepository } from "./setup-repository";
 
 const SETUP_COLUMNS =
@@ -43,6 +47,12 @@ const FEEDBACK_COLUMNS = `
 `;
 
 type Clock = () => string;
+
+/** The part of a version's data that comparing two versions looks at (v2 ignores `canonical`). */
+function comparable(v: { data: SetupData; schemaVersion: number }): SetupData {
+  if (v.schemaVersion !== SCHEMA_VERSION_V2) return v.data;
+  return withoutCanonical(v.data);
+}
 
 /** Parses a row with its schema; anything unexpected is corrupt local data, never shown. */
 function parse<T>(
@@ -63,10 +73,14 @@ function isNoRows(error: unknown): boolean {
 }
 
 export class LocalSetupRepository implements SetupRepository {
+  private readonly templates: LocalTemplateRepository;
+
   constructor(
     private readonly db: SetupDatabase = defaultSetupDatabase,
     private readonly now: Clock = () => new Date().toISOString(),
-  ) {}
+  ) {
+    this.templates = new LocalTemplateRepository(db);
+  }
 
   async listSetups(teamId: string, carId?: string): Promise<Setup[]> {
     const rows = await this.db.query(
@@ -131,6 +145,13 @@ export class LocalSetupRepository implements SetupRepository {
     );
     if (cars.length === 0) throw new SetupNotFoundError("car not found");
 
+    // A template sheet starts from the version the caller chose, which must be stored here and
+    // visible to this team (a private template of another team selects nothing).
+    const template = input.source ? null : (input.template ?? null);
+    if (template && !(await this.templates.getTemplate(teamId, template.id, template.version))) {
+      throw new SetupNotFoundError("sheet template not found");
+    }
+
     const id = newId();
     const now = this.now();
     const insertSetup: SqlStatement = {
@@ -175,12 +196,15 @@ export class LocalSetupRepository implements SetupRepository {
       : {
           sql: `INSERT INTO setup_version (
                   team_id, setup_id, version, data, schema_version, created_at, created_by
-                ) VALUES ($teamId, $id, 1, '{}', $schemaVersion, $now, $createdBy)
+                ) VALUES ($teamId, $id, 1, $data, $schemaVersion, $now, $createdBy)
                 RETURNING ${VERSION_COLUMNS}`,
           params: {
             $teamId: teamId,
             $id: id,
-            $schemaVersion: SCHEMA_VERSION,
+            $data: template
+              ? JSON.stringify({ template: { id: template.id, version: template.version }, values: {} })
+              : "{}",
+            $schemaVersion: template ? SCHEMA_VERSION_V2 : SCHEMA_VERSION,
             $now: now,
             $createdBy: input.createdBy,
           },
@@ -199,6 +223,7 @@ export class LocalSetupRepository implements SetupRepository {
           ...(input.source
             ? { source_setup_id: input.source.setupId, source_version: input.source.version }
             : {}),
+          ...(template ? { sheet_template_id: template.id, sheet_template_version: template.version } : {}),
         },
       });
       // The version statement stays last: it returns the row, and when a copy source selects
@@ -221,16 +246,25 @@ export class LocalSetupRepository implements SetupRepository {
     setupId: string,
     input: CreateVersionInput,
   ): Promise<SetupVersion> {
-    const issues = validateSetupData(input.data);
-    if (issues.length > 0) throw new SetupInvalidError(issues);
-    const data = normalizeData(input.data);
-
     const current = await this.getVersion(teamId, setupId);
     if (!current) throw new SetupNotFoundError();
+    const schemaVersion = input.schemaVersion ?? current.schemaVersion;
+    // A v2 setup cannot go back to v1 (the server refuses it too).
+    if (schemaVersion < current.schemaVersion || (schemaVersion !== SCHEMA_VERSION && schemaVersion !== SCHEMA_VERSION_V2)) {
+      throw new SetupInvalidError([{ path: "schema_version", ruleId: "setup.schema_version" }]);
+    }
+    let data: SetupData;
+    if (schemaVersion === SCHEMA_VERSION_V2) {
+      data = await this.validateV2(teamId, input.data);
+    } else {
+      const issues = validateSetupData(input.data);
+      if (issues.length > 0) throw new SetupInvalidError(issues);
+      data = normalizeData(input.data);
+    }
     if (current.version !== input.baseVersion) {
       throw new SetupConflictError("stale", "setup changed since this version was opened");
     }
-    if (compareSetupData(current.data, data).length === 0) {
+    if (compareSetupData(comparable(current), comparable({ data, schemaVersion })).length === 0) {
       throw new SetupConflictError("no_changes", "the new version equals the current one");
     }
 
@@ -261,7 +295,11 @@ export class LocalSetupRepository implements SetupRepository {
             entityId: setupId,
             kind: OpKind.patch,
             baseVersion: input.baseVersion,
-            fields: { data, change_summary: input.changeSummary },
+            fields: {
+              data,
+              change_summary: input.changeSummary,
+              ...(schemaVersion === SCHEMA_VERSION_V2 ? { schema_version: schemaVersion } : {}),
+            },
           }),
           {
             sql: `INSERT INTO setup_version (
@@ -280,7 +318,7 @@ export class LocalSetupRepository implements SetupRepository {
               $setupId: setupId,
               $next: next,
               $data: JSON.stringify(data),
-              $schemaVersion: SCHEMA_VERSION,
+              $schemaVersion: schemaVersion,
               $summary: input.changeSummary,
               $now: now,
               $createdBy: input.createdBy,
@@ -298,6 +336,22 @@ export class LocalSetupRepository implements SetupRepository {
       }
       this.rethrowWrite(error);
     }
+  }
+
+  /** Validates v2 data against the template version it names, which must be stored locally. */
+  private async validateV2(teamId: string, input: SetupData): Promise<SetupData> {
+    const ref = input.template;
+    const id = typeof ref === "object" && ref !== null && "id" in ref ? ref.id : undefined;
+    const version = typeof ref === "object" && ref !== null && "version" in ref ? ref.version : undefined;
+    if (typeof id !== "string" || typeof version !== "number") {
+      throw new SetupInvalidError([{ path: "template", ruleId: "setup.data.template_unknown" }]);
+    }
+    const template = await this.templates.getTemplate(teamId, id, version);
+    if (!template) throw new SetupInvalidError([{ path: "template", ruleId: "setup.data.template_unknown" }]);
+    // `canonical` is the server's: a copy that came from a Pull must not be sent back.
+    const result = validateSetupV2(template, withoutCanonical(input));
+    if (!result.ok) throw new SetupInvalidError([result.issue]);
+    return result.data;
   }
 
   async updateSetup(

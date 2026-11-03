@@ -11,6 +11,7 @@ import syncInventoryBackfill from "./0010_sync_inventory_backfill.sql?raw";
 import syncMountsBackfill from "./0011_sync_mounts_backfill.sql?raw";
 import syncFeedbackBackfill from "./0012_sync_feedback_backfill.sql?raw";
 import syncRepull from "./0013_sync_repull.sql?raw";
+import sheetTemplates from "./0014_sheet_templates.sql?raw";
 
 export interface Migration {
   version: number;
@@ -32,4 +33,5 @@ export const migrations: readonly Migration[] = [
   { version: 11, name: "sync_mounts_backfill", sql: syncMountsBackfill },
   { version: 12, name: "sync_feedback_backfill", sql: syncFeedbackBackfill },
   { version: 13, name: "sync_repull", sql: syncRepull },
+  { version: 14, name: "sheet_templates", sql: sheetTemplates },
 ];

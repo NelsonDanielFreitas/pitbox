@@ -68,3 +68,22 @@ export interface Difference {
 export const SCHEMA_VERSION = 1;
 export const MAX_DATA_BYTES = 64 << 10;
 export const MAX_DATA_DEPTH = 8;
+
+/** A sheet template as listed (the definition is read per version). */
+export interface TemplateInfo {
+  id: string;
+  /** NULL team = the global catalogue (read-only). */
+  teamId: string | null;
+  slug: string;
+  make: string;
+  model: string;
+  scale: string;
+  powertrain: string;
+  name: string;
+  sourceUrl: string | null;
+  currentVersion: number;
+  basedOnId: string | null;
+  /** The catalogue snapshot listed it without its definitions (over the size cap). */
+  truncated: boolean;
+  version: number;
+}

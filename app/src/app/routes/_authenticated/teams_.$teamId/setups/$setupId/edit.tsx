@@ -17,7 +17,7 @@ export const Route = createFileRoute("/_authenticated/teams_/$teamId/setups/$set
 function SetupEditRoute() {
   const { setupId } = Route.useParams();
   const team = useTeamContext();
-  const { setupRepository, garageRepository } = Route.useRouteContext();
+  const { setupRepository, garageRepository, templateRepository } = Route.useRouteContext();
   return (
     <SetupEditPage
       teamId={team.id}
@@ -25,6 +25,7 @@ function SetupEditRoute() {
       role={team.role}
       repository={setupRepository}
       garageRepository={garageRepository}
+      templateRepository={templateRepository}
     />
   );
 }

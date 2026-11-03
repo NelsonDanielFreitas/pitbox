@@ -9,13 +9,14 @@ export const Route = createFileRoute("/_authenticated/teams_/$teamId/setups/new"
 
 function NewSetupRoute() {
   const team = useTeamContext();
-  const { setupRepository, garageRepository } = Route.useRouteContext();
+  const { setupRepository, garageRepository, templateRepository } = Route.useRouteContext();
   return (
     <NewSetupPage
       teamId={team.id}
       role={team.role}
       repository={setupRepository}
       garageRepository={garageRepository}
+      templateRepository={templateRepository}
     />
   );
 }

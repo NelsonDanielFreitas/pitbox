@@ -21,7 +21,7 @@ function CompareRoute() {
   const { setupId } = Route.useParams();
   const { from, to } = Route.useSearch();
   const team = useTeamContext();
-  const { setupRepository, garageRepository } = Route.useRouteContext();
+  const { setupRepository, garageRepository, templateRepository } = Route.useRouteContext();
   return (
     <SetupComparePage
       teamId={team.id}
@@ -30,6 +30,7 @@ function CompareRoute() {
       to={to}
       repository={setupRepository}
       garageRepository={garageRepository}
+      templateRepository={templateRepository}
     />
   );
 }

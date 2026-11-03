@@ -304,6 +304,7 @@ export const carRowSchema = z
     scale: z.string(),
     powertrain: z.string(),
     notes: nullableString,
+    sheet_template_id: nullableString,
     created_at: z.string(),
     updated_at: z.string(),
     version: z.number().int().positive(),

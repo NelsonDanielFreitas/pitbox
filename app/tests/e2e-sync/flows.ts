@@ -54,6 +54,9 @@ export async function createCar(page: Page, nickname: string) {
   await page.getByLabel("Marca", { exact: true }).fill("Mugen");
   await page.getByLabel("Modelo", { exact: true }).fill("MBX8");
   await page.getByLabel("Alcunha").fill(nickname);
+  // Mugen MBX8 now has its own sheet in the catalogue and the form applies it by itself; these
+  // flows are about the generic sheet, so they choose it (the MBX8 sheet has its own spec).
+  await page.getByLabel("Ficha do carro").selectOption("");
   await page.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByRole("heading", { name: nickname })).toBeVisible();
 }

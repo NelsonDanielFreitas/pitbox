@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -235,9 +236,43 @@ func sharedSetupToProto(s domain.SharedSetup) (*setupv1.SharedSetup, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &setupv1.SharedSetup{
+	out := &setupv1.SharedSetup{
 		Name: s.Name, Version: s.Version, SchemaVersion: s.SchemaVersion,
 		Data: data, ChangeSummary: s.ChangeSummary,
 		VersionCreatedAt: timestamppb.New(s.VersionCreatedAt),
-	}, nil
+	}
+	if s.TemplateDefinition != nil {
+		if out.TemplateDefinition, err = dataToStruct(s.TemplateDefinition); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func sheetTemplateToProto(t domain.SheetTemplateInfo) *setupv1.SheetTemplate {
+	out := &setupv1.SheetTemplate{
+		Id: t.ID.String(), Slug: t.Slug, Make: t.Make, Model: t.Model, Scale: t.Scale,
+		Powertrain: t.Powertrain, Name: t.Name, SourceUrl: t.SourceURL, CurrentVersion: t.CurrentVersion,
+		IsGlobal: t.Global, CreatedAt: timestamppb.New(t.CreatedAt), UpdatedAt: timestamppb.New(t.UpdatedAt),
+		Version: t.Version,
+	}
+	if t.BasedOnID != nil {
+		s := t.BasedOnID.String()
+		out.BasedOnId = &s
+	}
+	return out
+}
+
+// templateVersionToProto decodes the stored definition JSON into a Struct. The definition is
+// data for the client to render as text; nothing in it is interpreted here.
+func templateVersionToProto(r domain.SheetTemplateVersionRow) (*setupv1.SheetTemplateVersion, error) {
+	var def map[string]any
+	if err := json.Unmarshal(r.Definition, &def); err != nil {
+		return nil, fmt.Errorf("sheet template definition: %w", err)
+	}
+	s, err := dataToStruct(def)
+	if err != nil {
+		return nil, err
+	}
+	return &setupv1.SheetTemplateVersion{TemplateId: r.TemplateID.String(), Version: r.Version, Definition: s}, nil
 }

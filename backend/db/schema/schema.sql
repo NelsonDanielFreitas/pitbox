@@ -362,6 +362,8 @@ CREATE TABLE garage.car (
   deleted_at          timestamptz,
   scale               text        NOT NULL DEFAULT '1/8' CONSTRAINT car_scale_fk REFERENCES garage.scale (code),
   powertrain          text        NOT NULL DEFAULT 'nitro' CONSTRAINT car_powertrain_fk REFERENCES garage.powertrain (code),
+  -- Ficha do fabricante (F2-00): sem FK porque uma FK ignora a RLS; ver o trigger sheet_template_check.
+  sheet_template_id   uuid,
   UNIQUE (team_id, id)
 );
 CREATE UNIQUE INDEX car_transponder_uq ON garage.car (team_id, transponder_number)
@@ -637,6 +639,47 @@ CREATE TABLE setup.setup_feedback (
   )
 );
 CREATE INDEX setup_feedback_version_idx ON setup.setup_feedback (team_id, setup_id, version, created_at);
+
+-- Modelos de ficha por carro (F2-00, ADR 0030).
+-- Identidade do modelo. team_id NULL = global catalogue (written only by reviewed migrations).
+CREATE TABLE setup.sheet_template (
+  id              uuid        PRIMARY KEY DEFAULT app.uuid_v7(),
+  team_id         uuid        REFERENCES identity.team (id) ON DELETE CASCADE,
+  slug            text        NOT NULL CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'),
+  make            text        NOT NULL CHECK (char_length(make) BETWEEN 1 AND 80),
+  model           text        NOT NULL CHECK (char_length(model) BETWEEN 1 AND 80),
+  scale           text        NOT NULL CONSTRAINT sheet_template_scale_fk REFERENCES garage.scale (code),
+  powertrain      text        NOT NULL CONSTRAINT sheet_template_powertrain_fk REFERENCES garage.powertrain (code),
+  name            text        NOT NULL CHECK (char_length(name) BETWEEN 1 AND 120),
+  source_url      text        CHECK (source_url IS NULL OR (source_url ~ '^https://' AND char_length(source_url) <= 500)),
+  current_version integer     NOT NULL DEFAULT 1 CHECK (current_version >= 1),
+  based_on_id     uuid        REFERENCES setup.sheet_template (id),
+  created_by      uuid        REFERENCES identity.user_account (id),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  version         integer     NOT NULL DEFAULT 1,
+  deleted_at      timestamptz,
+  UNIQUE (team_id, id),
+  CHECK (based_on_id IS NULL OR team_id IS NOT NULL)
+);
+CREATE UNIQUE INDEX sheet_template_global_slug ON setup.sheet_template (slug) WHERE team_id IS NULL;
+CREATE UNIQUE INDEX sheet_template_team_slug ON setup.sheet_template (team_id, slug) WHERE team_id IS NOT NULL;
+
+-- Immutable versions of a template. team_id is copied from the template by a trigger (for the RLS).
+CREATE TABLE setup.sheet_template_version (
+  template_id     uuid        NOT NULL REFERENCES setup.sheet_template (id) ON DELETE CASCADE,
+  team_id         uuid,
+  version         integer     NOT NULL CHECK (version >= 1),
+  definition      jsonb       NOT NULL CHECK (jsonb_typeof(definition) = 'object'
+                                              AND octet_length(definition::text) <= 262144),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (template_id, version)
+);
+
+-- The current version must exist. Deferred so a template and its first version go in together.
+ALTER TABLE setup.sheet_template
+  ADD CONSTRAINT sheet_template_current_version_fk FOREIGN KEY (id, current_version)
+  REFERENCES setup.sheet_template_version (template_id, version) DEFERRABLE INITIALLY DEFERRED;
 
 -- Favoritos por pista e condição do piso.
 CREATE TABLE setup.favorite (
@@ -1535,7 +1578,8 @@ BEGIN
       ON tb.table_schema = c.table_schema AND tb.table_name = c.table_name AND tb.table_type = 'BASE TABLE'
     WHERE c.column_name = 'team_id'
       AND c.table_schema IN ('identity','garage','setup','maintenance','events','timing','telemetry','sync','audit','platform')
-      AND (c.table_schema, c.table_name) NOT IN (('identity','membership'), ('events','track'), ('audit','audit_log'), ('platform','outbox'))
+      AND (c.table_schema, c.table_name) NOT IN (('identity','membership'), ('events','track'), ('audit','audit_log'), ('platform','outbox'),
+                                                   ('setup','sheet_template'), ('setup','sheet_template_version'))
   LOOP
     EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY', t.table_schema, t.table_name);
     EXECUTE format(
@@ -1968,6 +2012,197 @@ REVOKE ALL ON FUNCTION setup.open_share_link(bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION setup.open_share_link(bytea) TO pitbox_app;
 COMMENT ON FUNCTION setup.open_share_link(bytea) IS
   'Abre um link de partilha pelo hash do token, sem contexto de equipa. SECURITY DEFINER, só pitbox_app.';
+
+-- =============================================================================
+-- F2-00: modelos de ficha (ADR 0030) — triggers, RLS, vista e link público
+-- =============================================================================
+-- Depois das permissões em bloco, como na migração. As colunas e tabelas estão acima.
+CREATE FUNCTION setup.sheet_template_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    -- A team copy may only be based on a visible global template (RLS hides other teams' ones).
+    IF NEW.based_on_id IS NOT NULL AND NOT EXISTS (
+         SELECT 1 FROM setup.sheet_template g WHERE g.id = NEW.based_on_id AND g.team_id IS NULL) THEN
+      RAISE EXCEPTION 'sheet template not available' USING ERRCODE = 'PB020';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.id <> OLD.id OR NEW.team_id IS DISTINCT FROM OLD.team_id OR NEW.based_on_id IS DISTINCT FROM OLD.based_on_id
+     OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at <> OLD.created_at
+     OR NEW.current_version < OLD.current_version THEN
+    RAISE EXCEPTION 'sheet_template: identity columns are immutable and current_version only grows'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+CREATE FUNCTION setup.sheet_template_version_team() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE t uuid;
+BEGIN
+  SELECT s.team_id INTO t FROM setup.sheet_template s WHERE s.id = NEW.template_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'sheet template not available' USING ERRCODE = 'PB020';
+  END IF;
+  NEW.team_id := t;
+  RETURN NEW;
+END
+$$;
+
+CREATE FUNCTION garage.check_car_sheet_template() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.sheet_template_id IS NULL THEN RETURN NEW; END IF;
+  IF TG_OP = 'UPDATE' AND NEW.sheet_template_id IS NOT DISTINCT FROM OLD.sheet_template_id THEN RETURN NEW; END IF;
+  IF NOT EXISTS (SELECT 1 FROM setup.sheet_template t
+                  WHERE t.id = NEW.sheet_template_id AND t.deleted_at IS NULL
+                    AND (t.team_id IS NULL OR t.team_id = NEW.team_id)) THEN
+    RAISE EXCEPTION 'sheet template not available' USING ERRCODE = 'PB020';
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE ALL ON FUNCTION setup.sheet_template_guard() FROM PUBLIC;
+REVOKE ALL ON FUNCTION setup.sheet_template_version_team() FROM PUBLIC;
+REVOKE ALL ON FUNCTION garage.check_car_sheet_template() FROM PUBLIC;
+
+CREATE TRIGGER guard BEFORE INSERT OR UPDATE ON setup.sheet_template
+  FOR EACH ROW EXECUTE FUNCTION setup.sheet_template_guard();
+-- touch: criado pelo ciclo genérico acima (a tabela tem updated_at + version).
+CREATE TRIGGER team_sync BEFORE INSERT ON setup.sheet_template_version
+  FOR EACH ROW EXECUTE FUNCTION setup.sheet_template_version_team();
+CREATE TRIGGER immutable BEFORE UPDATE OR DELETE ON setup.sheet_template_version
+  FOR EACH ROW EXECUTE FUNCTION app.forbid_mutation();
+CREATE TRIGGER sheet_template_check BEFORE INSERT OR UPDATE OF sheet_template_id ON garage.car
+  FOR EACH ROW EXECUTE FUNCTION garage.check_car_sheet_template();
+
+-- RLS: everybody reads the global catalogue; a team writes only its own rows. Separate policies per
+-- command: with a single FOR ALL policy (as in events.track) an UPDATE could move a global row to
+-- the caller's team, because the WITH CHECK only looks at the new row.
+ALTER TABLE setup.sheet_template ENABLE ROW LEVEL SECURITY;
+CREATE POLICY template_select ON setup.sheet_template
+  FOR SELECT USING (team_id IS NULL OR team_id = app.current_team_id());
+CREATE POLICY template_insert ON setup.sheet_template
+  FOR INSERT WITH CHECK (team_id = app.current_team_id());
+CREATE POLICY template_update ON setup.sheet_template
+  FOR UPDATE USING (team_id = app.current_team_id()) WITH CHECK (team_id = app.current_team_id());
+ALTER TABLE setup.sheet_template_version ENABLE ROW LEVEL SECURITY;
+CREATE POLICY template_version_select ON setup.sheet_template_version
+  FOR SELECT USING (team_id IS NULL OR team_id = app.current_team_id());
+CREATE POLICY template_version_insert ON setup.sheet_template_version
+  FOR INSERT WITH CHECK (team_id = app.current_team_id());
+
+REVOKE DELETE ON setup.sheet_template FROM pitbox_app;
+REVOKE UPDATE, DELETE ON setup.sheet_template_version FROM pitbox_app;
+
+-- Analysis columns for v1 and v2 (D1). The 7 GENERATED columns stay as they are; v2 rows carry the
+-- server-computed data.canonical. security_invoker: without it the view would ignore the RLS.
+CREATE VIEW setup.setup_version_metrics WITH (security_invoker = true) AS
+SELECT v.team_id, v.setup_id, v.version, v.schema_version,
+  COALESCE(v.diff_front_cst, CASE WHEN jsonb_typeof(v.data #> '{canonical,diffs.front_cst}') = 'number'
+    THEN (v.data #>> '{canonical,diffs.front_cst}')::numeric::integer END) AS diff_front_cst,
+  COALESCE(v.diff_center_cst, CASE WHEN jsonb_typeof(v.data #> '{canonical,diffs.center_cst}') = 'number'
+    THEN (v.data #>> '{canonical,diffs.center_cst}')::numeric::integer END) AS diff_center_cst,
+  COALESCE(v.diff_rear_cst, CASE WHEN jsonb_typeof(v.data #> '{canonical,diffs.rear_cst}') = 'number'
+    THEN (v.data #>> '{canonical,diffs.rear_cst}')::numeric::integer END) AS diff_rear_cst,
+  COALESCE(v.shock_front_oil_cst, CASE WHEN jsonb_typeof(v.data #> '{canonical,shocks.front.oil_cst}') = 'number'
+    THEN (v.data #>> '{canonical,shocks.front.oil_cst}')::numeric::integer END) AS shock_front_oil_cst,
+  COALESCE(v.shock_rear_oil_cst, CASE WHEN jsonb_typeof(v.data #> '{canonical,shocks.rear.oil_cst}') = 'number'
+    THEN (v.data #>> '{canonical,shocks.rear.oil_cst}')::numeric::integer END) AS shock_rear_oil_cst,
+  COALESCE(v.clutch_bell_teeth, CASE WHEN jsonb_typeof(v.data #> '{canonical,transmission.clutch_bell_teeth}') = 'number'
+    THEN (v.data #>> '{canonical,transmission.clutch_bell_teeth}')::numeric::smallint END) AS clutch_bell_teeth,
+  COALESCE(v.spur_teeth, CASE WHEN jsonb_typeof(v.data #> '{canonical,transmission.spur_teeth}') = 'number'
+    THEN (v.data #>> '{canonical,transmission.spur_teeth}')::numeric::smallint END) AS spur_teeth
+FROM setup.setup_version v;
+
+-- setup.open_share_link_v2 — same as open_share_link plus the definition of the template version
+-- the shared version was made with (NULL for v1). A new function instead of changing the RETURNS
+-- TABLE of the old one, which would need a DROP.
+CREATE FUNCTION setup.open_share_link_v2(p_token_hash bytea)
+  RETURNS TABLE (
+    name text,
+    version integer,
+    schema_version integer,
+    data jsonb,
+    change_summary text,
+    version_created_at timestamptz,
+    template_definition jsonb
+  )
+  LANGUAGE sql
+  VOLATILE
+  SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+AS $$
+  WITH opened AS (
+    UPDATE setup.share_link l
+       SET last_used_at = now(), use_count = use_count + 1
+     WHERE l.token_hash = p_token_hash
+       AND octet_length(p_token_hash) = 32
+       AND l.revoked_at IS NULL
+       AND (l.expires_at IS NULL OR l.expires_at > now())
+       AND EXISTS (
+         SELECT 1
+           FROM setup.setup s
+           JOIN identity.team t ON t.id = l.team_id AND t.deleted_at IS NULL
+           JOIN setup.setup_version v
+             ON v.team_id = s.team_id
+            AND v.setup_id = s.id
+            AND v.version = COALESCE(l.pinned_version, s.current_version)
+          WHERE s.team_id = l.team_id
+            AND s.id = l.setup_id
+            AND s.deleted_at IS NULL
+       )
+    RETURNING l.team_id, l.setup_id, l.pinned_version
+  )
+  SELECT s.name, v.version, v.schema_version, v.data, v.change_summary, v.created_at, tv.definition
+    FROM opened o
+    JOIN setup.setup s ON s.team_id = o.team_id AND s.id = o.setup_id
+    JOIN setup.setup_version v
+      ON v.team_id = s.team_id
+     AND v.setup_id = s.id
+     AND v.version = COALESCE(o.pinned_version, s.current_version)
+    LEFT JOIN setup.sheet_template_version tv
+      ON v.schema_version = 2
+     AND jsonb_typeof(v.data #> '{template,version}') = 'number'
+     AND tv.template_id = CASE WHEN (v.data #>> '{template,id}') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                               THEN (v.data #>> '{template,id}')::uuid END
+     AND tv.version = CASE WHEN (v.data #>> '{template,version}') ~ '^[0-9]{1,9}$'
+                           THEN (v.data #>> '{template,version}')::integer END
+     AND (tv.team_id IS NULL OR tv.team_id = s.team_id);
+$$;
+
+REVOKE ALL ON FUNCTION setup.open_share_link_v2(bytea) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION setup.open_share_link_v2(bytea) TO pitbox_app;
+COMMENT ON FUNCTION setup.open_share_link_v2(bytea) IS
+  'Como open_share_link, mais a definição do modelo da versão partilhada. SECURITY DEFINER, só pitbox_app.';
+
+-- Os modelos da equipa sincronizam como as outras entidades; os globais viajam no snapshot do Pull.
+CREATE TRIGGER change_log AFTER INSERT OR UPDATE ON setup.sheet_template
+  FOR EACH ROW WHEN (NEW.team_id IS NOT NULL) EXECUTE FUNCTION sync.log_change('id');
+
+-- Catálogo global de modelos: os ficheiros em backend/internal/setup/templates são a fonte.
+-- BEGIN catálogo de modelos (gerado por scripts/template-migration.py; não editar)
+INSERT INTO setup.sheet_template (id, team_id, slug, make, model, scale, powertrain, name, source_url, current_version)
+VALUES ('01a1990b-b4dd-777f-9c5b-e31aaf01355f', NULL, 'generic-1-8-nitro', 'Genérico', '1/8 TT nitro', '1/8', 'nitro',
+        'Genérico 1/8 TT nitro', NULL, 1)
+ON CONFLICT (id) DO UPDATE
+  SET current_version = EXCLUDED.current_version, name = EXCLUDED.name, source_url = EXCLUDED.source_url
+  WHERE setup.sheet_template.current_version < EXCLUDED.current_version;
+INSERT INTO setup.sheet_template_version (template_id, version, definition)
+VALUES ('01a1990b-b4dd-777f-9c5b-e31aaf01355f', 1, $tpl${"format":1,"id":"01a1990b-b4dd-777f-9c5b-e31aaf01355f","slug":"generic-1-8-nitro","version":1,"make":"Genérico","model":"1/8 TT nitro","scale":"1/8","powertrain":"nitro","name":{"pt":"Genérico 1/8 TT nitro","en":"Generic 1/8 off-road nitro"},"groups":[{"key":"diffs","label":{"pt":"Diferenciais","en":"Diffs"},"fields":[{"key":"diffs_front_cst","label":{"pt":"Diffs front cst","en":"Diffs front cst"},"type":"int","unit":"cSt","min":100,"max":1000000,"canonical":"diffs.front_cst"},{"key":"diffs_center_cst","label":{"pt":"Diffs center cst","en":"Diffs center cst"},"type":"int","unit":"cSt","min":100,"max":1000000,"canonical":"diffs.center_cst"},{"key":"diffs_rear_cst","label":{"pt":"Diffs rear cst","en":"Diffs rear cst"},"type":"int","unit":"cSt","min":100,"max":1000000,"canonical":"diffs.rear_cst"},{"key":"diffs_front_ml","label":{"pt":"Diffs front ml","en":"Diffs front ml"},"type":"number","unit":"ml","min":0,"max":1000,"canonical":"diffs.front_ml"},{"key":"diffs_center_ml","label":{"pt":"Diffs center ml","en":"Diffs center ml"},"type":"number","unit":"ml","min":0,"max":1000,"canonical":"diffs.center_ml"},{"key":"diffs_rear_ml","label":{"pt":"Diffs rear ml","en":"Diffs rear ml"},"type":"number","unit":"ml","min":0,"max":1000,"canonical":"diffs.rear_ml"},{"key":"diffs_fill_notes","label":{"pt":"Diffs fill notes","en":"Diffs fill notes"},"type":"text","max_len":500,"canonical":"diffs.fill_notes"}]},{"key":"shocks","label":{"pt":"Amortecedores","en":"Shocks"},"fields":[{"key":"shocks_front_oil_cst","label":{"pt":"Shocks front oil cst","en":"Shocks front oil cst"},"type":"int","unit":"cSt","min":100,"max":2000,"canonical":"shocks.front.oil_cst"},{"key":"shocks_front_piston_holes","label":{"pt":"Shocks front piston holes","en":"Shocks front piston holes"},"type":"int","min":1,"max":10,"canonical":"shocks.front.piston_holes"},{"key":"shocks_front_piston_diameter_mm","label":{"pt":"Shocks front piston diameter mm","en":"Shocks front piston diameter mm"},"type":"number","unit":"mm","min":0.1,"max":5,"canonical":"shocks.front.piston_diameter_mm"},{"key":"shocks_front_spring_brand","label":{"pt":"Shocks front spring brand","en":"Shocks front spring brand"},"type":"text","max_len":40,"canonical":"shocks.front.spring_brand"},{"key":"shocks_front_spring_color","label":{"pt":"Shocks front spring color","en":"Shocks front spring color"},"type":"text","max_len":40,"canonical":"shocks.front.spring_color"},{"key":"shocks_front_spring_rate_gf_mm","label":{"pt":"Shocks front spring rate gf mm","en":"Shocks front spring rate gf mm"},"type":"number","unit":"gf/mm","min":0,"max":200,"canonical":"shocks.front.spring_rate_gf_mm"},{"key":"shocks_front_limiters_mm","label":{"pt":"Shocks front limiters mm","en":"Shocks front limiters mm"},"type":"number","unit":"mm","min":0,"max":200,"canonical":"shocks.front.limiters_mm"},{"key":"shocks_front_length_mm","label":{"pt":"Shocks front length mm","en":"Shocks front length mm"},"type":"number","unit":"mm","min":0,"max":200,"canonical":"shocks.front.length_mm"},{"key":"shocks_front_tower_position","label":{"pt":"Shocks front tower position","en":"Shocks front tower position"},"type":"text","max_len":40,"canonical":"shocks.front.tower_position"},{"key":"shocks_front_arm_position","label":{"pt":"Shocks front arm position","en":"Shocks front arm position"},"type":"text","max_len":40,"canonical":"shocks.front.arm_position"},{"key":"shocks_front_membrane_type","label":{"pt":"Shocks front membrane type","en":"Shocks front membrane type"},"type":"text","max_len":40,"canonical":"shocks.front.membrane_type"},{"key":"shocks_rear_oil_cst","label":{"pt":"Shocks rear oil cst","en":"Shocks rear oil cst"},"type":"int","unit":"cSt","min":100,"max":2000,"canonical":"shocks.rear.oil_cst"},{"key":"shocks_rear_piston_holes","label":{"pt":"Shocks rear piston holes","en":"Shocks rear piston holes"},"type":"int","min":1,"max":10,"canonical":"shocks.rear.piston_holes"},{"key":"shocks_rear_piston_diameter_mm","label":{"pt":"Shocks rear piston diameter mm","en":"Shocks rear piston diameter mm"},"type":"number","unit":"mm","min":0.1,"max":5,"canonical":"shocks.rear.piston_diameter_mm"},{"key":"shocks_rear_spring_brand","label":{"pt":"Shocks rear spring brand","en":"Shocks rear spring brand"},"type":"text","max_len":40,"canonical":"shocks.rear.spring_brand"},{"key":"shocks_rear_spring_color","label":{"pt":"Shocks rear spring color","en":"Shocks rear spring color"},"type":"text","max_len":40,"canonical":"shocks.rear.spring_color"},{"key":"shocks_rear_spring_rate_gf_mm","label":{"pt":"Shocks rear spring rate gf mm","en":"Shocks rear spring rate gf mm"},"type":"number","unit":"gf/mm","min":0,"max":200,"canonical":"shocks.rear.spring_rate_gf_mm"},{"key":"shocks_rear_limiters_mm","label":{"pt":"Shocks rear limiters mm","en":"Shocks rear limiters mm"},"type":"number","unit":"mm","min":0,"max":200,"canonical":"shocks.rear.limiters_mm"},{"key":"shocks_rear_length_mm","label":{"pt":"Shocks rear length mm","en":"Shocks rear length mm"},"type":"number","unit":"mm","min":0,"max":200,"canonical":"shocks.rear.length_mm"},{"key":"shocks_rear_tower_position","label":{"pt":"Shocks rear tower position","en":"Shocks rear tower position"},"type":"text","max_len":40,"canonical":"shocks.rear.tower_position"},{"key":"shocks_rear_arm_position","label":{"pt":"Shocks rear arm position","en":"Shocks rear arm position"},"type":"text","max_len":40,"canonical":"shocks.rear.arm_position"},{"key":"shocks_rear_membrane_type","label":{"pt":"Shocks rear membrane type","en":"Shocks rear membrane type"},"type":"text","max_len":40,"canonical":"shocks.rear.membrane_type"}]},{"key":"geometry","label":{"pt":"Geometria","en":"Geometry"},"fields":[{"key":"geometry_front_camber_deg","label":{"pt":"Geometry front camber deg","en":"Geometry front camber deg"},"type":"number","unit":"°","min":-5,"max":2,"canonical":"geometry.front_camber_deg"},{"key":"geometry_rear_camber_deg","label":{"pt":"Geometry rear camber deg","en":"Geometry rear camber deg"},"type":"number","unit":"°","min":-5,"max":2,"canonical":"geometry.rear_camber_deg"},{"key":"geometry_front_toe_deg","label":{"pt":"Geometry front toe deg","en":"Geometry front toe deg"},"type":"number","unit":"°","min":-5,"max":5,"canonical":"geometry.front_toe_deg"},{"key":"geometry_rear_toe_deg","label":{"pt":"Geometry rear toe deg","en":"Geometry rear toe deg"},"type":"number","unit":"°","min":-5,"max":5,"canonical":"geometry.rear_toe_deg"},{"key":"geometry_caster_deg","label":{"pt":"Geometry caster deg","en":"Geometry caster deg"},"type":"number","unit":"°","min":0,"max":30,"canonical":"geometry.caster_deg"},{"key":"geometry_ride_height_mm","label":{"pt":"Geometry ride height mm","en":"Geometry ride height mm"},"type":"number","unit":"mm","min":0,"max":100,"canonical":"geometry.ride_height_mm"},{"key":"geometry_front_droop_mm","label":{"pt":"Geometry front droop mm","en":"Geometry front droop mm"},"type":"number","unit":"mm","min":0,"max":50,"canonical":"geometry.front_droop_mm"},{"key":"geometry_rear_droop_mm","label":{"pt":"Geometry rear droop mm","en":"Geometry rear droop mm"},"type":"number","unit":"mm","min":0,"max":50,"canonical":"geometry.rear_droop_mm"},{"key":"geometry_ackermann","label":{"pt":"Geometry ackermann","en":"Geometry ackermann"},"type":"text","max_len":40,"canonical":"geometry.ackermann"},{"key":"geometry_rear_hub_position","label":{"pt":"Geometry rear hub position","en":"Geometry rear hub position"},"type":"text","max_len":40,"canonical":"geometry.rear_hub_position"}]},{"key":"bars","label":{"pt":"Barras","en":"Bars"},"fields":[{"key":"bars_front_mm","label":{"pt":"Bars front mm","en":"Bars front mm"},"type":"number","unit":"mm","min":0,"max":10,"canonical":"bars.front_mm"},{"key":"bars_front_removed","label":{"pt":"Bars front removed","en":"Bars front removed"},"type":"flag","canonical":"bars.front_removed"},{"key":"bars_rear_mm","label":{"pt":"Bars rear mm","en":"Bars rear mm"},"type":"number","unit":"mm","min":0,"max":10,"canonical":"bars.rear_mm"},{"key":"bars_rear_removed","label":{"pt":"Bars rear removed","en":"Bars rear removed"},"type":"flag","canonical":"bars.rear_removed"}]},{"key":"aero","label":{"pt":"Aerodinâmica","en":"Aero"},"fields":[{"key":"aero_wing_model","label":{"pt":"Aero wing model","en":"Aero wing model"},"type":"text","max_len":80,"canonical":"aero.wing_model"},{"key":"aero_wing_angle_deg","label":{"pt":"Aero wing angle deg","en":"Aero wing angle deg"},"type":"number","unit":"°","min":-10,"max":30,"canonical":"aero.wing_angle_deg"},{"key":"aero_gurney_mm","label":{"pt":"Aero gurney mm","en":"Aero gurney mm"},"type":"number","unit":"mm","min":0,"max":20,"canonical":"aero.gurney_mm"},{"key":"aero_body","label":{"pt":"Aero body","en":"Aero body"},"type":"text","max_len":80,"canonical":"aero.body"}]},{"key":"transmission","label":{"pt":"Transmissão","en":"Transmission"},"fields":[{"key":"transmission_clutch_bell_teeth","label":{"pt":"Transmission clutch bell teeth","en":"Transmission clutch bell teeth"},"type":"int","min":8,"max":60,"canonical":"transmission.clutch_bell_teeth"},{"key":"transmission_spur_teeth","label":{"pt":"Transmission spur teeth","en":"Transmission spur teeth"},"type":"int","min":8,"max":60,"canonical":"transmission.spur_teeth"},{"key":"transmission_clutch_shoe_material","label":{"pt":"Transmission clutch shoe material","en":"Transmission clutch shoe material"},"type":"text","max_len":40,"canonical":"transmission.clutch_shoe_material"},{"key":"transmission_clutch_spring","label":{"pt":"Transmission clutch spring","en":"Transmission clutch spring"},"type":"text","max_len":40,"canonical":"transmission.clutch_spring"},{"key":"transmission_clutch_clearance_mm","label":{"pt":"Transmission clutch clearance mm","en":"Transmission clutch clearance mm"},"type":"number","unit":"mm","min":0,"max":10,"canonical":"transmission.clutch_clearance_mm"}]},{"key":"engine","label":{"pt":"Motor","en":"Engine"},"fields":[{"key":"engine_high_needle_turns","label":{"pt":"Engine high needle turns","en":"Engine high needle turns"},"type":"number","min":0,"max":20,"canonical":"engine.high_needle_turns"},{"key":"engine_low_needle_turns","label":{"pt":"Engine low needle turns","en":"Engine low needle turns"},"type":"number","min":0,"max":20,"canonical":"engine.low_needle_turns"},{"key":"engine_glow_plug_brand","label":{"pt":"Engine glow plug brand","en":"Engine glow plug brand"},"type":"text","max_len":80,"canonical":"engine.glow_plug_brand"},{"key":"engine_glow_plug_temp","label":{"pt":"Engine glow plug temp","en":"Engine glow plug temp"},"type":"text","max_len":40,"canonical":"engine.glow_plug_temp"},{"key":"engine_fuel_brand","label":{"pt":"Engine fuel brand","en":"Engine fuel brand"},"type":"text","max_len":80,"canonical":"engine.fuel_brand"},{"key":"engine_fuel_nitro_pct","label":{"pt":"Engine fuel nitro pct","en":"Engine fuel nitro pct"},"type":"number","unit":"%","min":0,"max":50,"canonical":"engine.fuel_nitro_pct"},{"key":"engine_exhaust","label":{"pt":"Engine exhaust","en":"Engine exhaust"},"type":"text","max_len":80,"canonical":"engine.exhaust"},{"key":"engine_manifold","label":{"pt":"Engine manifold","en":"Engine manifold"},"type":"text","max_len":80,"canonical":"engine.manifold"},{"key":"engine_air_filter","label":{"pt":"Engine air filter","en":"Engine air filter"},"type":"text","max_len":80,"canonical":"engine.air_filter"},{"key":"engine_target_head_temp_c","label":{"pt":"Engine target head temp c","en":"Engine target head temp c"},"type":"number","unit":"°C","min":0,"max":200,"canonical":"engine.target_head_temp_c"}]},{"key":"tyres","label":{"pt":"Pneus","en":"Tyres"},"fields":[{"key":"tyres_glue_pressure_kpa","label":{"pt":"Tyres glue pressure kpa","en":"Tyres glue pressure kpa"},"type":"number","unit":"kPa","min":0,"max":500,"canonical":"tyres.glue_pressure_kpa"},{"key":"tyres_prep_additive","label":{"pt":"Tyres prep additive","en":"Tyres prep additive"},"type":"text","max_len":80,"canonical":"tyres.prep_additive"},{"key":"tyres_prep_time_min","label":{"pt":"Tyres prep time min","en":"Tyres prep time min"},"type":"number","unit":"min","min":0,"max":120,"canonical":"tyres.prep_time_min"}]},{"key":"weight","label":{"pt":"Peso","en":"Weight"},"fields":[{"key":"weight_total_g","label":{"pt":"Weight total g","en":"Weight total g"},"type":"number","unit":"g","min":0,"max":10000,"canonical":"weight.total_g"},{"key":"weight_ballast_g","label":{"pt":"Weight ballast g","en":"Weight ballast g"},"type":"number","unit":"g","min":0,"max":10000,"canonical":"weight.ballast_g"},{"key":"weight_ballast_position","label":{"pt":"Weight ballast position","en":"Weight ballast position"},"type":"text","max_len":80,"canonical":"weight.ballast_position"}]},{"key":"radio","label":{"pt":"Rádio","en":"Radio"},"fields":[{"key":"radio_steering_epa_pct","label":{"pt":"Radio steering epa pct","en":"Radio steering epa pct"},"type":"number","unit":"%","min":0,"max":150,"canonical":"radio.steering_epa_pct"},{"key":"radio_steering_expo_pct","label":{"pt":"Radio steering expo pct","en":"Radio steering expo pct"},"type":"number","unit":"%","min":-100,"max":100,"canonical":"radio.steering_expo_pct"},{"key":"radio_steering_dual_rate_pct","label":{"pt":"Radio steering dual rate pct","en":"Radio steering dual rate pct"},"type":"number","unit":"%","min":0,"max":150,"canonical":"radio.steering_dual_rate_pct"},{"key":"radio_throttle_epa_pct","label":{"pt":"Radio throttle epa pct","en":"Radio throttle epa pct"},"type":"number","unit":"%","min":0,"max":150,"canonical":"radio.throttle_epa_pct"},{"key":"radio_throttle_expo_pct","label":{"pt":"Radio throttle expo pct","en":"Radio throttle expo pct"},"type":"number","unit":"%","min":-100,"max":100,"canonical":"radio.throttle_expo_pct"},{"key":"radio_throttle_dual_rate_pct","label":{"pt":"Radio throttle dual rate pct","en":"Radio throttle dual rate pct"},"type":"number","unit":"%","min":0,"max":150,"canonical":"radio.throttle_dual_rate_pct"},{"key":"radio_brake_pct","label":{"pt":"Radio brake pct","en":"Radio brake pct"},"type":"number","unit":"%","min":0,"max":150,"canonical":"radio.brake_pct"}]}]}$tpl$::jsonb);
+
+INSERT INTO setup.sheet_template (id, team_id, slug, make, model, scale, powertrain, name, source_url, current_version)
+VALUES ('01a19e9a-59f5-749a-a5b7-608d6f308fef', NULL, 'mugen-mbx8', 'Mugen', 'MBX8', '1/8', 'nitro',
+        'Mugen MBX8 — ficha Ver. 1801E', NULL, 1)
+ON CONFLICT (id) DO UPDATE
+  SET current_version = EXCLUDED.current_version, name = EXCLUDED.name, source_url = EXCLUDED.source_url
+  WHERE setup.sheet_template.current_version < EXCLUDED.current_version;
+INSERT INTO setup.sheet_template_version (template_id, version, definition)
+VALUES ('01a19e9a-59f5-749a-a5b7-608d6f308fef', 1, $tpl${"format":1,"id":"01a19e9a-59f5-749a-a5b7-608d6f308fef","slug":"mugen-mbx8","version":1,"make":"Mugen","model":"MBX8","sheet_revision":"Ver. 1801E","scale":"1/8","powertrain":"nitro","name":{"pt":"Mugen MBX8 — ficha Ver. 1801E","en":"Mugen MBX8 — sheet Ver. 1801E"},"groups":[{"key":"track_conditions","label":{"pt":"Condições da pista","en":"Track conditions"},"fields":[{"key":"track_size","label":{"pt":"Tamanho","en":"Size"},"type":"multi","options":["Open","Med.","Tight"]},{"key":"track_traction","label":{"pt":"Tração","en":"Traction"},"type":"multi","options":["High","Med.","Low"]},{"key":"track_surface","label":{"pt":"Superfície","en":"Surface"},"type":"multi","options":["Smooth","Med.","Bumpy"]}]},{"key":"front_suspension","label":{"pt":"Suspensão da frente","en":"Front suspension"},"fields":[{"key":"front_rebound_stop","label":{"pt":"Rebound stop (frente)","en":"Front rebound stop"},"type":"number","unit":"mm","min":0,"max":300},{"key":"front_ride_height","label":{"pt":"Altura ao solo (frente)","en":"Front ride height"},"type":"number","unit":"mm","min":0,"max":100,"diagram":{"kind":"length","measure":"ride_height"}},{"key":"front_toe_angle","label":{"pt":"Toe angle (frente)","en":"Front toe angle"},"type":"number","unit":"mm","min":0,"max":100},{"key":"front_kingpin_ball_spacer_upper","label":{"pt":"Kingpin ball spacer, cima","en":"Kingpin ball spacer, upper"},"type":"number","unit":"mm","min":0,"max":10},{"key":"front_kingpin_ball_spacer_lower","label":{"pt":"Kingpin ball spacer, baixo","en":"Kingpin ball spacer, lower"},"type":"number","unit":"mm","min":0,"max":10},{"key":"front_parts_upper_a","label":{"pt":"Peças da frente, cima (coluna da esquerda)","en":"Front parts, upper (left column)"},"type":"multi","options":["E0160","E0159","E2218","E2146","E0239"]},{"key":"front_parts_upper_b","label":{"pt":"Peças da frente, cima (coluna da direita)","en":"Front parts, upper (right column)"},"type":"multi","options":["E2123 (Steel)","E2124 (Steel)","E0220 (CVD)","E2147 (1.5)","E0240 (1mm)","E0241 (2mm)"]},{"key":"front_parts_lower_a","label":{"pt":"Peças da frente, baixo (coluna da esquerda)","en":"Front parts, lower (left column)"},"type":"multi","options":["E0160","E0159"]},{"key":"front_parts_lower_b","label":{"pt":"Peças da frente, baixo (coluna da direita)","en":"Front parts, lower (right column)"},"type":"multi","options":["E2123 (Steel)","E2124 (Steel)"]},{"key":"front_lower_arm_plate","label":{"pt":"Lower arm plate (frente)","en":"Front lower arm plate"},"type":"choice","options":["E2144A,B","E2154 (CFRP 1mm)","E2155 (CFRP 1.2mm)"]},{"key":"front_anti_roll_bar","label":{"pt":"Anti-roll bar (frente)","en":"Front anti-roll bar"},"type":"number","unit":"mm","min":0,"max":10},{"key":"front_upper_arm_spacer","label":{"pt":"Upper arm spacer (frente)","en":"Front upper arm spacer"},"type":"number","unit":"mm","min":0,"max":10},{"key":"front_lower_arm_spacer","label":{"pt":"Lower arm spacer (frente)","en":"Front lower arm spacer"},"type":"number","unit":"mm","min":0,"max":10},{"key":"front_upper_arm_position_a","label":{"pt":"Upper arm position (frente), linha de cima","en":"Front upper arm position, top row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"front_upper_arm_position_b","label":{"pt":"Upper arm position (frente), linha de baixo","en":"Front upper arm position, bottom row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"front_lower_arm_position_a","label":{"pt":"Lower arm position, kick up (frente), linha de cima","en":"Front lower arm position (kick up), top row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"front_lower_arm_position_b","label":{"pt":"Lower arm position, kick up (frente), linha de baixo","en":"Front lower arm position (kick up), bottom row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}}]},{"key":"front_shocks","label":{"pt":"Amortecedores da frente","en":"Front shocks"},"fields":[{"key":"front_shock_piston","label":{"pt":"Pistão","en":"Piston"},"type":"text","max_len":40},{"key":"front_shock_oil","label":{"pt":"Óleo","en":"Oil"},"type":"text","max_len":40},{"key":"front_shock_spring","label":{"pt":"Mola","en":"Spring"},"type":"text","max_len":40},{"key":"front_shock_position_tower","label":{"pt":"Posição na torre","en":"Shock position (tower)"},"type":"choice","options":["1","2","3","4","5"],"diagram":{"kind":"hole_row","count":5,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"front_shock_position_arm","label":{"pt":"Posição no braço","en":"Shock position (arm)"},"type":"choice","options":["1","2"],"diagram":{"kind":"hole_row","count":2},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"front_shock_pivot_ball","label":{"pt":"Pivot ball position","en":"Pivot ball position"},"type":"choice","options":["Front","Rear"]},{"key":"front_damper_stay","label":{"pt":"Damper stay","en":"Damper stay"},"type":"choice","options":["E2562 (Aluminum)","E2565 (CFRP)"]}]},{"key":"steering","label":{"pt":"Direção e frente do chassis","en":"Steering and front plate"},"fields":[{"key":"steering_ackermann","label":{"pt":"Steering ackermann","en":"Steering ackermann"},"type":"choice","options":["1","2","3","4","5"],"diagram":{"kind":"hole_row","count":5,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"front_upper_plate","label":{"pt":"Front upper plate","en":"Front upper plate"},"type":"choice","options":["E2148D","E2158 (CFRP)"]},{"key":"servo_saver_arm","label":{"pt":"Servo saver arm","en":"Servo saver arm"},"type":"choice","options":["E2301A","E2310 (Aluminum)"]}]},{"key":"rear_suspension","label":{"pt":"Suspensão de trás","en":"Rear suspension"},"fields":[{"key":"rear_rebound_stop","label":{"pt":"Rebound stop (trás)","en":"Rear rebound stop"},"type":"number","unit":"mm","min":0,"max":300},{"key":"rear_ride_height","label":{"pt":"Altura ao solo (trás)","en":"Rear ride height"},"type":"number","unit":"mm","min":0,"max":100,"diagram":{"kind":"length","measure":"ride_height"}},{"key":"rear_camber_angle","label":{"pt":"Camber angle (trás)","en":"Rear camber angle"},"type":"number","unit":"mm","min":0,"max":100},{"key":"rear_hub_part","label":{"pt":"Peça do hub (trás)","en":"Rear hub part"},"type":"choice","options":["E2131","E2134 (Aluminum)"]},{"key":"rear_parts_a","label":{"pt":"Peças de trás (coluna da esquerda)","en":"Rear parts (left column)"},"type":"multi","options":["E0239","E2219"]},{"key":"rear_parts_b","label":{"pt":"Peças de trás (coluna da direita)","en":"Rear parts (right column)"},"type":"multi","options":["E0240 (1mm)","E0241 (2mm)","E0220 (CVD)"]},{"key":"rear_lower_arm_plate","label":{"pt":"Lower arm plate (trás)","en":"Rear lower arm plate"},"type":"choice","options":["E2145A,B","E2156 (CFRP 1mm)","E2157 (CFRP 1.2mm)"]},{"key":"rear_anti_roll_bar","label":{"pt":"Anti-roll bar (trás)","en":"Rear anti-roll bar"},"type":"number","unit":"mm","min":0,"max":10},{"key":"rear_lower_arm_spacer","label":{"pt":"Lower arm spacer (trás)","en":"Rear lower arm spacer"},"type":"number","unit":"mm","min":0,"max":10},{"key":"rear_upright_spacer","label":{"pt":"Upright spacer (trás)","en":"Rear upright spacer"},"type":"number","unit":"mm","min":0,"max":10},{"key":"rear_hub_position_row","label":{"pt":"Posição do hub (trás), fila horizontal","en":"Rear hub position, horizontal row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_plate_position","label":{"pt":"Posição da placa (trás), fila vertical","en":"Rear plate position, vertical row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_upper_arm_position_a","label":{"pt":"Upper arm position (trás), coluna da esquerda","en":"Rear upper arm position, left column"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_upper_arm_position_b","label":{"pt":"Upper arm position (trás), coluna da direita","en":"Rear upper arm position, right column"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_lower_arm_position_anti_squat","label":{"pt":"Lower arm position, anti-squat (trás)","en":"Rear lower arm position (anti-squat)"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_lower_arm_position_toe_a","label":{"pt":"Lower arm position, toe angle (trás), linha de cima","en":"Rear lower arm position (toe angle), top row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_lower_arm_position_toe_b","label":{"pt":"Lower arm position, toe angle (trás), linha de baixo","en":"Rear lower arm position (toe angle), bottom row"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}}]},{"key":"rear_shocks","label":{"pt":"Amortecedores de trás","en":"Rear shocks"},"fields":[{"key":"rear_shock_piston","label":{"pt":"Pistão","en":"Piston"},"type":"text","max_len":40},{"key":"rear_shock_oil","label":{"pt":"Óleo","en":"Oil"},"type":"text","max_len":40},{"key":"rear_shock_spring","label":{"pt":"Mola","en":"Spring"},"type":"text","max_len":40},{"key":"rear_shock_position_tower","label":{"pt":"Posição na torre","en":"Shock position (tower)"},"type":"choice","options":["1","2","3","4","5"],"diagram":{"kind":"hole_row","count":5,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_shock_position_arm","label":{"pt":"Posição no braço","en":"Shock position (arm)"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"rear_shock_pivot_ball","label":{"pt":"Pivot ball position","en":"Pivot ball position"},"type":"choice","options":["Front","Rear"]},{"key":"rear_damper_stay","label":{"pt":"Damper stay","en":"Damper stay"},"type":"choice","options":["E2563 (Aluminum)","E2566 (CFRP)"]}]},{"key":"center_shaft_rods","label":{"pt":"Eixo central e tensores","en":"Center shaft and tension rods"},"fields":[{"key":"center_shaft","label":{"pt":"Center shaft","en":"Center shaft"},"type":"choice","options":["E0223, E0259","E2228, E2229"]},{"key":"tension_rod_front","label":{"pt":"Tension rod (frente)","en":"Tension rod, front"},"type":"choice","options":["E2107A (Long)","E2107B (Short)"]},{"key":"tension_rod_rear","label":{"pt":"Tension rod (trás)","en":"Tension rod, rear"},"type":"choice","options":["E2148C","E0803 (Rubber)"]}]},{"key":"weight","label":{"pt":"Peso","en":"Weight"},"fields":[{"key":"weight_a_g","label":{"pt":"Peso, posição 1","en":"Weight, position 1"},"type":"number","unit":"g","min":0,"max":500},{"key":"weight_b_g","label":{"pt":"Peso, posição 2","en":"Weight, position 2"},"type":"number","unit":"g","min":0,"max":500}]},{"key":"engine","label":{"pt":"Motor","en":"Engine"},"fields":[{"key":"engine_type","label":{"pt":"Tipo","en":"Type"},"type":"text","max_len":60},{"key":"engine_plug","label":{"pt":"Vela","en":"Plug"},"type":"text","max_len":60},{"key":"engine_reducer","label":{"pt":"Reducer","en":"Reducer"},"type":"number","min":0,"max":50},{"key":"engine_muffler","label":{"pt":"Escape","en":"Muffler"},"type":"text","max_len":60},{"key":"engine_fuel","label":{"pt":"Combustível","en":"Fuel"},"type":"text","max_len":60},{"key":"engine_gasket","label":{"pt":"Junta","en":"Gasket"},"type":"text","max_len":60},{"key":"engine_mount","label":{"pt":"Engine mount","en":"Engine mount"},"type":"choice","options":["E0701 (Standard)","Other"]},{"key":"engine_mount_other","label":{"pt":"Engine mount, outro","en":"Engine mount, other"},"type":"text","max_len":60}]},{"key":"diff_gear","label":{"pt":"Diferenciais e relações","en":"Diff. gear"},"table":{"columns":[{"pt":"Relação","en":"Gear"},{"pt":"Óleo","en":"Oil"}],"rows":[{"label":{"pt":"Frente","en":"Front"},"cells":["diff_front_gear","diff_front_oil"]},{"label":{"pt":"Trás","en":"Rear"},"cells":["diff_rear_gear","diff_rear_oil"]},{"label":{"pt":"Centro","en":"Center"},"cells":["diff_center_gear","diff_center_oil"]}]},"fields":[{"key":"diff_front_gear","label":{"pt":"Relação da frente","en":"Front gear"},"type":"choice","options":["44/13T","42/12T"]},{"key":"diff_front_oil","label":{"pt":"Óleo da frente","en":"Front oil"},"type":"int","unit":"cSt","min":100,"max":1000000,"canonical":"diffs.front_cst"},{"key":"diff_rear_gear","label":{"pt":"Relação de trás","en":"Rear gear"},"type":"choice","options":["44/13T","42/12T"]},{"key":"diff_rear_oil","label":{"pt":"Óleo de trás","en":"Rear oil"},"type":"int","unit":"cSt","min":100,"max":1000000,"canonical":"diffs.rear_cst"},{"key":"diff_center_gear","label":{"pt":"Relação do centro","en":"Center gear"},"type":"choice","options":["44T","46T","47T","48T"]},{"key":"diff_center_oil","label":{"pt":"Óleo do centro","en":"Center oil"},"type":"int","unit":"cSt","min":100,"max":1000000,"canonical":"diffs.center_cst"}]},{"key":"clutch","label":{"pt":"Embraiagem","en":"Clutch"},"fields":[{"key":"clutch_type","label":{"pt":"Tipo","en":"Type"},"type":"choice","options":["3P","4P"]},{"key":"clutch_bell","label":{"pt":"Clutch bell","en":"Clutch bell"},"type":"choice","options":["13T","14T"]},{"key":"clutch_shoes","label":{"pt":"Clutch shoes","en":"Clutch shoes"},"type":"multi","options":["C0754","E0704","E0710","E2706"]},{"key":"clutch_spring","label":{"pt":"Clutch spring","en":"Clutch spring"},"type":"choice","options":["0.8","0.9","0.95","1.0","1.05","1.1"]}]},{"key":"tires","label":{"pt":"Pneus","en":"Tires"},"table":{"columns":[{"pt":"Frente","en":"Front"},{"pt":"Trás","en":"Rear"}],"rows":[{"label":{"pt":"Tipo","en":"Type"},"cells":["tire_front_type","tire_rear_type"]},{"label":{"pt":"Composto","en":"Compound"},"cells":["tire_front_compound","tire_rear_compound"]},{"label":{"pt":"Inserts","en":"Inserts"},"cells":["tire_front_inserts","tire_rear_inserts"]},{"label":{"pt":"Jante","en":"Wheel"},"cells":["tire_front_wheel","tire_rear_wheel"]}]},"fields":[{"key":"tire_front_type","label":{"pt":"Tipo (frente)","en":"Front type"},"type":"text","max_len":60},{"key":"tire_rear_type","label":{"pt":"Tipo (trás)","en":"Rear type"},"type":"text","max_len":60},{"key":"tire_front_compound","label":{"pt":"Composto (frente)","en":"Front compound"},"type":"text","max_len":60},{"key":"tire_rear_compound","label":{"pt":"Composto (trás)","en":"Rear compound"},"type":"text","max_len":60},{"key":"tire_front_inserts","label":{"pt":"Inserts (frente)","en":"Front inserts"},"type":"text","max_len":60},{"key":"tire_rear_inserts","label":{"pt":"Inserts (trás)","en":"Rear inserts"},"type":"text","max_len":60},{"key":"tire_front_wheel","label":{"pt":"Jante (frente)","en":"Front wheel"},"type":"text","max_len":60},{"key":"tire_rear_wheel","label":{"pt":"Jante (trás)","en":"Rear wheel"},"type":"text","max_len":60}]},{"key":"body_wing","label":{"pt":"Carroçaria e asa","en":"Body/Wing"},"fields":[{"key":"body","label":{"pt":"Carroçaria","en":"Body"},"type":"text","max_len":60},{"key":"wing","label":{"pt":"Asa","en":"Wing"},"type":"text","max_len":60},{"key":"wing_position","label":{"pt":"Posição da asa (frente-trás)","en":"Wing position (front-rear)"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}},{"key":"wing_mount_hole","label":{"pt":"Furo de fixação da asa","en":"Wing mount hole"},"type":"choice","options":["1","2","3"],"diagram":{"kind":"hole_row","count":3,"orientation":"vertical"},"help":{"pt":"Posições numeradas como na folha: da esquerda para a direita, ou de cima para baixo.","en":"Positions numbered as on the sheet: left to right, or top to bottom."}}]},{"key":"comments","label":{"pt":"Comentários","en":"Comments"},"fields":[{"key":"comments","label":{"pt":"Comentários","en":"Comments"},"type":"text","max_len":500}]}]}$tpl$::jsonb);
+-- END catálogo de modelos
 
 -- =============================================================================
 -- TimescaleDB: hypertable e retenção da telemetria

@@ -23,6 +23,7 @@ import (
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/db"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/idempotency"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/setup"
 )
 
 type fakeAuthz struct {
@@ -73,6 +74,7 @@ func newHarness(t *testing.T) *harness {
 	log := slog.New(slog.DiscardHandler)
 	svc, err := app.New(app.Deps{
 		DB: db.New(pool), Store: store.NewRepo(), Authz: az, Clock: clock.Real(), Log: log,
+		Templates:   setup.NewTemplateDirectory(),
 		Idempotency: idempotency.NewStore(),
 	})
 	require.NoError(t, err)

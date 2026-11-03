@@ -73,6 +73,14 @@ type RoleGated interface {
 	CanWrite(role string) bool
 }
 
+// AtomicPatch is implemented by an Applier whose patch only makes sense whole: when any field
+// of a stale patch clashes with a newer operation, none of its fields is applied (the others
+// would be meaningless alone, and applying them would be rejected as invalid). A setup version
+// is the case: its `data` is the version, and the summary describes that data.
+type AtomicPatch interface {
+	AtomicPatch() bool
+}
+
 // Registry maps entity names to their Applier. An entity that is not registered is not
 // syncable: this is the allow-list.
 type Registry map[string]Applier

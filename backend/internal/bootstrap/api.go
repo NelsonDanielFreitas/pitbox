@@ -116,6 +116,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 
 	garageModule, err := garage.New(garage.Deps{
 		DB: db.New(authn.pool), Authz: authzClient, Clock: clock.Real(), Log: logger,
+		Templates: setup.NewTemplateDirectory(),
 	})
 	if err != nil {
 		flushTelemetry(ctx, tel, logger)

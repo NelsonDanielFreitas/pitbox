@@ -4,6 +4,7 @@
 
 import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
@@ -12,7 +13,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file pitbox/setup/v1/setup.proto.
  */
 export const file_pitbox_setup_v1_setup: GenFile = /*@__PURE__*/
-  fileDesc("ChtwaXRib3gvc2V0dXAvdjEvc2V0dXAucHJvdG8SD3BpdGJveC5zZXR1cC52MSLZAQoFU2V0dXASCgoCaWQYASABKAkSDgoGY2FyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSFwoPY3VycmVudF92ZXJzaW9uGAQgASgFEhIKBW5vdGVzGAUgASgJSACIAQESLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyc2lvbhgIIAEoBUIICgZfbm90ZXMilgIKD1NldHVwVmVyc2lvblJlZhIQCghzZXR1cF9pZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFEhYKDnNjaGVtYV92ZXJzaW9uGAMgASgFEh4KEWJhc2VkX29uX3NldHVwX2lkGAQgASgJSACIAQESHQoQYmFzZWRfb25fdmVyc2lvbhgFIAEoBUgBiAEBEhsKDmNoYW5nZV9zdW1tYXJ5GAYgASgJSAKIAQESLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCFAoSX2Jhc2VkX29uX3NldHVwX2lkQhMKEV9iYXNlZF9vbl92ZXJzaW9uQhEKD19jaGFuZ2Vfc3VtbWFyeSJkCgxTZXR1cFZlcnNpb24SLQoDcmVmGAEgASgLMiAucGl0Ym94LnNldHVwLnYxLlNldHVwVmVyc2lvblJlZhIlCgRkYXRhGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKdAQoPU2V0dXBEaWZmZXJlbmNlEgwKBHBhdGgYASABKAkSJgoGYmVmb3JlGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEiUKBWFmdGVyGAMgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEi0KBGtpbmQYBCABKA4yHy5waXRib3guc2V0dXAudjEuRGlmZmVyZW5jZUtpbmQi7AIKCVNoYXJlTGluaxIKCgJpZBgBIAEoCRIQCghzZXR1cF9pZBgCIAEoCRIbCg5waW5uZWRfdmVyc2lvbhgDIAEoBUgAiAEBEjMKCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESMwoKcmV2b2tlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIAogBARI1CgxsYXN0X3VzZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAOIAQESEQoJdXNlX2NvdW50GAcgASgFEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQhEKD19waW5uZWRfdmVyc2lvbkINCgtfZXhwaXJlc19hdEINCgtfcmV2b2tlZF9hdEIPCg1fbGFzdF91c2VkX2F0IlMKElNoYXJlTGlua1dpdGhUb2tlbhIuCgpzaGFyZV9saW5rGAEgASgLMhoucGl0Ym94LnNldHVwLnYxLlNoYXJlTGluaxINCgV0b2tlbhgCIAEoCSIzChJTZXR1cERhdGFWaW9sYXRpb24SDAoEcGF0aBgBIAEoCRIPCgdydWxlX2lkGAIgASgJItMBCgtTaGFyZWRTZXR1cBIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFgoOc2NoZW1hX3ZlcnNpb24YAyABKAUSJQoEZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGwoOY2hhbmdlX3N1bW1hcnkYBSABKAlIAIgBARI2ChJ2ZXJzaW9uX2NyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQhEKD19jaGFuZ2Vfc3VtbWFyeSqGAQoORGlmZmVyZW5jZUtpbmQSHwobRElGRkVSRU5DRV9LSU5EX1VOU1BFQ0lGSUVEEAASGQoVRElGRkVSRU5DRV9LSU5EX0FEREVEEAESGwoXRElGRkVSRU5DRV9LSU5EX1JFTU9WRUQQAhIbChdESUZGRVJFTkNFX0tJTkRfQ0hBTkdFRBADKoYBCg9TaGFyZUxpbmtFeHBpcnkSIQodU0hBUkVfTElOS19FWFBJUllfVU5TUEVDSUZJRUQQABIZChVTSEFSRV9MSU5LX0VYUElSWV8yNEgQARIYChRTSEFSRV9MSU5LX0VYUElSWV83RBACEhsKF1NIQVJFX0xJTktfRVhQSVJZX05FVkVSEANCygEKE2NvbS5waXRib3guc2V0dXAudjFCClNldHVwUHJvdG9QAVpJZ2l0aHViLmNvbS9OZWxzb25EYW5pZWxGcmVpdGFzL3BpdGJveC9iYWNrZW5kL2dlbi9waXRib3gvc2V0dXAvdjE7c2V0dXB2MaICA1BTWKoCD1BpdGJveC5TZXR1cC5WMcoCD1BpdGJveFxTZXR1cFxWMeICG1BpdGJveFxTZXR1cFxWMVxHUEJNZXRhZGF0YeoCEVBpdGJveDo6U2V0dXA6OlYxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
+  fileDesc("ChtwaXRib3gvc2V0dXAvdjEvc2V0dXAucHJvdG8SD3BpdGJveC5zZXR1cC52MSLZAQoFU2V0dXASCgoCaWQYASABKAkSDgoGY2FyX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSFwoPY3VycmVudF92ZXJzaW9uGAQgASgFEhIKBW5vdGVzGAUgASgJSACIAQESLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyc2lvbhgIIAEoBUIICgZfbm90ZXMilgIKD1NldHVwVmVyc2lvblJlZhIQCghzZXR1cF9pZBgBIAEoCRIPCgd2ZXJzaW9uGAIgASgFEhYKDnNjaGVtYV92ZXJzaW9uGAMgASgFEh4KEWJhc2VkX29uX3NldHVwX2lkGAQgASgJSACIAQESHQoQYmFzZWRfb25fdmVyc2lvbhgFIAEoBUgBiAEBEhsKDmNoYW5nZV9zdW1tYXJ5GAYgASgJSAKIAQESLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCFAoSX2Jhc2VkX29uX3NldHVwX2lkQhMKEV9iYXNlZF9vbl92ZXJzaW9uQhEKD19jaGFuZ2Vfc3VtbWFyeSJkCgxTZXR1cFZlcnNpb24SLQoDcmVmGAEgASgLMiAucGl0Ym94LnNldHVwLnYxLlNldHVwVmVyc2lvblJlZhIlCgRkYXRhGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCKdAQoPU2V0dXBEaWZmZXJlbmNlEgwKBHBhdGgYASABKAkSJgoGYmVmb3JlGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEiUKBWFmdGVyGAMgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlEi0KBGtpbmQYBCABKA4yHy5waXRib3guc2V0dXAudjEuRGlmZmVyZW5jZUtpbmQi7AIKCVNoYXJlTGluaxIKCgJpZBgBIAEoCRIQCghzZXR1cF9pZBgCIAEoCRIbCg5waW5uZWRfdmVyc2lvbhgDIAEoBUgAiAEBEjMKCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESMwoKcmV2b2tlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIAogBARI1CgxsYXN0X3VzZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAOIAQESEQoJdXNlX2NvdW50GAcgASgFEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQhEKD19waW5uZWRfdmVyc2lvbkINCgtfZXhwaXJlc19hdEINCgtfcmV2b2tlZF9hdEIPCg1fbGFzdF91c2VkX2F0IlMKElNoYXJlTGlua1dpdGhUb2tlbhIuCgpzaGFyZV9saW5rGAEgASgLMhoucGl0Ym94LnNldHVwLnYxLlNoYXJlTGluaxINCgV0b2tlbhgCIAEoCSIzChJTZXR1cERhdGFWaW9sYXRpb24SDAoEcGF0aBgBIAEoCRIPCgdydWxlX2lkGAIgASgJIokCCgtTaGFyZWRTZXR1cBIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFgoOc2NoZW1hX3ZlcnNpb24YAyABKAUSJQoEZGF0YRgEIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGwoOY2hhbmdlX3N1bW1hcnkYBSABKAlIAIgBARI2ChJ2ZXJzaW9uX2NyZWF0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKE3RlbXBsYXRlX2RlZmluaXRpb24YByABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0QhEKD19jaGFuZ2Vfc3VtbWFyeSLmAgoNU2hlZXRUZW1wbGF0ZRIKCgJpZBgBIAEoCRIMCgRzbHVnGAIgASgJEgwKBG1ha2UYAyABKAkSDQoFbW9kZWwYBCABKAkSDQoFc2NhbGUYBSABKAkSEgoKcG93ZXJ0cmFpbhgGIAEoCRIMCgRuYW1lGAcgASgJEhcKCnNvdXJjZV91cmwYCCABKAlIAIgBARIXCg9jdXJyZW50X3ZlcnNpb24YCSABKAUSEQoJaXNfZ2xvYmFsGAogASgIEhgKC2Jhc2VkX29uX2lkGAsgASgJSAGIAQESLgoKY3JlYXRlZF9hdBgMIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyc2lvbhgOIAEoBUINCgtfc291cmNlX3VybEIOCgxfYmFzZWRfb25faWQiaQoUU2hlZXRUZW1wbGF0ZVZlcnNpb24SEwoLdGVtcGxhdGVfaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoBRIrCgpkZWZpbml0aW9uGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJTChBTaGVldFRlbXBsYXRlUmVmEhQKAmlkGAEgASgJQgi6SAVyA7ABARIdCgd2ZXJzaW9uGAIgASgFQge6SAQaAigBSACIAQFCCgoIX3ZlcnNpb24qhgEKDkRpZmZlcmVuY2VLaW5kEh8KG0RJRkZFUkVOQ0VfS0lORF9VTlNQRUNJRklFRBAAEhkKFURJRkZFUkVOQ0VfS0lORF9BRERFRBABEhsKF0RJRkZFUkVOQ0VfS0lORF9SRU1PVkVEEAISGwoXRElGRkVSRU5DRV9LSU5EX0NIQU5HRUQQAyqGAQoPU2hhcmVMaW5rRXhwaXJ5EiEKHVNIQVJFX0xJTktfRVhQSVJZX1VOU1BFQ0lGSUVEEAASGQoVU0hBUkVfTElOS19FWFBJUllfMjRIEAESGAoUU0hBUkVfTElOS19FWFBJUllfN0QQAhIbChdTSEFSRV9MSU5LX0VYUElSWV9ORVZFUhADQsoBChNjb20ucGl0Ym94LnNldHVwLnYxQgpTZXR1cFByb3RvUAFaSWdpdGh1Yi5jb20vTmVsc29uRGFuaWVsRnJlaXRhcy9waXRib3gvYmFja2VuZC9nZW4vcGl0Ym94L3NldHVwL3YxO3NldHVwdjGiAgNQU1iqAg9QaXRib3guU2V0dXAuVjHKAg9QaXRib3hcU2V0dXBcVjHiAhtQaXRib3hcU2V0dXBcVjFcR1BCTWV0YWRhdGHqAhFQaXRib3g6OlNldHVwOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * Setup is the live identity of a versioned setup sheet.
@@ -316,6 +317,14 @@ export type SharedSetup = Message<"pitbox.setup.v1.SharedSetup"> & {
    * @generated from field: google.protobuf.Timestamp version_created_at = 6;
    */
   versionCreatedAt?: Timestamp | undefined;
+
+  /**
+   * Definition of the sheet template version this version was made with. Set only for
+   * schema_version 2, and only that one version: never another template of the team.
+   *
+   * @generated from field: google.protobuf.Struct template_definition = 7;
+   */
+  templateDefinition?: JsonObject | undefined;
 };
 
 /**
@@ -324,6 +333,145 @@ export type SharedSetup = Message<"pitbox.setup.v1.SharedSetup"> & {
  */
 export const SharedSetupSchema: GenMessage<SharedSetup> = /*@__PURE__*/
   messageDesc(file_pitbox_setup_v1_setup, 7);
+
+/**
+ * SheetTemplate is the identity of a sheet template (ADR 0030). team_id NULL in the
+ * database is the global catalogue; is_global tells the client without exposing team ids.
+ *
+ * @generated from message pitbox.setup.v1.SheetTemplate
+ */
+export type SheetTemplate = Message<"pitbox.setup.v1.SheetTemplate"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string slug = 2;
+   */
+  slug: string;
+
+  /**
+   * @generated from field: string make = 3;
+   */
+  make: string;
+
+  /**
+   * @generated from field: string model = 4;
+   */
+  model: string;
+
+  /**
+   * @generated from field: string scale = 5;
+   */
+  scale: string;
+
+  /**
+   * @generated from field: string powertrain = 6;
+   */
+  powertrain: string;
+
+  /**
+   * @generated from field: string name = 7;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional string source_url = 8;
+   */
+  sourceUrl?: string | undefined;
+
+  /**
+   * @generated from field: int32 current_version = 9;
+   */
+  currentVersion: number;
+
+  /**
+   * @generated from field: bool is_global = 10;
+   */
+  isGlobal: boolean;
+
+  /**
+   * @generated from field: optional string based_on_id = 11;
+   */
+  basedOnId?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 12;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 13;
+   */
+  updatedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int32 version = 14;
+   */
+  version: number;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.SheetTemplate.
+ * Use `create(SheetTemplateSchema)` to create a new message.
+ */
+export const SheetTemplateSchema: GenMessage<SheetTemplate> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup, 8);
+
+/**
+ * SheetTemplateVersion is one immutable version of a template. The definition is the
+ * reviewed JSON (docs/adr/0030); the client treats it as data, never as markup.
+ *
+ * @generated from message pitbox.setup.v1.SheetTemplateVersion
+ */
+export type SheetTemplateVersion = Message<"pitbox.setup.v1.SheetTemplateVersion"> & {
+  /**
+   * @generated from field: string template_id = 1;
+   */
+  templateId: string;
+
+  /**
+   * @generated from field: int32 version = 2;
+   */
+  version: number;
+
+  /**
+   * @generated from field: google.protobuf.Struct definition = 3;
+   */
+  definition?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.SheetTemplateVersion.
+ * Use `create(SheetTemplateVersionSchema)` to create a new message.
+ */
+export const SheetTemplateVersionSchema: GenMessage<SheetTemplateVersion> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup, 9);
+
+/**
+ * SheetTemplateRef names a template version. Without version, the current one.
+ *
+ * @generated from message pitbox.setup.v1.SheetTemplateRef
+ */
+export type SheetTemplateRef = Message<"pitbox.setup.v1.SheetTemplateRef"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: optional int32 version = 2;
+   */
+  version?: number | undefined;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.SheetTemplateRef.
+ * Use `create(SheetTemplateRefSchema)` to create a new message.
+ */
+export const SheetTemplateRefSchema: GenMessage<SheetTemplateRef> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup, 10);
 
 /**
  * DifferenceKind says how a field changed between two versions.

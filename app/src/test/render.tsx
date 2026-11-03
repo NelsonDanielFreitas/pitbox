@@ -28,9 +28,11 @@ import type { MembersRepository } from "@/features/teams/data/members-repository
 import type { TeamsRepository } from "@/features/teams/data/teams-repository";
 import type { Team } from "@/features/teams/domain/team";
 import type { SetupRepository } from "@/features/setups/data/setup-repository";
+import type { TemplateRepository } from "@/features/setups/data/template-repository";
 
 import { emptyGarageRepository } from "./garage";
 import { emptySetupRepository } from "./setups";
+import { emptyTemplateRepository } from "./templates";
 
 export function renderWithQuery(ui: ReactElement) {
   const queryClient = new QueryClient({
@@ -47,6 +49,7 @@ export function renderApp({
   membersRepository: membersRepositoryOverride,
   garageRepository,
   setupRepository,
+  templateRepository,
 }: {
   initialPath?: string;
   teams?: Team[];
@@ -55,6 +58,7 @@ export function renderApp({
   membersRepository?: MembersRepository;
   garageRepository?: GarageRepository;
   setupRepository?: SetupRepository;
+  templateRepository?: TemplateRepository;
 } = {}) {
   vi.stubGlobal(
     "fetch",
@@ -98,6 +102,7 @@ export function renderApp({
       membersRepository,
       garageRepository: garageRepository ?? emptyGarageRepository(),
       setupRepository: setupRepository ?? emptySetupRepository(),
+      templateRepository: templateRepository ?? emptyTemplateRepository(),
     },
   });
   const view = render(

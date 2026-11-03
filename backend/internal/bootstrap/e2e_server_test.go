@@ -65,7 +65,7 @@ type e2eState struct {
 // the outside. They return metadata and identifiers, never tokens, e-mails or keys.
 var e2eQueries = map[string]string{
 	"setups":     `SELECT coalesce(json_agg(t ORDER BY t.created_at), '[]') FROM (SELECT id, team_id, name, created_at FROM setup.setup) t`,
-	"versions":   `SELECT coalesce(json_agg(t ORDER BY t.setup_id, t.version), '[]') FROM (SELECT setup_id, version, created_by FROM setup.setup_version) t`,
+	"versions":   `SELECT coalesce(json_agg(t ORDER BY t.setup_id, t.version), '[]') FROM (SELECT setup_id, version, created_by, schema_version, data FROM setup.setup_version) t`,
 	"feedback":   `SELECT coalesce(json_agg(t ORDER BY t.created_at), '[]') FROM (SELECT id, setup_id, version, author_id, created_at FROM setup.setup_feedback) t`,
 	"cars":       `SELECT coalesce(json_agg(t ORDER BY t.created_at), '[]') FROM (SELECT id, team_id, nickname, created_at FROM garage.car) t`,
 	"operations": `SELECT coalesce(json_agg(t ORDER BY t.received_at), '[]') FROM (SELECT op_id, entity, entity_id, kind, status, (device_signature IS NOT NULL) AS signed, received_at FROM sync.operation) t`,

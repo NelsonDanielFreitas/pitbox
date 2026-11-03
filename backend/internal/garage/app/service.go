@@ -18,6 +18,7 @@ type Deps struct {
 	Clock       clock.Clock
 	Log         *slog.Logger
 	Idempotency *idempotency.Store
+	Templates   SheetTemplates
 }
 
 type Service struct {
@@ -27,13 +28,14 @@ type Service struct {
 	clock       clock.Clock
 	log         *slog.Logger
 	idempotency *idempotency.Store
+	templates   SheetTemplates
 }
 
 func New(d Deps) (*Service, error) {
-	if d.DB == nil || d.Store == nil || d.Authz == nil || d.Clock == nil || d.Log == nil || d.Idempotency == nil {
+	if d.DB == nil || d.Store == nil || d.Authz == nil || d.Clock == nil || d.Log == nil || d.Idempotency == nil || d.Templates == nil {
 		return nil, errors.New("garage: missing service dependency")
 	}
-	return &Service{db: d.DB, store: d.Store, authz: d.Authz, clock: d.Clock, log: d.Log, idempotency: d.Idempotency}, nil
+	return &Service{db: d.DB, store: d.Store, authz: d.Authz, clock: d.Clock, log: d.Log, idempotency: d.Idempotency, templates: d.Templates}, nil
 }
 
 func pageSize(n int32) int32 {

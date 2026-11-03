@@ -4,36 +4,51 @@ import { cn } from "@/shared/lib/cn";
 
 /**
  * A titled section the user opens and closes. The panel is only rendered while open, so a
- * long form keeps a small DOM; whoever owns the data keeps the state.
+ * long form keeps a small DOM; whoever owns the data keeps the state. Pass `open` and
+ * `onOpenChange` to control it from outside (open all, jump to a section).
  */
 export function Collapsible({
   title,
   summary,
   defaultOpen = false,
+  open: controlled,
+  onOpenChange,
+  anchorId,
   children,
 }: {
   title: string;
   summary?: ReactNode;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** DOM id of the section, so that a link or a script can scroll to it. */
+  anchorId?: string;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [inner, setInner] = useState(defaultOpen);
+  const open = controlled ?? inner;
+  const setOpen = (next: boolean) => {
+    setInner(next);
+    onOpenChange?.(next);
+  };
   const id = useId();
   const buttonId = `${id}-button`;
   const panelId = `${id}-panel`;
 
   return (
-    <section className="rounded-2xl border border-line bg-surface">
+    <section id={anchorId} className="scroll-mt-4 rounded-2xl border border-line bg-surface">
       <h2 className="text-base">
         <button
           id={buttonId}
           type="button"
           aria-expanded={open}
           aria-controls={open ? panelId : undefined}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => setOpen(!open)}
           className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl px-4 text-left font-semibold text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <span className="min-w-0 flex-1">{title}</span>
+          {/* A space for the accessible name ("Peças 2 de 10 preenchidos"); flex hides it on screen. */}
+          {summary ? " " : null}
           {summary ? <span className="shrink-0 text-sm font-medium text-muted">{summary}</span> : null}
           <svg
             aria-hidden="true"

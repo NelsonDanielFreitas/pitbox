@@ -19,6 +19,8 @@ import { TextArea } from "@/shared/ui/TextArea";
 import { TextInput } from "@/shared/ui/TextInput";
 
 import { setupsQueryOptions, versionsQueryOptions } from "../data/setup-queries";
+import { templatesQueryOptions } from "../data/template-queries";
+import { defaultTemplateRepository, type TemplateRepository } from "../data/template-repository";
 import type { SetupRepository, SetupSource } from "../data/setup-repository";
 import { canWriteSetups } from "../domain/roles";
 import { setupFormSchema, type SetupFormValues } from "../domain/schemas";
@@ -32,11 +34,13 @@ export function NewSetupPage({
   role,
   repository,
   garageRepository,
+  templateRepository = defaultTemplateRepository,
 }: {
   teamId: string;
   role: TeamRole;
   repository: SetupRepository;
   garageRepository: GarageRepository;
+  templateRepository?: TemplateRepository;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -45,6 +49,7 @@ export function NewSetupPage({
   const userId = session.data?.authenticated ? session.data.user_id : null;
   const cars = useQuery(carsQueryOptions(garageRepository, teamId));
   const setups = useQuery(setupsQueryOptions(repository, teamId));
+  const templates = useQuery(templatesQueryOptions(templateRepository, teamId));
   const [carId, setCarId] = useState("");
   const [mode, setMode] = useState<SourceMode>("blank");
   const [otherSetupId, setOtherSetupId] = useState("");
@@ -84,6 +89,7 @@ export function NewSetupPage({
   const activeCars = cars.data.filter((car) => car.status !== "retired");
   const effectiveCarId = carId || activeCars[0]?.id || "";
   const last = setups.data[0];
+  const carTemplate = templates.data?.find((tpl) => tpl.id === activeCars.find((c) => c.id === effectiveCarId)?.sheetTemplateId);
 
   const resolveSource = (): SetupSource | null => {
     if (mode === "last" && last) return { setupId: last.id, version: last.currentVersion };
@@ -105,11 +111,17 @@ export function NewSetupPage({
       return;
     }
     try {
+      // A blank setup starts on the car's sheet when this phone has it; otherwise on the generic v1 sheet.
+      const sheet =
+        mode === "blank" && carTemplate && (await templateRepository.getTemplate(teamId, carTemplate.id, carTemplate.currentVersion))
+          ? { id: carTemplate.id, version: carTemplate.currentVersion }
+          : null;
       const created = await repository.createSetup(teamId, {
         carId: effectiveCarId,
         name: values.name,
         notes: values.notes,
         source,
+        template: sheet,
         createdBy: userId,
       });
       await queryClient.invalidateQueries({ queryKey: ["setups", teamId] });
@@ -139,6 +151,9 @@ export function NewSetupPage({
               ))}
             </SelectInput>
           </FormField>
+          {carTemplate && mode === "blank" ? (
+            <p className="text-sm text-muted">{t("setups.template.sheet", { name: carTemplate.name })}</p>
+          ) : null}
           <FormField id="setup-name" label={t("setups.new.name")} error={errors.name?.message}>
             <TextInput
               id="setup-name"

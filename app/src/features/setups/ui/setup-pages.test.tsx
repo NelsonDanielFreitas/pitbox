@@ -36,6 +36,7 @@ const car: Car = {
   scale: "1/8",
   powertrain: "nitro",
   notes: null,
+  sheetTemplateId: null,
   createdAt: "2026-10-26T12:00:00Z",
   updatedAt: "2026-10-26T12:00:00Z",
   version: 1,
@@ -132,6 +133,7 @@ describe("new setup", () => {
       name: "Pista molhada",
       notes: null,
       source: null,
+      template: null,
       createdBy: sessionUser,
     });
     expect(await screen.findByRole("heading", { name: "Editar setup" })).toBeVisible();

@@ -35,13 +35,13 @@ func (q *Queries) CarExists(ctx context.Context, arg CarExistsParams) (bool, err
 const createCar = `-- name: CreateCar :one
 INSERT INTO garage.car (
   team_id, make, model, model_year, serial_number, nickname, transponder_number,
-  status, scale, powertrain, notes, created_by
+  status, scale, powertrain, notes, created_by, sheet_template_id
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8::garage.asset_status, $9, $10, $11, $12
+  $1, $2, $3, $4, $5, $6, $7, $8::garage.asset_status, $9, $10, $11, $12, $13
 )
 RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
-          status::text AS status, scale, powertrain, notes, created_at, version
+          status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 `
 
 type CreateCarParams struct {
@@ -57,6 +57,7 @@ type CreateCarParams struct {
 	Powertrain        string
 	Notes             *string
 	CreatedBy         *uuid.UUID
+	SheetTemplateID   *uuid.UUID
 }
 
 type CreateCarRow struct {
@@ -73,6 +74,7 @@ type CreateCarRow struct {
 	Notes             *string
 	CreatedAt         time.Time
 	Version           int32
+	SheetTemplateID   *uuid.UUID
 }
 
 func (q *Queries) CreateCar(ctx context.Context, arg CreateCarParams) (CreateCarRow, error) {
@@ -89,6 +91,7 @@ func (q *Queries) CreateCar(ctx context.Context, arg CreateCarParams) (CreateCar
 		arg.Powertrain,
 		arg.Notes,
 		arg.CreatedBy,
+		arg.SheetTemplateID,
 	)
 	var i CreateCarRow
 	err := row.Scan(
@@ -105,6 +108,7 @@ func (q *Queries) CreateCar(ctx context.Context, arg CreateCarParams) (CreateCar
 		&i.Notes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.SheetTemplateID,
 	)
 	return i, err
 }
@@ -112,13 +116,13 @@ func (q *Queries) CreateCar(ctx context.Context, arg CreateCarParams) (CreateCar
 const createCarWithID = `-- name: CreateCarWithID :one
 INSERT INTO garage.car (
   id, team_id, make, model, model_year, serial_number, nickname, transponder_number,
-  status, scale, powertrain, notes, created_by
+  status, scale, powertrain, notes, created_by, sheet_template_id
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9::garage.asset_status, $10, $11, $12, $13
+  $1, $2, $3, $4, $5, $6, $7, $8, $9::garage.asset_status, $10, $11, $12, $13, $14
 )
 RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
-          status::text AS status, scale, powertrain, notes, created_at, version
+          status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 `
 
 type CreateCarWithIDParams struct {
@@ -135,6 +139,7 @@ type CreateCarWithIDParams struct {
 	Powertrain        string
 	Notes             *string
 	CreatedBy         *uuid.UUID
+	SheetTemplateID   *uuid.UUID
 }
 
 type CreateCarWithIDRow struct {
@@ -151,6 +156,7 @@ type CreateCarWithIDRow struct {
 	Notes             *string
 	CreatedAt         time.Time
 	Version           int32
+	SheetTemplateID   *uuid.UUID
 }
 
 // The device generates the id (UUIDv7) so an offline record keeps it after syncing.
@@ -169,6 +175,7 @@ func (q *Queries) CreateCarWithID(ctx context.Context, arg CreateCarWithIDParams
 		arg.Powertrain,
 		arg.Notes,
 		arg.CreatedBy,
+		arg.SheetTemplateID,
 	)
 	var i CreateCarWithIDRow
 	err := row.Scan(
@@ -185,13 +192,14 @@ func (q *Queries) CreateCarWithID(ctx context.Context, arg CreateCarWithIDParams
 		&i.Notes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.SheetTemplateID,
 	)
 	return i, err
 }
 
 const getCar = `-- name: GetCar :one
 SELECT id, make, model, model_year, serial_number, nickname, transponder_number,
-       status::text AS status, scale, powertrain, notes, created_at, version
+       status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 FROM garage.car
 WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -215,6 +223,7 @@ type GetCarRow struct {
 	Notes             *string
 	CreatedAt         time.Time
 	Version           int32
+	SheetTemplateID   *uuid.UUID
 }
 
 func (q *Queries) GetCar(ctx context.Context, arg GetCarParams) (GetCarRow, error) {
@@ -234,13 +243,14 @@ func (q *Queries) GetCar(ctx context.Context, arg GetCarParams) (GetCarRow, erro
 		&i.Notes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.SheetTemplateID,
 	)
 	return i, err
 }
 
 const listCars = `-- name: ListCars :many
 SELECT id, make, model, model_year, serial_number, nickname, transponder_number,
-       status::text AS status, scale, powertrain, notes, created_at, version
+       status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 FROM garage.car
 WHERE team_id = $1 AND deleted_at IS NULL AND id > $2
 ORDER BY id
@@ -267,6 +277,7 @@ type ListCarsRow struct {
 	Notes             *string
 	CreatedAt         time.Time
 	Version           int32
+	SheetTemplateID   *uuid.UUID
 }
 
 func (q *Queries) ListCars(ctx context.Context, arg ListCarsParams) ([]ListCarsRow, error) {
@@ -292,6 +303,7 @@ func (q *Queries) ListCars(ctx context.Context, arg ListCarsParams) ([]ListCarsR
 			&i.Notes,
 			&i.CreatedAt,
 			&i.Version,
+			&i.SheetTemplateID,
 		); err != nil {
 			return nil, err
 		}
@@ -327,10 +339,10 @@ const updateCar = `-- name: UpdateCar :one
 UPDATE garage.car
 SET make = $1, model = $2, model_year = $3, serial_number = $4, nickname = $5,
     transponder_number = $6, status = $7::garage.asset_status, scale = $8,
-    powertrain = $9, notes = $10
-WHERE team_id = $11 AND id = $12 AND version = $13 AND deleted_at IS NULL
+    powertrain = $9, notes = $10, sheet_template_id = $11
+WHERE team_id = $12 AND id = $13 AND version = $14 AND deleted_at IS NULL
 RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
-          status::text AS status, scale, powertrain, notes, created_at, version
+          status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 `
 
 type UpdateCarParams struct {
@@ -344,6 +356,7 @@ type UpdateCarParams struct {
 	Scale             string
 	Powertrain        string
 	Notes             *string
+	SheetTemplateID   *uuid.UUID
 	TeamID            uuid.UUID
 	ID                uuid.UUID
 	Version           int32
@@ -363,6 +376,7 @@ type UpdateCarRow struct {
 	Notes             *string
 	CreatedAt         time.Time
 	Version           int32
+	SheetTemplateID   *uuid.UUID
 }
 
 func (q *Queries) UpdateCar(ctx context.Context, arg UpdateCarParams) (UpdateCarRow, error) {
@@ -377,6 +391,7 @@ func (q *Queries) UpdateCar(ctx context.Context, arg UpdateCarParams) (UpdateCar
 		arg.Scale,
 		arg.Powertrain,
 		arg.Notes,
+		arg.SheetTemplateID,
 		arg.TeamID,
 		arg.ID,
 		arg.Version,
@@ -396,6 +411,7 @@ func (q *Queries) UpdateCar(ctx context.Context, arg UpdateCarParams) (UpdateCar
 		&i.Notes,
 		&i.CreatedAt,
 		&i.Version,
+		&i.SheetTemplateID,
 	)
 	return i, err
 }

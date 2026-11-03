@@ -18,13 +18,14 @@ export const Route = createFileRoute("/_authenticated/teams_/$teamId/garage/cars
 function EditCarRoute() {
   const { carId } = Route.useParams();
   const team = useTeamContext();
-  const { garageRepository } = Route.useRouteContext();
+  const { garageRepository, templateRepository } = Route.useRouteContext();
   return (
     <CarFormPage
       teamId={team.id}
       carId={carId}
       role={team.role}
       repository={garageRepository}
+      templateRepository={templateRepository}
     />
   );
 }

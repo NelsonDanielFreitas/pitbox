@@ -40,6 +40,8 @@ export interface Car {
   scale: string;
   powertrain: string;
   notes: string | null;
+  /** The manufacturer sheet (ADR 0030); null = the generic sheet. */
+  sheetTemplateId: string | null;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -55,6 +57,8 @@ export interface CarInput {
   transponderNumber: string | null;
   status: AssetStatus;
   notes: string | null;
+  /** Omitted = leave the car's sheet as it is; null = the generic sheet. */
+  sheetTemplateId?: string | null;
 }
 
 export interface CarSummary {

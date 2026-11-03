@@ -1,8 +1,9 @@
-import { create } from "@bufbuild/protobuf";
+import { create, type JsonObject } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 import {
@@ -67,6 +68,34 @@ interface MockInvitation {
 
 // How long a freshly issued offline pass lasts, in seconds (negative = already expired).
 const defaultPassTtlSeconds = 72 * 3600;
+// The generic sheet the server publishes and an invented example sheet with every kind of field.
+const readJson = (rel: string): unknown => JSON.parse(readFileSync(new URL(rel, import.meta.url), "utf8"));
+const catalogVersion = "e2e-catalogue-1";
+function catalogSnapshot(): JsonObject {
+  const generic = readJson("../../../backend/internal/setup/templates/generic-1-8-nitro.v1.json") as Record<string, unknown>;
+  const example = readJson("./fixtures/example-sheet.json") as Record<string, unknown>;
+  const entry = (t: Record<string, unknown>) => {
+    const name = t.name as { pt: string };
+    return {
+      id: t.id, slug: t.slug, make: t.make, model: t.model, scale: t.scale, powertrain: t.powertrain,
+      name: name.pt, source_url: null, current_version: t.version, truncated: false,
+      versions: [{ version: t.version, definition: t }],
+    };
+  };
+  const snapshot = {
+    scales: [{ code: "1/8", name: "1/8", active: true, sort_order: 10 }],
+    powertrains: [{ code: "nitro", name: "Nitro", family: "combustion", active: true, sort_order: 10 }],
+    sheet_templates: [entry(generic), entry(example)],
+  };
+  // The Pull carries the snapshot as JSON; this keeps only what JSON can hold.
+  return jsonObject(JSON.parse(JSON.stringify(snapshot)));
+}
+
+function jsonObject(value: unknown): JsonObject {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("not a JSON object");
+  return value as JsonObject; // built from JSON.parse above
+}
+
 let passTtlSeconds = defaultPassTtlSeconds;
 // A Pull comes after the pass is issued and stored, so a test can wait for "pulls > 0".
 let pulls = 0;
@@ -290,10 +319,17 @@ const rpcHandler = connectNodeAdapter({
           ),
         });
       },
-      pull(_request, context) {
+      pull(request, context) {
         requireUser(context);
         pulls += 1;
-        return create(PullResponseSchema, { nextCursor: "0", hasMore: false });
+        // The catalogue travels only when the device does not have this version (like the real API).
+        const send = request.catalogVersion !== catalogVersion;
+        return create(PullResponseSchema, {
+          nextCursor: "0",
+          hasMore: false,
+          catalogVersion,
+          ...(send ? { catalogSnapshot: catalogSnapshot() } : {}),
+        });
       },
       listConflicts(_request, context) {
         requireUser(context);

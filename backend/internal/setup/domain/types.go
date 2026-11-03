@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Setup is the live identity of a versioned setup sheet.
 type Setup struct {
@@ -83,4 +87,36 @@ type SharedSetup struct {
 	Data             map[string]any
 	ChangeSummary    *string
 	VersionCreatedAt time.Time
+	// TemplateDefinition is the definition of the template version a v2 version was made with.
+	TemplateDefinition map[string]any
+}
+
+// SheetTemplateInfo is the identity of a sheet template (ADR 0030). Global means the
+// platform catalogue (no team); a team template is a copy a mechanic owns.
+type SheetTemplateInfo struct {
+	ID             uuid.UUID
+	Global         bool
+	Slug           string
+	Make           string
+	Model          string
+	Scale          string
+	Powertrain     string
+	Name           string
+	SourceURL      *string
+	CurrentVersion int32
+	BasedOnID      *uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	Version        int32
+}
+
+// SheetTemplateVersionRow is one stored, immutable template version. Definition is the raw
+// JSON; callers parse it with ParseTemplate before trusting it.
+type SheetTemplateVersionRow struct {
+	TemplateID uuid.UUID
+	Version    int32
+	Definition []byte
+	CreatedAt  time.Time
+	// Global is true for the platform catalogue: the same for every team, so it can be cached.
+	Global bool
 }

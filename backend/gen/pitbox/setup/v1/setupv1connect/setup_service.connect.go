@@ -46,6 +46,15 @@ const (
 	// SetupServiceRevokeShareLinkProcedure is the procedure name of the SetupService's RevokeShareLink
 	// RPC.
 	SetupServiceRevokeShareLinkProcedure = "/pitbox.setup.v1.SetupService/RevokeShareLink"
+	// SetupServiceListSheetTemplatesProcedure is the procedure name of the SetupService's
+	// ListSheetTemplates RPC.
+	SetupServiceListSheetTemplatesProcedure = "/pitbox.setup.v1.SetupService/ListSheetTemplates"
+	// SetupServiceGetSheetTemplateVersionProcedure is the procedure name of the SetupService's
+	// GetSheetTemplateVersion RPC.
+	SetupServiceGetSheetTemplateVersionProcedure = "/pitbox.setup.v1.SetupService/GetSheetTemplateVersion"
+	// SetupServiceDuplicateSheetTemplateProcedure is the procedure name of the SetupService's
+	// DuplicateSheetTemplate RPC.
+	SetupServiceDuplicateSheetTemplateProcedure = "/pitbox.setup.v1.SetupService/DuplicateSheetTemplate"
 )
 
 var (
@@ -117,6 +126,29 @@ var (
 			Procedure:  SetupServiceRevokeShareLinkProcedure,
 		}
 	})
+	setupServiceListSheetTemplatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pitbox_setup_v1_setup_service_proto.Services().ByName("SetupService").Methods().ByName("ListSheetTemplates"),
+			Procedure:        SetupServiceListSheetTemplatesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	setupServiceGetSheetTemplateVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pitbox_setup_v1_setup_service_proto.Services().ByName("SetupService").Methods().ByName("GetSheetTemplateVersion"),
+			Procedure:        SetupServiceGetSheetTemplateVersionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	setupServiceDuplicateSheetTemplateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pitbox_setup_v1_setup_service_proto.Services().ByName("SetupService").Methods().ByName("DuplicateSheetTemplate"),
+			Procedure:  SetupServiceDuplicateSheetTemplateProcedure,
+		}
+	})
 )
 
 // SetupServiceClient is a client for the pitbox.setup.v1.SetupService service.
@@ -130,6 +162,12 @@ type SetupServiceClient interface {
 	CreateShareLink(context.Context, *v1.CreateShareLinkRequest) (*v1.CreateShareLinkResponse, error)
 	ListShareLinks(context.Context, *v1.ListShareLinksRequest) (*v1.ListShareLinksResponse, error)
 	RevokeShareLink(context.Context, *v1.RevokeShareLinkRequest) (*v1.RevokeShareLinkResponse, error)
+	// Sheet templates (ADR 0030): the global catalogue plus the team's own. A private
+	// template of another team is NOT_FOUND.
+	ListSheetTemplates(context.Context, *v1.ListSheetTemplatesRequest) (*v1.ListSheetTemplatesResponse, error)
+	GetSheetTemplateVersion(context.Context, *v1.GetSheetTemplateVersionRequest) (*v1.GetSheetTemplateVersionResponse, error)
+	// Copies a global template into the team (mechanic or owner).
+	DuplicateSheetTemplate(context.Context, *v1.DuplicateSheetTemplateRequest) (*v1.DuplicateSheetTemplateResponse, error)
 }
 
 // NewSetupServiceClient constructs a client for the pitbox.setup.v1.SetupService service. Multiple
@@ -149,6 +187,12 @@ type SetupServiceHandler interface {
 	CreateShareLink(context.Context, *v1.CreateShareLinkRequest) (*v1.CreateShareLinkResponse, error)
 	ListShareLinks(context.Context, *v1.ListShareLinksRequest) (*v1.ListShareLinksResponse, error)
 	RevokeShareLink(context.Context, *v1.RevokeShareLinkRequest) (*v1.RevokeShareLinkResponse, error)
+	// Sheet templates (ADR 0030): the global catalogue plus the team's own. A private
+	// template of another team is NOT_FOUND.
+	ListSheetTemplates(context.Context, *v1.ListSheetTemplatesRequest) (*v1.ListSheetTemplatesResponse, error)
+	GetSheetTemplateVersion(context.Context, *v1.GetSheetTemplateVersionRequest) (*v1.GetSheetTemplateVersionResponse, error)
+	// Copies a global template into the team (mechanic or owner).
+	DuplicateSheetTemplate(context.Context, *v1.DuplicateSheetTemplateRequest) (*v1.DuplicateSheetTemplateResponse, error)
 }
 
 // RegisterSetupServiceHandler registers svc as the pitbox.setup.v1.SetupService implementation on
@@ -165,6 +209,9 @@ func RegisterSetupServiceHandler(server *connect.Server, svc SetupServiceHandler
 		connect.Method{Spec: setupServiceCreateShareLinkSpec(), Handler: adapter.createShareLink},
 		connect.Method{Spec: setupServiceListShareLinksSpec(), Handler: adapter.listShareLinks},
 		connect.Method{Spec: setupServiceRevokeShareLinkSpec(), Handler: adapter.revokeShareLink},
+		connect.Method{Spec: setupServiceListSheetTemplatesSpec(), Handler: adapter.listSheetTemplates},
+		connect.Method{Spec: setupServiceGetSheetTemplateVersionSpec(), Handler: adapter.getSheetTemplateVersion},
+		connect.Method{Spec: setupServiceDuplicateSheetTemplateSpec(), Handler: adapter.duplicateSheetTemplate},
 	)
 }
 
@@ -205,6 +252,18 @@ func (UnimplementedSetupServiceHandler) ListShareLinks(context.Context, *v1.List
 
 func (UnimplementedSetupServiceHandler) RevokeShareLink(context.Context, *v1.RevokeShareLinkRequest) (*v1.RevokeShareLinkResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.setup.v1.SetupService.RevokeShareLink is not implemented")
+}
+
+func (UnimplementedSetupServiceHandler) ListSheetTemplates(context.Context, *v1.ListSheetTemplatesRequest) (*v1.ListSheetTemplatesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.setup.v1.SetupService.ListSheetTemplates is not implemented")
+}
+
+func (UnimplementedSetupServiceHandler) GetSheetTemplateVersion(context.Context, *v1.GetSheetTemplateVersionRequest) (*v1.GetSheetTemplateVersionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.setup.v1.SetupService.GetSheetTemplateVersion is not implemented")
+}
+
+func (UnimplementedSetupServiceHandler) DuplicateSheetTemplate(context.Context, *v1.DuplicateSheetTemplateRequest) (*v1.DuplicateSheetTemplateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pitbox.setup.v1.SetupService.DuplicateSheetTemplate is not implemented")
 }
 
 type setupServiceClient struct {
@@ -278,6 +337,30 @@ func (c *setupServiceClient) ListShareLinks(ctx context.Context, req *v1.ListSha
 func (c *setupServiceClient) RevokeShareLink(ctx context.Context, req *v1.RevokeShareLinkRequest) (*v1.RevokeShareLinkResponse, error) {
 	var res v1.RevokeShareLinkResponse
 	if err := c.client.CallUnary(ctx, setupServiceRevokeShareLinkSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *setupServiceClient) ListSheetTemplates(ctx context.Context, req *v1.ListSheetTemplatesRequest) (*v1.ListSheetTemplatesResponse, error) {
+	var res v1.ListSheetTemplatesResponse
+	if err := c.client.CallUnary(ctx, setupServiceListSheetTemplatesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *setupServiceClient) GetSheetTemplateVersion(ctx context.Context, req *v1.GetSheetTemplateVersionRequest) (*v1.GetSheetTemplateVersionResponse, error) {
+	var res v1.GetSheetTemplateVersionResponse
+	if err := c.client.CallUnary(ctx, setupServiceGetSheetTemplateVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *setupServiceClient) DuplicateSheetTemplate(ctx context.Context, req *v1.DuplicateSheetTemplateRequest) (*v1.DuplicateSheetTemplateResponse, error) {
+	var res v1.DuplicateSheetTemplateResponse
+	if err := c.client.CallUnary(ctx, setupServiceDuplicateSheetTemplateSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -387,6 +470,42 @@ func (h setupServiceHandler) revokeShareLink(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.RevokeShareLink(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h setupServiceHandler) listSheetTemplates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSheetTemplatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSheetTemplates(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h setupServiceHandler) getSheetTemplateVersion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSheetTemplateVersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSheetTemplateVersion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h setupServiceHandler) duplicateSheetTemplate(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DuplicateSheetTemplateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DuplicateSheetTemplate(ctx, &req)
 	if err != nil {
 		return err
 	}

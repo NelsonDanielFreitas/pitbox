@@ -54,6 +54,7 @@ func requestMessages() []proto.Message {
 		&setupv1.ListSetupsRequest{}, &setupv1.ListVersionsRequest{}, &setupv1.CompareVersionsRequest{},
 		&setupv1.CreateShareLinkRequest{}, &setupv1.ListShareLinksRequest{}, &setupv1.RevokeShareLinkRequest{},
 		&setupv1.GetSharedSetupRequest{},
+		&setupv1.ListSheetTemplatesRequest{}, &setupv1.GetSheetTemplateVersionRequest{}, &setupv1.DuplicateSheetTemplateRequest{},
 		&syncv1.RegisterDeviceRequest{}, &syncv1.IssueOfflinePassRequest{}, &syncv1.PushRequest{}, &syncv1.PullRequest{},
 		&syncv1.ListConflictsRequest{}, &syncv1.ResolveConflictRequest{}, &syncv1.RevokeDeviceRequest{},
 	}

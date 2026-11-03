@@ -12,12 +12,17 @@ import { ErrorState } from "@/shared/ui/ErrorState";
 
 import { setupQueryOptions, versionQueryOptions, versionsQueryOptions } from "../data/setup-queries";
 import type { SetupRepository } from "../data/setup-repository";
-import { compareSetupData } from "../domain/compare";
+import { compareSetupData, compareVersions } from "../domain/compare";
+import { defaultTemplateRepository, type TemplateRepository } from "../data/template-repository";
 import { canWriteSetups } from "../domain/roles";
 import { SetupsLoading, SetupsNotFound, SetupsPageHeader } from "./common";
 import { FeedbackSection } from "./FeedbackSection";
 import { SetupChanges } from "./SetupChanges";
 import { SetupValues } from "./SetupValues";
+import { makeDescriber } from "./template/describe";
+import { TemplateValues } from "./template/TemplateValues";
+import { useVersionViews } from "./template/use-version-views";
+import { useSetupLabels } from "./labels";
 import { useGarageChoices } from "./use-choices";
 
 export function SetupDetailPage({
@@ -27,6 +32,7 @@ export function SetupDetailPage({
   role,
   repository,
   garageRepository,
+  templateRepository = defaultTemplateRepository,
 }: {
   teamId: string;
   setupId: string;
@@ -35,13 +41,16 @@ export function SetupDetailPage({
   role: TeamRole;
   repository: SetupRepository;
   garageRepository: GarageRepository;
+  templateRepository?: TemplateRepository;
 }) {
   const { t, i18n } = useTranslation();
+  const labels = useSetupLabels();
   const setup = useQuery(setupQueryOptions(repository, teamId, setupId));
   const versions = useQuery(versionsQueryOptions(repository, teamId, setupId));
   const shown = useQuery(versionQueryOptions(repository, teamId, setupId, version));
   const cars = useQuery(carsQueryOptions(garageRepository, teamId));
   const { names } = useGarageChoices(garageRepository, teamId);
+  const views = useVersionViews(templateRepository, teamId, versions.data ?? []);
   const basedOnId = shown.data?.basedOn?.setupId;
   const source = useQuery({
     ...setupQueryOptions(repository, teamId, basedOnId ?? ""),
@@ -67,7 +76,18 @@ export function SetupDetailPage({
   const current = setup.data.currentVersion;
   const viewing = shown.data;
   const previous = versions.data.find((v) => v.version === viewing.version - 1);
-  const differences = previous ? compareSetupData(previous.data, viewing.data) : [];
+  // Two v1 versions keep the v1 comparison; anything on a template goes through its sheet.
+  const onTemplates = viewing.schemaVersion === 2 || previous?.schemaVersion === 2;
+  const viewingView = views.viewOf(viewing);
+  const previousView = previous ? views.viewOf(previous) : undefined;
+  const differences =
+    previous && !onTemplates
+      ? compareSetupData(previous.data, viewing.data)
+      : previousView && viewingView
+        ? compareVersions(previousView, viewingView).differences
+        : [];
+  const describer = onTemplates ? makeDescriber(views.templates, labels, t, i18n.language) : undefined;
+  const sheetMissing = onTemplates && !views.isPending && (viewingView === undefined || (previous !== undefined && previousView === undefined));
   const car = cars.data?.find((c) => c.id === setup.data?.carId);
   const canEdit = canWriteSetups(role) && viewing.version === current;
 
@@ -123,14 +143,24 @@ export function SetupDetailPage({
           </h2>
           {!previous ? (
             <p className="text-sm text-muted">{t("setups.detail.firstVersion")}</p>
+          ) : sheetMissing ? (
+            <Alert tone="warn">{t("setups.template.missingTemplate")}</Alert>
           ) : differences.length === 0 ? (
             <p className="text-sm text-muted">{t("setups.detail.noChanges")}</p>
           ) : (
-            <SetupChanges differences={differences} names={names} />
+            <SetupChanges differences={differences} names={names} describer={describer} />
           )}
         </section>
 
-        <SetupValues data={viewing.data} names={names} />
+        {viewing.schemaVersion === 2 ? (
+          viewingView ? (
+            <TemplateValues view={viewingView} names={names} />
+          ) : views.isPending ? null : (
+            <Alert tone="warn">{t("setups.template.missingTemplate")}</Alert>
+          )
+        ) : (
+          <SetupValues data={viewing.data} names={names} />
+        )}
 
         <FeedbackSection
           teamId={teamId}

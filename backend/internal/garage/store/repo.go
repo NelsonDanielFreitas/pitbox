@@ -79,7 +79,7 @@ func (Repo) CreateCar(ctx context.Context, tx db.DBTX, team, user uuid.UUID, c d
 		TeamID: team, Make: c.Make, Model: c.Model, ModelYear: int2(c.ModelYear),
 		SerialNumber: c.SerialNumber, Nickname: c.Nickname, TransponderNumber: c.TransponderNumber,
 		Column8: sqlcgen.GarageAssetStatus(c.Status), Scale: c.Scale, Powertrain: c.Powertrain,
-		Notes: c.Notes, CreatedBy: &user,
+		Notes: c.Notes, CreatedBy: &user, SheetTemplateID: c.SheetTemplateID,
 	})
 	if err != nil {
 		return domain.Car{}, mapError("create car", err)
@@ -94,12 +94,12 @@ func (Repo) CreateCarWithID(ctx context.Context, tx db.DBTX, team, user, id uuid
 		ID: id, TeamID: team, Make: c.Make, Model: c.Model, ModelYear: int2(c.ModelYear),
 		SerialNumber: c.SerialNumber, Nickname: c.Nickname, TransponderNumber: c.TransponderNumber,
 		Column9: sqlcgen.GarageAssetStatus(c.Status), Scale: c.Scale, Powertrain: c.Powertrain,
-		Notes: c.Notes, CreatedBy: &user,
+		Notes: c.Notes, CreatedBy: &user, SheetTemplateID: c.SheetTemplateID,
 	})
 	if err != nil {
 		return domain.Car{}, mapError("create car", err)
 	}
-	return domain.Car{ID: row.ID, Make: row.Make, Model: row.Model, ModelYear: ptrInt2(row.ModelYear),
+	return domain.Car{ID: row.ID, SheetTemplateID: row.SheetTemplateID, Make: row.Make, Model: row.Model, ModelYear: ptrInt2(row.ModelYear),
 		SerialNumber: row.SerialNumber, Nickname: row.Nickname, TransponderNumber: row.TransponderNumber,
 		Status: row.Status, Scale: row.Scale, Powertrain: row.Powertrain, Notes: row.Notes,
 		CreatedAt: row.CreatedAt, Version: row.Version}, nil
@@ -133,7 +133,7 @@ func (Repo) UpdateCar(ctx context.Context, tx db.DBTX, team uuid.UUID, c domain.
 		Make: c.Make, Model: c.Model, ModelYear: int2(c.ModelYear), SerialNumber: c.SerialNumber,
 		Nickname: c.Nickname, TransponderNumber: c.TransponderNumber,
 		Column7: sqlcgen.GarageAssetStatus(c.Status), Scale: c.Scale, Powertrain: c.Powertrain,
-		Notes: c.Notes, TeamID: team, ID: c.ID, Version: c.Version,
+		Notes: c.Notes, SheetTemplateID: c.SheetTemplateID, TeamID: team, ID: c.ID, Version: c.Version,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Car{}, domain.ErrConflict
@@ -710,22 +710,22 @@ func ptrDate(s string) *time.Time {
 }
 
 func carFromCreate(r sqlcgen.CreateCarRow) domain.Car {
-	return domain.Car{ID: r.ID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
+	return domain.Car{ID: r.ID, SheetTemplateID: r.SheetTemplateID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
 		SerialNumber: r.SerialNumber, Nickname: r.Nickname, TransponderNumber: r.TransponderNumber,
 		Status: r.Status, Scale: r.Scale, Powertrain: r.Powertrain, Notes: r.Notes, CreatedAt: r.CreatedAt, Version: r.Version}
 }
 func carFromGet(r sqlcgen.GetCarRow) domain.Car {
-	return domain.Car{ID: r.ID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
+	return domain.Car{ID: r.ID, SheetTemplateID: r.SheetTemplateID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
 		SerialNumber: r.SerialNumber, Nickname: r.Nickname, TransponderNumber: r.TransponderNumber,
 		Status: r.Status, Scale: r.Scale, Powertrain: r.Powertrain, Notes: r.Notes, CreatedAt: r.CreatedAt, Version: r.Version}
 }
 func carFromList(r sqlcgen.ListCarsRow) domain.Car {
-	return domain.Car{ID: r.ID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
+	return domain.Car{ID: r.ID, SheetTemplateID: r.SheetTemplateID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
 		SerialNumber: r.SerialNumber, Nickname: r.Nickname, TransponderNumber: r.TransponderNumber,
 		Status: r.Status, Scale: r.Scale, Powertrain: r.Powertrain, Notes: r.Notes, CreatedAt: r.CreatedAt, Version: r.Version}
 }
 func carFromUpdate(r sqlcgen.UpdateCarRow) domain.Car {
-	return domain.Car{ID: r.ID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
+	return domain.Car{ID: r.ID, SheetTemplateID: r.SheetTemplateID, Make: r.Make, Model: r.Model, ModelYear: ptrInt2(r.ModelYear),
 		SerialNumber: r.SerialNumber, Nickname: r.Nickname, TransponderNumber: r.TransponderNumber,
 		Status: r.Status, Scale: r.Scale, Powertrain: r.Powertrain, Notes: r.Notes, CreatedAt: r.CreatedAt, Version: r.Version}
 }
@@ -859,6 +859,8 @@ func mapError(op string, err error) error {
 			}
 		case "23503":
 			return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
+		case "PB020": // sheet template not available (trigger on garage.car): another team's, deleted or unknown
+			return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
 		case "23P01":
 			return fmt.Errorf("%s: %w", op, domain.ErrMountConflict)
 		case "23514":

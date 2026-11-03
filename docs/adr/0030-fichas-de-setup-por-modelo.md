@@ -60,3 +60,26 @@ O mecânico olha para o papel e quer ver a mesma coisa no telemóvel. A ficha ge
 | D | Modelo ou setup com milhares de campos ou opções | Limites no validador do modelo e do setup; fuzzing |
 | T | Setup gravado contra uma versão do modelo que não existe ou de outra equipa | FK composta para o modelo da equipa, ou referência ao catálogo global validada no servidor |
 | I | Modelo da equipa visível a outra | RLS como nas outras tabelas da equipa |
+
+## Adenda 2026-11-02 — escolha múltipla e disposição em tabela (F2-00, PR 5)
+
+**Estado:** aceite por Nelson (2026-11-02). Não muda nenhuma decisão acima; acrescenta dois elementos ao formato do modelo, porque a ficha do Mugen MBX8 (Ver. 1801E, o carro do piloto) tem grupos de peças onde se marcam várias referências ao mesmo tempo e tabelas frente/centro/trás.
+
+1. **Tipo de campo `multi`.** Várias opções de uma lista ao mesmo tempo (ex.: `E0160`, `E0159`, `E2218` num grupo de peças).
+   - O valor é uma lista **não vazia** de opções distintas do campo. "Nada marcado" não se guarda (a chave é omitida), como nos outros tipos.
+   - O servidor e a app **normalizam a lista pela ordem das `options`**: dois dispositivos que marcam as mesmas caixas por ordem diferente guardam o mesmo valor, e a comparação por índice e o `domain.Merge` não veem diferenças falsas.
+   - Sem `part_ref` (as referências são as próprias opções), sem desenho, sem `canonical` (os campos canónicos do v1 são escalares). `kit` é uma lista de opções.
+   - Os mesmos limites de opções do `choice` (2 a 20, 40 caracteres cada).
+2. **Disposição em tabela (`table`) num grupo.** Dica de apresentação: colunas (2 a 4) e linhas (até 30) com a chave do campo em cada célula (`""` = célula vazia).
+   - Cada campo do grupo aparece em **exatamente uma** célula e nenhuma célula nomeia um campo de outro grupo (senão um campo nunca seria mostrado).
+   - Só tem chaves e etiquetas: não transporta valores, por isso não altera o que se guarda nem a validação do setup. Violações: `setup.template.table_layout` (e `setup.template.limits` para o número de colunas e linhas).
+3. **Compatibilidade.** `format` continua `1`: um modelo sem `multi` nem `table` é igual ao de antes, e os setups v2 existentes não mudam. Um servidor ou app antigos recusam um modelo com `multi` ou `table` (campos desconhecidos, validação estrita): o catálogo novo só é publicado com a app nova.
+4. **Fora do âmbito.** Continuamos sem importar nem alojar PDFs, desenhos ou logótipos do fabricante. Os desenhos continuam a ser o conjunto fechado (`hole_row`, `hole_grid`, `angle`, `length`, `part`). Uma folha interativa sobre o PDF do próprio utilizador, guardado só no telemóvel, seria um ADR à parte.
+5. **Fonte do MBX8.** O site da Mugen estava indisponível a 2026-11-02; o `source_url` provisório aponta para a publicação pública da ficha na página da Mugen no Facebook, com a data da consulta, e troca-se pelo link oficial quando o site voltar.
+
+| STRIDE | Ameaça | Mitigação |
+| --- | --- | --- |
+| D | Lista `multi` ou tabela enormes | Limites de opções, colunas e linhas no validador do modelo; `FuzzParseTemplate`; o valor conta para o limite de `MaxDataBytes` |
+| T | Valor `multi` com opções repetidas, desconhecidas ou fora de ordem | Validação no servidor e na app; normalização pela ordem das opções; vetores partilhados Go ↔ TS |
+| T | Tabela que esconde um campo ou aponta para outro grupo | Cada campo do grupo em exatamente uma célula (teste em Go e em TS) |
+

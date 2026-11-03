@@ -60,3 +60,9 @@ type Store interface {
 	ListPartInstalls(ctx context.Context, tx db.DBTX, team uuid.UUID, filter domain.InstallFilter, history bool, after uuid.UUID, limit int32) ([]domain.PartInstall, error)
 	ListMountsForEngine(ctx context.Context, tx db.DBTX, team, engine, after uuid.UUID, limit int32) ([]domain.EngineMount, error)
 }
+
+// SheetTemplates tells whether a sheet template is usable by a team (global, or the team's own
+// and not deleted). The setup module implements it; the garage never imports that module.
+type SheetTemplates interface {
+	Visible(ctx context.Context, tx db.DBTX, team db.TeamID, id uuid.UUID) (bool, error)
+}

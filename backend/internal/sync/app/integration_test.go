@@ -63,7 +63,7 @@ func (f *fakeAuthz) Check(_ context.Context, user, relation, object string) erro
 
 type fakeCatalog struct{}
 
-func (fakeCatalog) Load(context.Context) (string, json.RawMessage, error) {
+func (fakeCatalog) Load(context.Context, string) (string, json.RawMessage, error) {
 	return "cat-v1", json.RawMessage(`{"scales":[]}`), nil
 }
 
@@ -93,6 +93,20 @@ func newHarness(t *testing.T) *harness {
 	})
 	require.NoError(t, err)
 	return &harness{pg: pg, pool: pool, svc: svc, authz: az, ctx: context.Background()}
+}
+
+// rebuild makes a service with the same dependencies and an extra applier.
+func (h *harness) rebuild(t *testing.T, extra syncapply.Applier) *app.Service {
+	t.Helper()
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	svc, err := app.New(app.Deps{
+		DB: db.New(h.pool), Store: store.NewRepo(), Authz: h.authz, Clock: clock.Real(),
+		Log: slog.New(slog.DiscardHandler), Appliers: syncapply.NewRegistry(garage.NewCarApplier(), noteApplier{}, extra),
+		PassSigner:   domain.PassSigner{KeyID: "k1", Key: priv},
+		PassVerifier: domain.PassVerifier{"k1": pub}, Catalog: fakeCatalog{},
+	})
+	require.NoError(t, err)
+	return svc
 }
 
 func uid(id uuid.UUID) db.UserID { return db.UserID(id) }
@@ -198,7 +212,52 @@ func (noteApplier) Read(context.Context, db.DBTX, db.TeamID, string, uuid.UUID) 
 	return nil, false, nil
 }
 
+// docApplier stands in for a setup version: its patch only makes sense with `data`, and it is
+// atomic, so a clash on `data` must not leave the summary to be applied alone.
+type docApplier struct{ version *int32 }
+
+func (docApplier) Entity() string    { return "test.doc" }
+func (docApplier) AtomicPatch() bool { return true }
+func (a docApplier) CurrentVersion(context.Context, db.DBTX, db.TeamID, uuid.UUID) (int32, error) {
+	return *a.version, nil
+}
+func (a docApplier) Apply(_ context.Context, _ db.DBTX, op syncapply.Op) (int32, error) {
+	if op.Kind == syncapply.Patch {
+		if _, ok := op.Fields["data"]; !ok {
+			return 0, syncapply.ErrInvalidFields
+		}
+	}
+	*a.version++
+	return *a.version, nil
+}
+func (docApplier) Read(context.Context, db.DBTX, db.TeamID, string, uuid.UUID) (json.RawMessage, bool, error) {
+	return nil, false, nil
+}
+
 // --- tests -------------------------------------------------------------------
+
+func TestAtomicPatchClashAppliesNothing(t *testing.T) {
+	h := newHarness(t)
+	var current int32
+	h.svc = h.rebuild(t, docApplier{version: &current})
+	user := h.user(t, "mech")
+	team := h.team(t, user)
+	d := h.device(t, user, team)
+	doc := uuid.Must(uuid.NewV7())
+	require.Equal(t, domain.StatusApplied, d.push(t, d.opFor(t, "test.doc", domain.KindCreate, doc, nil, `{"data":{}}`))[0].Status)
+	// Another device saved version 2 from version 1.
+	require.Equal(t, domain.StatusApplied, d.push(t, d.opFor(t, "test.doc", domain.KindPatch, doc, ver(1), `{"data":{"a":1},"change_summary":null}`))[0].Status)
+
+	// This device also saved from version 1: `data` clashes, the summary is equal. Without
+	// atomicity the summary alone would be applied and rejected as invalid.
+	res := d.push(t, d.opFor(t, "test.doc", domain.KindPatch, doc, ver(1), `{"data":{"a":2},"change_summary":null}`))[0]
+	require.Equal(t, domain.StatusConflict, res.Status)
+	require.Equal(t, int32(2), current, "nothing was applied for the losing patch")
+	conflicts, err := h.svc.ListConflicts(h.ctx, uid(user), tid(team))
+	require.NoError(t, err)
+	require.Len(t, conflicts, 1)
+	require.Equal(t, "data", conflicts[0].Field)
+}
 
 func TestPushIsIdempotent(t *testing.T) {
 	h := newHarness(t)

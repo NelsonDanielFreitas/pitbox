@@ -10,6 +10,7 @@ Esquema PostgreSQL 16 + TimescaleDB do PitBox: 58 tabelas em 10 esquemas, com Ro
 | `migrations/` | Migrações versionadas (Atlas Community) e `atlas.sum`; a `0001_initial` é uma cópia do `schema.sql` |
 | `tests/rls_and_constraints_test.sql` | Isolamento entre equipas, FKs compostas, imutabilidade, triggers, vistas, idempotência por utilizador, CHECKs |
 | `tests/structure_test.sql` | Toda a tabela tem RLS (exceto lista explícita) e política, donos, papéis, privilégios de `pitbox_app` e `pitbox_readonly`, telemetria |
+| `tests/sheet_template_test.sql` | Modelos de ficha (F2-00): RLS global/equipa, trigger do carro, versões imutáveis, vista de análise, link público v2 |
 | `tests/default_privileges_test.sql` | Uma tabela criada por migração futura herda os privilégios certos; `pitbox_owner` sem palavra-passe |
 | `tests/drift_snapshot.sql` | Papéis, extensões e jobs usados pelo teste de desvio |
 
@@ -42,7 +43,7 @@ Aplicar manualmente (por exemplo no compose): `DATABASE_URL=postgres://pitbox_mi
 | --- | --- |
 | `identity` | user_account, team, membership, invitation, ownership_transfer, device_key, offline_pass, support_grant |
 | `garage` | scale, powertrain, car, engine, engine_mount, tyre_set, part, stock_movement, part_install, shopping_item · vista stock_level |
-| `setup` | field_definition, setup, setup_version, favorite, share_link |
+| `setup` | field_definition, setup, setup_version, setup_feedback, favorite, share_link, sheet_template, sheet_template_version · vista setup_version_metrics |
 | `events` | track, championship, event, session, driver_feedback, lap, lap_incident, race_strategy, pit_stop · vista session_lap_stats |
 | `maintenance` | rule, entry, entry_part, checklist_template, checklist_template_item, checklist_run, checklist_run_item · vista engine_rule_status |
 | `timing` | provider_link, raw_import, competitor, result, result_lap |

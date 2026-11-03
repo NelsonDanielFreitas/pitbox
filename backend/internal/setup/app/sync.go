@@ -52,7 +52,7 @@ func (a *SetupApplier) Apply(ctx context.Context, tx db.DBTX, op syncapply.Op) (
 	}
 	team, user := op.TeamID, op.UserID
 	f := syncapply.Fields(op.Fields)
-	if err := f.Only("car_id", "name", "notes", "source_setup_id", "source_version"); err != nil {
+	if err := f.Only("car_id", "name", "notes", "source_setup_id", "source_version", "sheet_template_id", "sheet_template_version"); err != nil {
 		return 0, err
 	}
 	carRaw, err := f.RequiredString("car_id")
@@ -70,7 +70,9 @@ func (a *SetupApplier) Apply(ctx context.Context, tx db.DBTX, op syncapply.Op) (
 	_, rawNotes, err1 := f.String("notes")
 	_, srcRaw, err2 := f.String("source_setup_id")
 	_, srcVersion, err3 := f.Int32("source_version")
-	if err := errors.Join(err1, err2, err3); err != nil {
+	_, tplRaw, err4 := f.String("sheet_template_id")
+	_, tplVersion, err5 := f.Int32("sheet_template_version")
+	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
 		return 0, syncapply.ErrInvalidFields
 	}
 	name, err := domain.NormalizeName(rawName)
@@ -88,40 +90,39 @@ func (a *SetupApplier) Apply(ctx context.Context, tx db.DBTX, op syncapply.Op) (
 		return 0, fmt.Errorf("car: %w", syncapply.ErrInvalidRef)
 	}
 
-	data := map[string]any{}
-	var basedOnSetup *uuid.UUID
-	var basedOnVersion *int32
+	var src *uuid.UUID
 	if srcRaw != nil {
-		src, err := uuid.Parse(*srcRaw)
-		if err != nil || src == uuid.Nil {
+		id, err := uuid.Parse(*srcRaw)
+		if err != nil || id == uuid.Nil {
 			return 0, fmt.Errorf("source setup id: %w", syncapply.ErrInvalidFields)
 		}
-		want := int32(0)
-		if srcVersion != nil {
-			want = *srcVersion
-		}
-		source, err := a.svc.store.GetVersion(ctx, tx, uuid.UUID(team), src, want)
-		if err != nil {
-			return 0, setupSyncRefErr(err)
-		}
-		if source.Ref.SchemaVersion != domain.SchemaVersion {
-			return 0, fmt.Errorf("source schema: %w", syncapply.ErrInvalidFields)
-		}
-		data = source.Data
-		basedOnSetup, basedOnVersion = &src, &source.Ref.Version
+		src = &id
 	} else if srcVersion != nil {
 		return 0, fmt.Errorf("source version without setup: %w", syncapply.ErrInvalidFields)
 	}
-	raw, err := domain.MarshalV1(data)
+	var tref *TemplateRef
+	if tplRaw != nil {
+		id, err := uuid.Parse(*tplRaw)
+		if err != nil || id == uuid.Nil {
+			return 0, fmt.Errorf("sheet template id: %w", syncapply.ErrInvalidFields)
+		}
+		if tplVersion != nil && *tplVersion < 1 {
+			return 0, fmt.Errorf("sheet template version: %w", syncapply.ErrInvalidFields)
+		}
+		tref = &TemplateRef{ID: id, Version: tplVersion}
+	} else if tplVersion != nil {
+		return 0, fmt.Errorf("sheet template version without template: %w", syncapply.ErrInvalidFields)
+	}
+	initial, err := a.svc.prepareInitial(ctx, tx, team, tref, src, srcVersion)
 	if err != nil {
-		return 0, setupSyncErr(err)
+		return 0, setupSyncRefErr(err)
 	}
 
 	created, err := a.svc.store.CreateSetupWithID(ctx, tx, uuid.UUID(team), uuid.UUID(user), op.EntityID, carID, name, notes)
 	if err != nil {
 		return 0, setupSyncErr(err)
 	}
-	if _, err := a.svc.store.CreateVersion(ctx, tx, uuid.UUID(team), uuid.UUID(user), op.EntityID, 1, raw, basedOnSetup, basedOnVersion, nil); err != nil {
+	if _, err := a.svc.store.CreateVersion(ctx, tx, uuid.UUID(team), uuid.UUID(user), op.EntityID, 1, initial.schema, initial.raw, initial.basedSetup, initial.basedVersion, nil); err != nil {
 		return 0, setupSyncErr(err)
 	}
 	return created.Version, nil
@@ -160,6 +161,10 @@ var _ syncapply.Applier = (*VersionApplier)(nil)
 
 func (*VersionApplier) Entity() string { return "setup.setup_version" }
 
+// AtomicPatch: a version is its data. If the data clashes with a newer version, the summary
+// alone is not a version.
+func (*VersionApplier) AtomicPatch() bool { return true }
+
 // CurrentVersion is the setup's current VERSION NUMBER: what a device's base_version means.
 func (a *VersionApplier) CurrentVersion(ctx context.Context, tx db.DBTX, team db.TeamID, setupID uuid.UUID) (int32, error) {
 	s, err := a.svc.store.GetSetup(ctx, tx, uuid.UUID(team), setupID)
@@ -174,7 +179,7 @@ func (a *VersionApplier) Apply(ctx context.Context, tx db.DBTX, op syncapply.Op)
 		return 0, fmt.Errorf("version operation kind: %w", syncapply.ErrInvalidFields)
 	}
 	f := syncapply.Fields(op.Fields)
-	if err := f.Only("data", "change_summary"); err != nil {
+	if err := f.Only("data", "change_summary", "schema_version"); err != nil {
 		return 0, err
 	}
 	data, err := f.Object("data")
@@ -185,9 +190,18 @@ func (a *VersionApplier) Apply(ctx context.Context, tx db.DBTX, op syncapply.Op)
 	if err != nil {
 		return 0, err
 	}
-	raw, err := domain.MarshalV1(data)
+	// An operation queued before F2-00 has no schema_version: it is v1.
+	_, rawSchema, err := f.Int32("schema_version")
 	if err != nil {
-		return 0, setupSyncErr(err)
+		return 0, err
+	}
+	schema := int32(0)
+	if rawSchema != nil {
+		schema = *rawSchema
+	}
+	schema = normalizeSchema(schema)
+	if schema != domain.SchemaVersion && schema != domain.SchemaVersionV2 {
+		return 0, fmt.Errorf("schema version: %w", syncapply.ErrInvalidFields)
 	}
 	summary, err := domain.NormalizeChangeSummary(rawSummary)
 	if err != nil {
@@ -206,11 +220,18 @@ func (a *VersionApplier) Apply(ctx context.Context, tx db.DBTX, op syncapply.Op)
 	if err != nil {
 		return 0, setupSyncErr(err)
 	}
+	if baseVersion.Ref.SchemaVersion == domain.SchemaVersionV2 && schema != domain.SchemaVersionV2 {
+		return 0, fmt.Errorf("a template setup cannot go back to schema v1: %w", syncapply.ErrInvalidFields)
+	}
+	raw, err := a.svc.marshalVersionData(ctx, tx, op.TeamID, schema, data)
+	if err != nil {
+		return 0, setupSyncRefErr(err)
+	}
 	if err := a.svc.validateChangedReferences(ctx, tx, op.TeamID, baseVersion.Data, data); err != nil {
 		return 0, setupSyncRefErr(err)
 	}
 	next := base + 1
-	if _, err := a.svc.store.CreateVersion(ctx, tx, team, user, setupID, next, raw, &setupID, &base, summary); err != nil {
+	if _, err := a.svc.store.CreateVersion(ctx, tx, team, user, setupID, next, schema, raw, &setupID, &base, summary); err != nil {
 		return 0, setupSyncErr(err)
 	}
 	if _, err := a.svc.store.UpdateCurrentVersion(ctx, tx, team, setupID, next, base); err != nil {

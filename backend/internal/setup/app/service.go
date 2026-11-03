@@ -31,6 +31,7 @@ type Service struct {
 	idempotency *idempotency.Store
 	garage      Garage
 	shares      ShareReader
+	templates   *templateCache
 }
 
 func New(d Deps) (*Service, error) {
@@ -40,7 +41,7 @@ func New(d Deps) (*Service, error) {
 	}
 	return &Service{
 		db: d.DB, store: d.Store, authz: d.Authz, clock: d.Clock, log: d.Log,
-		idempotency: d.Idempotency, garage: d.Garage, shares: d.Shares,
+		idempotency: d.Idempotency, garage: d.Garage, shares: d.Shares, templates: newTemplateCache(),
 	}, nil
 }
 

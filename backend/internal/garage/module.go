@@ -20,6 +20,8 @@ type Deps struct {
 	Authz *authz.Client
 	Clock clock.Clock
 	Log   *slog.Logger
+	// Templates answers whether a sheet template is usable by a team (the setup module).
+	Templates app.SheetTemplates
 }
 
 type Module struct {
@@ -33,7 +35,7 @@ type Module struct {
 func New(d Deps) (*Module, error) {
 	svc, err := app.New(app.Deps{
 		DB: d.DB, Store: store.NewRepo(), Authz: d.Authz, Clock: d.Clock, Log: d.Log,
-		Idempotency: idempotency.NewStore(),
+		Idempotency: idempotency.NewStore(), Templates: d.Templates,
 	})
 	if err != nil {
 		return nil, err

@@ -29,7 +29,7 @@ func (*CarApplier) Entity() string { return "garage.car" }
 
 var carFields = []string{
 	"make", "model", "model_year", "serial_number", "nickname", "transponder_number",
-	"status", "scale", "powertrain", "notes",
+	"status", "scale", "powertrain", "notes", "sheet_template_id",
 }
 
 func (a *CarApplier) CurrentVersion(ctx context.Context, tx db.DBTX, team db.TeamID, id uuid.UUID) (int32, error) {
@@ -78,20 +78,26 @@ func (a *CarApplier) create(ctx context.Context, tx db.DBTX, team, user, id uuid
 	_, scale, err5 := f.String("scale")
 	_, powertrain, err6 := f.String("powertrain")
 	_, notes, err7 := f.String("notes")
-	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7); err != nil {
+	_, tplRaw, err8 := f.String("sheet_template_id")
+	if err := errors.Join(err1, err2, err3, err4, err5, err6, err7, err8); err != nil {
 		return 0, syncapply.ErrInvalidFields
+	}
+	tplID, err := parseSyncTemplateID(tplRaw)
+	if err != nil {
+		return 0, err
 	}
 	car, err := domain.NewCar(make, model, year, serial, nick, transponder,
 		deref(status), deref(scale), deref(powertrain), notes)
 	if err != nil {
 		return 0, carSyncErr(err)
 	}
+	car.SheetTemplateID = tplID
 	if err := a.repo.ActiveCatalog(ctx, tx, car.Scale, car.Powertrain); err != nil {
 		return 0, carSyncErr(err)
 	}
 	created, err := a.repo.CreateCarWithID(ctx, tx, team, user, id, car)
 	if err != nil {
-		return 0, carSyncErr(err)
+		return 0, templateRefErr(err)
 	}
 	return created.Version, nil
 }
@@ -131,8 +137,14 @@ func (a *CarApplier) patch(ctx context.Context, tx db.DBTX, team, id uuid.UUID, 
 	collect(err)
 	u.NotesSet, u.Notes, err = f.String("notes")
 	collect(err)
+	var tplRaw *string
+	u.SheetTemplateSet, tplRaw, err = f.String("sheet_template_id")
+	collect(err)
 	if err := errors.Join(errs...); err != nil {
 		return 0, syncapply.ErrInvalidFields
+	}
+	if u.SheetTemplateID, err = parseSyncTemplateID(tplRaw); err != nil {
+		return 0, err
 	}
 
 	next, err := domain.ApplyCarUpdate(current, u)
@@ -154,7 +166,7 @@ func (a *CarApplier) patch(ctx context.Context, tx db.DBTX, team, id uuid.UUID, 
 	next.Version = expected
 	updated, err := a.repo.UpdateCar(ctx, tx, team, next)
 	if err != nil {
-		return 0, carSyncErr(err)
+		return 0, templateRefErr(err)
 	}
 	return updated.Version, nil
 }
@@ -196,6 +208,7 @@ type carWire struct {
 	Notes             *string   `json:"notes"`
 	CreatedAt         time.Time `json:"created_at"`
 	Version           int32     `json:"version"`
+	SheetTemplateID   *string   `json:"sheet_template_id"`
 }
 
 func (a *CarApplier) Read(ctx context.Context, tx db.DBTX, team db.TeamID, _ string, id uuid.UUID) (json.RawMessage, bool, error) {
@@ -210,6 +223,7 @@ func (a *CarApplier) Read(ctx context.Context, tx db.DBTX, team db.TeamID, _ str
 		ID: c.ID, Make: c.Make, Model: c.Model, ModelYear: c.ModelYear, SerialNumber: c.SerialNumber,
 		Nickname: c.Nickname, TransponderNumber: c.TransponderNumber, Status: c.Status, Scale: c.Scale,
 		Powertrain: c.Powertrain, Notes: c.Notes, CreatedAt: c.CreatedAt, Version: c.Version,
+		SheetTemplateID: tplString(c.SheetTemplateID),
 	})
 	return raw, err == nil, err
 }
@@ -238,4 +252,32 @@ func carSyncErr(err error) error {
 	default:
 		return err
 	}
+}
+
+func parseSyncTemplateID(raw *string) (*uuid.UUID, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	id, err := uuid.Parse(*raw)
+	if err != nil || id == uuid.Nil {
+		return nil, fmt.Errorf("sheet template id: %w", syncapply.ErrInvalidFields)
+	}
+	return &id, nil
+}
+
+func tplString(id *uuid.UUID) *string {
+	if id == nil {
+		return nil
+	}
+	s := id.String()
+	return &s
+}
+
+// templateRefErr: a sheet template the team cannot see (trigger on garage.car) is a bad
+// reference in the operation, not a missing car.
+func templateRefErr(err error) error {
+	if errors.Is(err, domain.ErrNotFound) {
+		return syncapply.ErrInvalidRef
+	}
+	return carSyncErr(err)
 }

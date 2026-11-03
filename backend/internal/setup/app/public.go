@@ -23,6 +23,7 @@ func (s *Service) OpenShareLink(ctx context.Context, token string) (domain.Share
 }
 
 func stripReferences(data map[string]any) {
+	delete(data, "refs") // schema v2 keeps the garage references here
 	if engine, ok := data["engine"].(map[string]any); ok {
 		delete(engine, "engine_id")
 	}

@@ -286,6 +286,9 @@ func (s *Service) execute(
 		}
 		m := domain.Merge(fields, newer)
 		toApply, res.conflicts = m.Apply, m.Conflicts
+		if atomic, ok := a.(syncapply.AtomicPatch); ok && atomic.AtomicPatch() && len(m.Conflicts) > 0 {
+			toApply = nil // all or nothing: the conflict is shown, nothing is half-applied
+		}
 		res.status = m.Status(newer)
 		if res.status == domain.StatusApplied {
 			// Newer versions exist but no recorded operation explains them (rows from before

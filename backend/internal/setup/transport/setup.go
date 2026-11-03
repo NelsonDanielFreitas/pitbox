@@ -30,6 +30,13 @@ func (h *Setup) CreateSetup(ctx context.Context, req *setupv1.CreateSetupRequest
 		return nil, err
 	}
 	in := app.CreateSetupInput{RequestID: requestID, CarID: carID, Name: req.GetName(), Notes: req.Notes}
+	if req.SheetTemplate != nil {
+		id, err := parseUUID(req.GetSheetTemplate().GetId())
+		if err != nil {
+			return nil, err
+		}
+		in.Template = &app.TemplateRef{ID: id, Version: req.GetSheetTemplate().Version}
+	}
 	if req.SourceSetupId != nil {
 		id, err := parseUUID(req.GetSourceSetupId())
 		if err != nil {
@@ -60,7 +67,7 @@ func (h *Setup) CreateVersion(ctx context.Context, req *setupv1.CreateVersionReq
 	}
 	ref, err := h.svc.CreateVersion(ctx, user, team, app.CreateVersionInput{
 		RequestID: requestID, SetupID: setupID, BaseVersion: req.GetBaseVersion(),
-		Data: data, ChangeSummary: req.ChangeSummary,
+		Data: data, ChangeSummary: req.ChangeSummary, SchemaVersion: req.GetSchemaVersion(),
 	})
 	if err != nil {
 		return nil, setupError(err)
@@ -133,15 +140,16 @@ func (h *Setup) CompareVersions(ctx context.Context, req *setupv1.CompareVersion
 	if err != nil {
 		return nil, err
 	}
-	diffs, err := h.svc.CompareVersions(ctx, user, team, setupID, req.GetFromVersion(), req.GetToVersion())
+	result, err := h.svc.CompareVersions(ctx, user, team, setupID, req.GetFromVersion(), req.GetToVersion())
 	if err != nil {
 		return nil, setupError(err)
 	}
 	resp := &setupv1.CompareVersionsResponse{
 		FromVersion: req.GetFromVersion(), ToVersion: req.GetToVersion(),
-		Differences: make([]*setupv1.SetupDifference, 0, len(diffs)),
+		Differences: make([]*setupv1.SetupDifference, 0, len(result.Differences)),
+		SkippedKeys: result.Skipped,
 	}
-	for _, d := range diffs {
+	for _, d := range result.Differences {
 		out, err := differenceToProto(d)
 		if err != nil {
 			return nil, err
@@ -221,4 +229,56 @@ func expiryFromProto(v setupv1.ShareLinkExpiry) (domain.ShareExpiry, error) {
 	default:
 		return "", domain.ErrInvalid
 	}
+}
+
+func (h *Setup) ListSheetTemplates(ctx context.Context, req *setupv1.ListSheetTemplatesRequest) (*setupv1.ListSheetTemplatesResponse, error) {
+	user, err := caller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	team, err := db.ParseTeamID(req.GetTeamId())
+	if err != nil {
+		return nil, err
+	}
+	items, next, err := h.svc.ListSheetTemplates(ctx, user, team, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, setupError(err)
+	}
+	resp := &setupv1.ListSheetTemplatesResponse{NextPageToken: next, Templates: make([]*setupv1.SheetTemplate, 0, len(items))}
+	for _, t := range items {
+		resp.Templates = append(resp.Templates, sheetTemplateToProto(t))
+	}
+	return resp, nil
+}
+
+func (h *Setup) GetSheetTemplateVersion(ctx context.Context, req *setupv1.GetSheetTemplateVersionRequest) (*setupv1.GetSheetTemplateVersionResponse, error) {
+	user, team, id, err := callerTeamID(ctx, req.GetTeamId(), req.GetTemplateId())
+	if err != nil {
+		return nil, err
+	}
+	row, err := h.svc.GetSheetTemplateVersion(ctx, user, team, id, req.GetVersion())
+	if err != nil {
+		return nil, setupError(err)
+	}
+	out, err := templateVersionToProto(row)
+	if err != nil {
+		return nil, err
+	}
+	return &setupv1.GetSheetTemplateVersionResponse{Version: out}, nil
+}
+
+func (h *Setup) DuplicateSheetTemplate(ctx context.Context, req *setupv1.DuplicateSheetTemplateRequest) (*setupv1.DuplicateSheetTemplateResponse, error) {
+	user, team, requestID, err := callerTeamRequest(ctx, req.GetTeamId(), req.GetRequestId())
+	if err != nil {
+		return nil, err
+	}
+	templateID, err := parseUUID(req.GetTemplateId())
+	if err != nil {
+		return nil, err
+	}
+	created, err := h.svc.DuplicateSheetTemplate(ctx, user, team, requestID, templateID)
+	if err != nil {
+		return nil, setupError(err)
+	}
+	return &setupv1.DuplicateSheetTemplateResponse{Template: sheetTemplateToProto(created)}, nil
 }

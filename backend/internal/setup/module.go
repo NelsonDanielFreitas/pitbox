@@ -42,7 +42,7 @@ func New(d Deps) (*Module, error) {
 	}
 	return &Module{
 		setup: transport.NewSetup(svc), shared: transport.NewShared(svc),
-		appliers: []syncapply.Applier{app.NewSetupApplier(svc), app.NewVersionApplier(svc), app.NewFeedbackApplier(svc)},
+		appliers: []syncapply.Applier{app.NewSetupApplier(svc), app.NewVersionApplier(svc), app.NewFeedbackApplier(svc), app.NewTemplateApplier(svc)},
 	}, nil
 }
 

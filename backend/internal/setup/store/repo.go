@@ -109,10 +109,10 @@ func (Repo) UpdateCurrentVersion(ctx context.Context, tx db.DBTX, team, id uuid.
 	return setupFromUpdateVersion(row), nil
 }
 
-func (Repo) CreateVersion(ctx context.Context, tx db.DBTX, team, user uuid.UUID, setupID uuid.UUID, version int32, data []byte, basedOnSetup *uuid.UUID, basedOnVersion *int32, summary *string) (domain.VersionRef, error) {
+func (Repo) CreateVersion(ctx context.Context, tx db.DBTX, team, user uuid.UUID, setupID uuid.UUID, version, schemaVersion int32, data []byte, basedOnSetup *uuid.UUID, basedOnVersion *int32, summary *string) (domain.VersionRef, error) {
 	row, err := sqlcgen.New(tx).CreateVersion(ctx, sqlcgen.CreateVersionParams{
 		TeamID: team, SetupID: setupID, Version: version, Column4: data,
-		SchemaVersion: domain.SchemaVersion, BasedOnSetupID: basedOnSetup,
+		SchemaVersion: schemaVersion, BasedOnSetupID: basedOnSetup,
 		BasedOnVersion: int4(basedOnVersion), ChangeSummary: summary, CreatedBy: &user,
 	})
 	if err != nil {
@@ -212,7 +212,7 @@ type ShareReader struct{ db Querier }
 func NewShareReader(db Querier) *ShareReader { return &ShareReader{db: db} }
 
 func (r *ShareReader) Open(ctx context.Context, tokenHash []byte) (domain.SharedSetup, error) {
-	// The function is a table function with RETURNS TABLE; sqlc does not
+	// open_share_link_v2 adds the template definition. The function is a table function with RETURNS TABLE; sqlc does not
 	// introspect its output columns. This parameterised read follows the
 	// identity.resolve_login precedent instead of hand-building SQL.
 	var data string
@@ -220,10 +220,11 @@ func (r *ShareReader) Open(ctx context.Context, tokenHash []byte) (domain.Shared
 	var createdAt time.Time
 	var name string
 	var version, schemaVersion int32
+	var templateDef *string
 	err := r.db.QueryRow(ctx, `
-SELECT name, version, schema_version, data::text, change_summary, version_created_at
-  FROM setup.open_share_link($1)`, tokenHash).Scan(
-		&name, &version, &schemaVersion, &data, &changeSummary, &createdAt,
+SELECT name, version, schema_version, data::text, change_summary, version_created_at, template_definition::text
+  FROM setup.open_share_link_v2($1)`, tokenHash).Scan(
+		&name, &version, &schemaVersion, &data, &changeSummary, &createdAt, &templateDef,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.SharedSetup{}, fmt.Errorf("open share link: %w", domain.ErrNotFound)
@@ -235,10 +236,16 @@ SELECT name, version, schema_version, data::text, change_summary, version_create
 	if err != nil {
 		return domain.SharedSetup{}, err
 	}
-	return domain.SharedSetup{
+	out := domain.SharedSetup{
 		Name: name, Version: version, SchemaVersion: schemaVersion, Data: parsed,
 		ChangeSummary: changeSummary, VersionCreatedAt: createdAt,
-	}, nil
+	}
+	if templateDef != nil {
+		if out.TemplateDefinition, err = domain.DecodeData([]byte(*templateDef)); err != nil {
+			return domain.SharedSetup{}, err
+		}
+	}
+	return out, nil
 }
 
 func setupFromCreate(r sqlcgen.CreateSetupRow) domain.Setup {
@@ -339,6 +346,8 @@ func mapError(op string, err error) error {
 			return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
 		case "23505":
 			return fmt.Errorf("%s: %w", op, domain.ErrInvalid)
+		case "PB020": // sheet template not available (another team's, deleted or unknown)
+			return fmt.Errorf("%s: %w", op, domain.ErrNotFound)
 		}
 	}
 	return fmt.Errorf("%s: %w", op, err)

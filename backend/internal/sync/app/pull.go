@@ -92,7 +92,7 @@ func (s *Service) Pull(ctx context.Context, user db.UserID, team db.TeamID, in P
 		return PullOutput{}, err
 	}
 
-	version, snapshot, err := s.catalog.Load(ctx)
+	version, snapshot, err := s.catalog.Load(ctx, in.CatalogVersion)
 	if err != nil {
 		return PullOutput{}, fmt.Errorf("load catalogue: %w", err)
 	}

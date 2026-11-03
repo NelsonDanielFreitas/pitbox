@@ -29,6 +29,7 @@ type CreateCarInput struct {
 	Scale             string
 	Powertrain        string
 	Notes             *string
+	SheetTemplateID   *uuid.UUID
 }
 
 type UpdateCarInput struct {
@@ -48,6 +49,7 @@ func (s *Service) CreateCar(ctx context.Context, user db.UserID, team db.TeamID,
 	if err != nil {
 		return domain.Car{}, err
 	}
+	car.SheetTemplateID = in.SheetTemplateID
 	hash, err := hashInput(uuid.UUID(team), in)
 	if err != nil {
 		return domain.Car{}, fmt.Errorf("hash create car: %w", err)
@@ -63,6 +65,9 @@ func (s *Service) CreateCar(ctx context.Context, user db.UserID, team db.TeamID,
 			return err
 		}
 		if err := s.store.ActiveCatalog(ctx, tx, car.Scale, car.Powertrain); err != nil {
+			return err
+		}
+		if err := s.checkTemplate(ctx, tx, team, car.SheetTemplateID, nil); err != nil {
 			return err
 		}
 		response, replayed, err = s.claimOrReplay(ctx, tx, uuid.UUID(user), in.RequestID, carCreateMethod, hash)
@@ -153,6 +158,9 @@ func (s *Service) UpdateCar(ctx context.Context, user db.UserID, team db.TeamID,
 				return err
 			}
 		}
+		if err := s.checkTemplate(ctx, tx, team, next.SheetTemplateID, current.SheetTemplateID); err != nil {
+			return err
+		}
 		if next.Status == domain.AssetRetired {
 			if _, open, err := s.store.OpenMountForCar(ctx, tx, uuid.UUID(team), next.ID); err != nil {
 				return err
@@ -236,6 +244,23 @@ func (s *Service) DeleteCar(ctx context.Context, user db.UserID, team db.TeamID,
 func carAudit(c domain.Car) map[string]any {
 	return map[string]any{
 		"make": c.Make, "model": c.Model, "status": c.Status, "scale": c.Scale,
-		"powertrain": c.Powertrain, "version": c.Version,
+		"powertrain": c.Powertrain, "version": c.Version, "sheet_template_id": c.SheetTemplateID,
 	}
+}
+
+// checkTemplate refuses a sheet template the team cannot see (another team's private one, a
+// deleted or unknown one) as NOT_FOUND. An unchanged link is not rechecked, so deleting a
+// template later does not block edits of the car. The database trigger is the second barrier.
+func (s *Service) checkTemplate(ctx context.Context, tx db.DBTX, team db.TeamID, next, current *uuid.UUID) error {
+	if next == nil || (current != nil && *current == *next) {
+		return nil
+	}
+	ok, err := s.templates.Visible(ctx, tx, team, *next)
+	if err != nil {
+		return fmt.Errorf("check sheet template: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("sheet template: %w", domain.ErrNotFound)
+	}
+	return nil
 }

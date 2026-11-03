@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate db-backup db-restore db-restore-live db-backup-test app-preview serve-phone serve-phone-off run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: template-migration help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate db-backup db-restore db-restore-live db-backup-test app-preview serve-phone serve-phone-off run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -131,10 +131,14 @@ test: test-scripts ## Testes do backend e dos scripts (app: make app-test)
 
 test-app: app-test ## Alias para os testes da app
 
-fuzz: ## Fuzzers do setup (1 min cada): validação, comparação e conversão de Struct
-	cd backend && go test -run=^$$ -fuzz=FuzzValidateV1 -fuzztime=1m ./internal/setup/domain
-	cd backend && go test -run=^$$ -fuzz=FuzzCompare -fuzztime=1m ./internal/setup/domain
-	cd backend && go test -run=^$$ -fuzz=FuzzDataFromProto -fuzztime=1m ./internal/setup/transport
+fuzz: ## Fuzzers do setup (1 min cada): validação v1/v2, modelos, comparação e conversão de Struct
+	cd backend && go test -run=^$$ -fuzz='^FuzzValidateV1$$' -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz='^FuzzCompare$$' -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz='^FuzzDataFromProto$$' -fuzztime=1m ./internal/setup/transport
+	cd backend && go test -run=^$$ -fuzz='^FuzzParseTemplate$$' -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz='^FuzzValidateV2$$' -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz='^FuzzValidateV1VsGeneric$$' -fuzztime=1m ./internal/setup/domain
+	cd backend && go test -run=^$$ -fuzz='^FuzzCompareVersions$$' -fuzztime=1m ./internal/setup/domain
 
 test-scripts: ## Testes dos scripts Python (Zitadel falso, sem Docker)
 	python3 -I -m unittest discover -s scripts -p 'test_*.py'
@@ -213,6 +217,12 @@ db-test: ## Contentores descartáveis: migrações (Atlas) + schema.sql + testes
 db-new: ## Nova migração vazia: make db-new name=<nome>; escreve o SQL e edita também schema.sql
 	@test -n "$(name)" || { echo "uso: make db-new name=<nome>"; exit 1; }
 	atlas migrate new $(name) --env local
+
+template-migration: ## Migração do catálogo global a partir de um modelo: make template-migration file=<slug>.v<N>.json (também reescreve o bloco do schema.sql)
+	@test -n "$(file)" || { echo "uso: make template-migration file=<slug>.v<N>.json"; exit 1; }
+	python3 -I scripts/template-migration.py backend/internal/setup/templates/$(file) --out backend/db/migrations
+	atlas migrate hash --env local
+	python3 -I scripts/template-migration.py --schema backend/db/schema/schema.sql
 
 db-backup: ## Backup das bases pitbox e zitadel para ~/pitbox-backups (fora do volume Docker; 700/600; precisa de make up). DB=pitbox|zitadel para uma só
 	bash scripts/db-backup.sh $(DB)

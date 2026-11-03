@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package pitbox.setup.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -94,4 +95,40 @@ message SharedSetup {
   google.protobuf.Struct data = 4;
   optional string change_summary = 5;
   google.protobuf.Timestamp version_created_at = 6;
+  // Definition of the sheet template version this version was made with. Set only for
+  // schema_version 2, and only that one version: never another template of the team.
+  google.protobuf.Struct template_definition = 7;
+}
+
+// SheetTemplate is the identity of a sheet template (ADR 0030). team_id NULL in the
+// database is the global catalogue; is_global tells the client without exposing team ids.
+message SheetTemplate {
+  string id = 1;
+  string slug = 2;
+  string make = 3;
+  string model = 4;
+  string scale = 5;
+  string powertrain = 6;
+  string name = 7;
+  optional string source_url = 8;
+  int32 current_version = 9;
+  bool is_global = 10;
+  optional string based_on_id = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  int32 version = 14;
+}
+
+// SheetTemplateVersion is one immutable version of a template. The definition is the
+// reviewed JSON (docs/adr/0030); the client treats it as data, never as markup.
+message SheetTemplateVersion {
+  string template_id = 1;
+  int32 version = 2;
+  google.protobuf.Struct definition = 3;
+}
+
+// SheetTemplateRef names a template version. Without version, the current one.
+message SheetTemplateRef {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  optional int32 version = 2 [(buf.validate.field).int32.gte = 1];
 }

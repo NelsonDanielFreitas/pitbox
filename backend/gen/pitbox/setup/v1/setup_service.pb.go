@@ -32,6 +32,9 @@ type CreateSetupRequest struct {
 	Notes         *string                `protobuf:"bytes,5,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
 	SourceSetupId *string                `protobuf:"bytes,6,opt,name=source_setup_id,json=sourceSetupId,proto3,oneof" json:"source_setup_id,omitempty"`
 	SourceVersion *int32                 `protobuf:"varint,7,opt,name=source_version,json=sourceVersion,proto3,oneof" json:"source_version,omitempty"`
+	// Opt-in to schema v2: version 1 is created empty for this template. Without it the
+	// setup is created in schema v1, as before.
+	SheetTemplate *SheetTemplateRef `protobuf:"bytes,8,opt,name=sheet_template,json=sheetTemplate,proto3,oneof" json:"sheet_template,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -115,6 +118,13 @@ func (x *CreateSetupRequest) GetSourceVersion() int32 {
 	return 0
 }
 
+func (x *CreateSetupRequest) GetSheetTemplate() *SheetTemplateRef {
+	if x != nil {
+		return x.SheetTemplate
+	}
+	return nil
+}
+
 type CreateSetupResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Setup         *Setup                 `protobuf:"bytes,1,opt,name=setup,proto3" json:"setup,omitempty"`
@@ -167,6 +177,9 @@ type CreateVersionRequest struct {
 	BaseVersion   int32                  `protobuf:"varint,4,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
 	Data          *structpb.Struct       `protobuf:"bytes,5,opt,name=data,proto3" json:"data,omitempty"`
 	ChangeSummary *string                `protobuf:"bytes,6,opt,name=change_summary,json=changeSummary,proto3,oneof" json:"change_summary,omitempty"`
+	// Schema of data: 0 or 1 = v1 (the default, so old clients keep working), 2 = a
+	// template sheet {template, values, refs}. A v2 setup cannot go back to v1.
+	SchemaVersion int32 `protobuf:"varint,7,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -241,6 +254,13 @@ func (x *CreateVersionRequest) GetChangeSummary() string {
 		return *x.ChangeSummary
 	}
 	return ""
+}
+
+func (x *CreateVersionRequest) GetSchemaVersion() int32 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
 }
 
 type CreateVersionResponse struct {
@@ -700,10 +720,12 @@ func (x *CompareVersionsRequest) GetToVersion() int32 {
 }
 
 type CompareVersionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Differences   []*SetupDifference     `protobuf:"bytes,1,rep,name=differences,proto3" json:"differences,omitempty"`
-	FromVersion   int32                  `protobuf:"varint,2,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`
-	ToVersion     int32                  `protobuf:"varint,3,opt,name=to_version,json=toVersion,proto3" json:"to_version,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Differences []*SetupDifference     `protobuf:"bytes,1,rep,name=differences,proto3" json:"differences,omitempty"`
+	FromVersion int32                  `protobuf:"varint,2,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`
+	ToVersion   int32                  `protobuf:"varint,3,opt,name=to_version,json=toVersion,proto3" json:"to_version,omitempty"`
+	// Keys that exist in only one of two different templates and so were not compared.
+	SkippedKeys   []string `protobuf:"bytes,4,rep,name=skipped_keys,json=skippedKeys,proto3" json:"skipped_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -757,6 +779,13 @@ func (x *CompareVersionsResponse) GetToVersion() int32 {
 		return x.ToVersion
 	}
 	return 0
+}
+
+func (x *CompareVersionsResponse) GetSkippedKeys() []string {
+	if x != nil {
+		return x.SkippedKeys
+	}
+	return nil
 }
 
 type CreateShareLinkRequest struct {
@@ -1081,11 +1110,332 @@ func (*RevokeShareLinkResponse) Descriptor() ([]byte, []int) {
 	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{17}
 }
 
+type ListSheetTemplatesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TeamId        string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSheetTemplatesRequest) Reset() {
+	*x = ListSheetTemplatesRequest{}
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSheetTemplatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSheetTemplatesRequest) ProtoMessage() {}
+
+func (x *ListSheetTemplatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSheetTemplatesRequest.ProtoReflect.Descriptor instead.
+func (*ListSheetTemplatesRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListSheetTemplatesRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *ListSheetTemplatesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListSheetTemplatesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListSheetTemplatesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Templates     []*SheetTemplate       `protobuf:"bytes,1,rep,name=templates,proto3" json:"templates,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSheetTemplatesResponse) Reset() {
+	*x = ListSheetTemplatesResponse{}
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSheetTemplatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSheetTemplatesResponse) ProtoMessage() {}
+
+func (x *ListSheetTemplatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSheetTemplatesResponse.ProtoReflect.Descriptor instead.
+func (*ListSheetTemplatesResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ListSheetTemplatesResponse) GetTemplates() []*SheetTemplate {
+	if x != nil {
+		return x.Templates
+	}
+	return nil
+}
+
+func (x *ListSheetTemplatesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type GetSheetTemplateVersionRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	TeamId     string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	TemplateId string                 `protobuf:"bytes,2,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	// Without version, the template's current one.
+	Version       *int32 `protobuf:"varint,3,opt,name=version,proto3,oneof" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSheetTemplateVersionRequest) Reset() {
+	*x = GetSheetTemplateVersionRequest{}
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSheetTemplateVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSheetTemplateVersionRequest) ProtoMessage() {}
+
+func (x *GetSheetTemplateVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSheetTemplateVersionRequest.ProtoReflect.Descriptor instead.
+func (*GetSheetTemplateVersionRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetSheetTemplateVersionRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *GetSheetTemplateVersionRequest) GetTemplateId() string {
+	if x != nil {
+		return x.TemplateId
+	}
+	return ""
+}
+
+func (x *GetSheetTemplateVersionRequest) GetVersion() int32 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
+type GetSheetTemplateVersionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       *SheetTemplateVersion  `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSheetTemplateVersionResponse) Reset() {
+	*x = GetSheetTemplateVersionResponse{}
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSheetTemplateVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSheetTemplateVersionResponse) ProtoMessage() {}
+
+func (x *GetSheetTemplateVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSheetTemplateVersionResponse.ProtoReflect.Descriptor instead.
+func (*GetSheetTemplateVersionResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetSheetTemplateVersionResponse) GetVersion() *SheetTemplateVersion {
+	if x != nil {
+		return x.Version
+	}
+	return nil
+}
+
+type DuplicateSheetTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TeamId        string                 `protobuf:"bytes,1,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
+	RequestId     string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	TemplateId    string                 `protobuf:"bytes,3,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DuplicateSheetTemplateRequest) Reset() {
+	*x = DuplicateSheetTemplateRequest{}
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DuplicateSheetTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DuplicateSheetTemplateRequest) ProtoMessage() {}
+
+func (x *DuplicateSheetTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DuplicateSheetTemplateRequest.ProtoReflect.Descriptor instead.
+func (*DuplicateSheetTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DuplicateSheetTemplateRequest) GetTeamId() string {
+	if x != nil {
+		return x.TeamId
+	}
+	return ""
+}
+
+func (x *DuplicateSheetTemplateRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *DuplicateSheetTemplateRequest) GetTemplateId() string {
+	if x != nil {
+		return x.TemplateId
+	}
+	return ""
+}
+
+type DuplicateSheetTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *SheetTemplate         `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DuplicateSheetTemplateResponse) Reset() {
+	*x = DuplicateSheetTemplateResponse{}
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DuplicateSheetTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DuplicateSheetTemplateResponse) ProtoMessage() {}
+
+func (x *DuplicateSheetTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pitbox_setup_v1_setup_service_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DuplicateSheetTemplateResponse.ProtoReflect.Descriptor instead.
+func (*DuplicateSheetTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_pitbox_setup_v1_setup_service_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *DuplicateSheetTemplateResponse) GetTemplate() *SheetTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
 var File_pitbox_setup_v1_setup_service_proto protoreflect.FileDescriptor
 
 const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"\n" +
-	"#pitbox/setup/v1/setup_service.proto\x12\x0fpitbox.setup.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bpitbox/setup/v1/setup.proto\"\xe2\x02\n" +
+	"#pitbox/setup/v1/setup_service.proto\x12\x0fpitbox.setup.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1bpitbox/setup/v1/setup.proto\"\xc4\x03\n" +
 	"\x12CreateSetupRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -1094,12 +1444,14 @@ const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"\x04name\x18\x04 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18xR\x04name\x12#\n" +
 	"\x05notes\x18\x05 \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fH\x00R\x05notes\x88\x01\x01\x125\n" +
 	"\x0fsource_setup_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\rsourceSetupId\x88\x01\x01\x123\n" +
-	"\x0esource_version\x18\a \x01(\x05B\a\xbaH\x04\x1a\x02(\x01H\x02R\rsourceVersion\x88\x01\x01B\b\n" +
+	"\x0esource_version\x18\a \x01(\x05B\a\xbaH\x04\x1a\x02(\x01H\x02R\rsourceVersion\x88\x01\x01\x12M\n" +
+	"\x0esheet_template\x18\b \x01(\v2!.pitbox.setup.v1.SheetTemplateRefH\x03R\rsheetTemplate\x88\x01\x01B\b\n" +
 	"\x06_notesB\x12\n" +
 	"\x10_source_setup_idB\x11\n" +
-	"\x0f_source_version\"C\n" +
+	"\x0f_source_versionB\x11\n" +
+	"\x0f_sheet_template\"C\n" +
 	"\x13CreateSetupResponse\x12,\n" +
-	"\x05setup\x18\x01 \x01(\v2\x16.pitbox.setup.v1.SetupR\x05setup\"\xb1\x02\n" +
+	"\x05setup\x18\x01 \x01(\v2\x16.pitbox.setup.v1.SetupR\x05setup\"\xe5\x02\n" +
 	"\x14CreateVersionRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -1107,7 +1459,8 @@ const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"\bsetup_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\asetupId\x12*\n" +
 	"\fbase_version\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\vbaseVersion\x123\n" +
 	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructB\x06\xbaH\x03\xc8\x01\x01R\x04data\x124\n" +
-	"\x0echange_summary\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\rchangeSummary\x88\x01\x01B\x11\n" +
+	"\x0echange_summary\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03H\x00R\rchangeSummary\x88\x01\x01\x122\n" +
+	"\x0eschema_version\x18\a \x01(\x05B\v\xbaH\b\x1a\x060\x000\x010\x02R\rschemaVersionB\x11\n" +
 	"\x0f_change_summary\"S\n" +
 	"\x15CreateVersionResponse\x12:\n" +
 	"\aversion\x18\x01 \x01(\v2 .pitbox.setup.v1.SetupVersionRefR\aversion\"\x8f\x01\n" +
@@ -1145,12 +1498,13 @@ const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"\bsetup_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\asetupId\x12*\n" +
 	"\ffrom_version\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\vfromVersion\x12&\n" +
 	"\n" +
-	"to_version\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\ttoVersion\"\x9f\x01\n" +
+	"to_version\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01R\ttoVersion\"\xc2\x01\n" +
 	"\x17CompareVersionsResponse\x12B\n" +
 	"\vdifferences\x18\x01 \x03(\v2 .pitbox.setup.v1.SetupDifferenceR\vdifferences\x12!\n" +
 	"\ffrom_version\x18\x02 \x01(\x05R\vfromVersion\x12\x1d\n" +
 	"\n" +
-	"to_version\x18\x03 \x01(\x05R\ttoVersion\"\x9e\x02\n" +
+	"to_version\x18\x03 \x01(\x05R\ttoVersion\x12!\n" +
+	"\fskipped_keys\x18\x04 \x03(\tR\vskippedKeys\"\x9e\x02\n" +
 	"\x16CreateShareLinkRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -1176,7 +1530,33 @@ const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12#\n" +
 	"\bsetup_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\asetupId\x12,\n" +
 	"\rshare_link_id\x18\x04 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vshareLinkId\"\x19\n" +
-	"\x17RevokeShareLinkResponse2\x81\a\n" +
+	"\x17RevokeShareLinkResponse\"\x90\x01\n" +
+	"\x19ListSheetTemplatesRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\x82\x01\n" +
+	"\x1aListSheetTemplatesResponse\x12<\n" +
+	"\ttemplates\x18\x01 \x03(\v2\x1e.pitbox.setup.v1.SheetTemplateR\ttemplates\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa2\x01\n" +
+	"\x1eGetSheetTemplateVersionRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12)\n" +
+	"\vtemplate_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"templateId\x12&\n" +
+	"\aversion\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02(\x01H\x00R\aversion\x88\x01\x01B\n" +
+	"\n" +
+	"\b_version\"b\n" +
+	"\x1fGetSheetTemplateVersionResponse\x12?\n" +
+	"\aversion\x18\x01 \x01(\v2%.pitbox.setup.v1.SheetTemplateVersionR\aversion\"\x96\x01\n" +
+	"\x1dDuplicateSheetTemplateRequest\x12!\n" +
+	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
+	"\n" +
+	"request_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\trequestId\x12)\n" +
+	"\vtemplate_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"templateId\"\\\n" +
+	"\x1eDuplicateSheetTemplateResponse\x12:\n" +
+	"\btemplate\x18\x01 \x01(\v2\x1e.pitbox.setup.v1.SheetTemplateR\btemplate2\xf4\t\n" +
 	"\fSetupService\x12X\n" +
 	"\vCreateSetup\x12#.pitbox.setup.v1.CreateSetupRequest\x1a$.pitbox.setup.v1.CreateSetupResponse\x12^\n" +
 	"\rCreateVersion\x12%.pitbox.setup.v1.CreateVersionRequest\x1a&.pitbox.setup.v1.CreateVersionResponse\x12Z\n" +
@@ -1188,7 +1568,10 @@ const file_pitbox_setup_v1_setup_service_proto_rawDesc = "" +
 	"\x0fCompareVersions\x12'.pitbox.setup.v1.CompareVersionsRequest\x1a(.pitbox.setup.v1.CompareVersionsResponse\"\x03\x90\x02\x01\x12d\n" +
 	"\x0fCreateShareLink\x12'.pitbox.setup.v1.CreateShareLinkRequest\x1a(.pitbox.setup.v1.CreateShareLinkResponse\x12f\n" +
 	"\x0eListShareLinks\x12&.pitbox.setup.v1.ListShareLinksRequest\x1a'.pitbox.setup.v1.ListShareLinksResponse\"\x03\x90\x02\x01\x12d\n" +
-	"\x0fRevokeShareLink\x12'.pitbox.setup.v1.RevokeShareLinkRequest\x1a(.pitbox.setup.v1.RevokeShareLinkResponseB\xd1\x01\n" +
+	"\x0fRevokeShareLink\x12'.pitbox.setup.v1.RevokeShareLinkRequest\x1a(.pitbox.setup.v1.RevokeShareLinkResponse\x12r\n" +
+	"\x12ListSheetTemplates\x12*.pitbox.setup.v1.ListSheetTemplatesRequest\x1a+.pitbox.setup.v1.ListSheetTemplatesResponse\"\x03\x90\x02\x01\x12\x81\x01\n" +
+	"\x17GetSheetTemplateVersion\x12/.pitbox.setup.v1.GetSheetTemplateVersionRequest\x1a0.pitbox.setup.v1.GetSheetTemplateVersionResponse\"\x03\x90\x02\x01\x12y\n" +
+	"\x16DuplicateSheetTemplate\x12..pitbox.setup.v1.DuplicateSheetTemplateRequest\x1a/.pitbox.setup.v1.DuplicateSheetTemplateResponseB\xd1\x01\n" +
 	"\x13com.pitbox.setup.v1B\x11SetupServiceProtoP\x01ZIgithub.com/NelsonDanielFreitas/pitbox/backend/gen/pitbox/setup/v1;setupv1\xa2\x02\x03PSX\xaa\x02\x0fPitbox.Setup.V1\xca\x02\x0fPitbox\\Setup\\V1\xe2\x02\x1bPitbox\\Setup\\V1\\GPBMetadata\xea\x02\x11Pitbox::Setup::V1b\x06proto3"
 
 var (
@@ -1203,69 +1586,88 @@ func file_pitbox_setup_v1_setup_service_proto_rawDescGZIP() []byte {
 	return file_pitbox_setup_v1_setup_service_proto_rawDescData
 }
 
-var file_pitbox_setup_v1_setup_service_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_pitbox_setup_v1_setup_service_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_pitbox_setup_v1_setup_service_proto_goTypes = []any{
-	(*CreateSetupRequest)(nil),      // 0: pitbox.setup.v1.CreateSetupRequest
-	(*CreateSetupResponse)(nil),     // 1: pitbox.setup.v1.CreateSetupResponse
-	(*CreateVersionRequest)(nil),    // 2: pitbox.setup.v1.CreateVersionRequest
-	(*CreateVersionResponse)(nil),   // 3: pitbox.setup.v1.CreateVersionResponse
-	(*GetVersionRequest)(nil),       // 4: pitbox.setup.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),      // 5: pitbox.setup.v1.GetVersionResponse
-	(*ListSetupsRequest)(nil),       // 6: pitbox.setup.v1.ListSetupsRequest
-	(*ListSetupsResponse)(nil),      // 7: pitbox.setup.v1.ListSetupsResponse
-	(*ListVersionsRequest)(nil),     // 8: pitbox.setup.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil),    // 9: pitbox.setup.v1.ListVersionsResponse
-	(*CompareVersionsRequest)(nil),  // 10: pitbox.setup.v1.CompareVersionsRequest
-	(*CompareVersionsResponse)(nil), // 11: pitbox.setup.v1.CompareVersionsResponse
-	(*CreateShareLinkRequest)(nil),  // 12: pitbox.setup.v1.CreateShareLinkRequest
-	(*CreateShareLinkResponse)(nil), // 13: pitbox.setup.v1.CreateShareLinkResponse
-	(*ListShareLinksRequest)(nil),   // 14: pitbox.setup.v1.ListShareLinksRequest
-	(*ListShareLinksResponse)(nil),  // 15: pitbox.setup.v1.ListShareLinksResponse
-	(*RevokeShareLinkRequest)(nil),  // 16: pitbox.setup.v1.RevokeShareLinkRequest
-	(*RevokeShareLinkResponse)(nil), // 17: pitbox.setup.v1.RevokeShareLinkResponse
-	(*Setup)(nil),                   // 18: pitbox.setup.v1.Setup
-	(*structpb.Struct)(nil),         // 19: google.protobuf.Struct
-	(*SetupVersionRef)(nil),         // 20: pitbox.setup.v1.SetupVersionRef
-	(*SetupVersion)(nil),            // 21: pitbox.setup.v1.SetupVersion
-	(*SetupDifference)(nil),         // 22: pitbox.setup.v1.SetupDifference
-	(ShareLinkExpiry)(0),            // 23: pitbox.setup.v1.ShareLinkExpiry
-	(*ShareLinkWithToken)(nil),      // 24: pitbox.setup.v1.ShareLinkWithToken
-	(*ShareLink)(nil),               // 25: pitbox.setup.v1.ShareLink
+	(*CreateSetupRequest)(nil),              // 0: pitbox.setup.v1.CreateSetupRequest
+	(*CreateSetupResponse)(nil),             // 1: pitbox.setup.v1.CreateSetupResponse
+	(*CreateVersionRequest)(nil),            // 2: pitbox.setup.v1.CreateVersionRequest
+	(*CreateVersionResponse)(nil),           // 3: pitbox.setup.v1.CreateVersionResponse
+	(*GetVersionRequest)(nil),               // 4: pitbox.setup.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),              // 5: pitbox.setup.v1.GetVersionResponse
+	(*ListSetupsRequest)(nil),               // 6: pitbox.setup.v1.ListSetupsRequest
+	(*ListSetupsResponse)(nil),              // 7: pitbox.setup.v1.ListSetupsResponse
+	(*ListVersionsRequest)(nil),             // 8: pitbox.setup.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil),            // 9: pitbox.setup.v1.ListVersionsResponse
+	(*CompareVersionsRequest)(nil),          // 10: pitbox.setup.v1.CompareVersionsRequest
+	(*CompareVersionsResponse)(nil),         // 11: pitbox.setup.v1.CompareVersionsResponse
+	(*CreateShareLinkRequest)(nil),          // 12: pitbox.setup.v1.CreateShareLinkRequest
+	(*CreateShareLinkResponse)(nil),         // 13: pitbox.setup.v1.CreateShareLinkResponse
+	(*ListShareLinksRequest)(nil),           // 14: pitbox.setup.v1.ListShareLinksRequest
+	(*ListShareLinksResponse)(nil),          // 15: pitbox.setup.v1.ListShareLinksResponse
+	(*RevokeShareLinkRequest)(nil),          // 16: pitbox.setup.v1.RevokeShareLinkRequest
+	(*RevokeShareLinkResponse)(nil),         // 17: pitbox.setup.v1.RevokeShareLinkResponse
+	(*ListSheetTemplatesRequest)(nil),       // 18: pitbox.setup.v1.ListSheetTemplatesRequest
+	(*ListSheetTemplatesResponse)(nil),      // 19: pitbox.setup.v1.ListSheetTemplatesResponse
+	(*GetSheetTemplateVersionRequest)(nil),  // 20: pitbox.setup.v1.GetSheetTemplateVersionRequest
+	(*GetSheetTemplateVersionResponse)(nil), // 21: pitbox.setup.v1.GetSheetTemplateVersionResponse
+	(*DuplicateSheetTemplateRequest)(nil),   // 22: pitbox.setup.v1.DuplicateSheetTemplateRequest
+	(*DuplicateSheetTemplateResponse)(nil),  // 23: pitbox.setup.v1.DuplicateSheetTemplateResponse
+	(*SheetTemplateRef)(nil),                // 24: pitbox.setup.v1.SheetTemplateRef
+	(*Setup)(nil),                           // 25: pitbox.setup.v1.Setup
+	(*structpb.Struct)(nil),                 // 26: google.protobuf.Struct
+	(*SetupVersionRef)(nil),                 // 27: pitbox.setup.v1.SetupVersionRef
+	(*SetupVersion)(nil),                    // 28: pitbox.setup.v1.SetupVersion
+	(*SetupDifference)(nil),                 // 29: pitbox.setup.v1.SetupDifference
+	(ShareLinkExpiry)(0),                    // 30: pitbox.setup.v1.ShareLinkExpiry
+	(*ShareLinkWithToken)(nil),              // 31: pitbox.setup.v1.ShareLinkWithToken
+	(*ShareLink)(nil),                       // 32: pitbox.setup.v1.ShareLink
+	(*SheetTemplate)(nil),                   // 33: pitbox.setup.v1.SheetTemplate
+	(*SheetTemplateVersion)(nil),            // 34: pitbox.setup.v1.SheetTemplateVersion
 }
 var file_pitbox_setup_v1_setup_service_proto_depIdxs = []int32{
-	18, // 0: pitbox.setup.v1.CreateSetupResponse.setup:type_name -> pitbox.setup.v1.Setup
-	19, // 1: pitbox.setup.v1.CreateVersionRequest.data:type_name -> google.protobuf.Struct
-	20, // 2: pitbox.setup.v1.CreateVersionResponse.version:type_name -> pitbox.setup.v1.SetupVersionRef
-	21, // 3: pitbox.setup.v1.GetVersionResponse.version:type_name -> pitbox.setup.v1.SetupVersion
-	18, // 4: pitbox.setup.v1.ListSetupsResponse.setups:type_name -> pitbox.setup.v1.Setup
-	20, // 5: pitbox.setup.v1.ListVersionsResponse.versions:type_name -> pitbox.setup.v1.SetupVersionRef
-	22, // 6: pitbox.setup.v1.CompareVersionsResponse.differences:type_name -> pitbox.setup.v1.SetupDifference
-	23, // 7: pitbox.setup.v1.CreateShareLinkRequest.expires_in:type_name -> pitbox.setup.v1.ShareLinkExpiry
-	24, // 8: pitbox.setup.v1.CreateShareLinkResponse.share_link:type_name -> pitbox.setup.v1.ShareLinkWithToken
-	25, // 9: pitbox.setup.v1.ListShareLinksResponse.share_links:type_name -> pitbox.setup.v1.ShareLink
-	0,  // 10: pitbox.setup.v1.SetupService.CreateSetup:input_type -> pitbox.setup.v1.CreateSetupRequest
-	2,  // 11: pitbox.setup.v1.SetupService.CreateVersion:input_type -> pitbox.setup.v1.CreateVersionRequest
-	4,  // 12: pitbox.setup.v1.SetupService.GetVersion:input_type -> pitbox.setup.v1.GetVersionRequest
-	6,  // 13: pitbox.setup.v1.SetupService.ListSetups:input_type -> pitbox.setup.v1.ListSetupsRequest
-	8,  // 14: pitbox.setup.v1.SetupService.ListVersions:input_type -> pitbox.setup.v1.ListVersionsRequest
-	10, // 15: pitbox.setup.v1.SetupService.CompareVersions:input_type -> pitbox.setup.v1.CompareVersionsRequest
-	12, // 16: pitbox.setup.v1.SetupService.CreateShareLink:input_type -> pitbox.setup.v1.CreateShareLinkRequest
-	14, // 17: pitbox.setup.v1.SetupService.ListShareLinks:input_type -> pitbox.setup.v1.ListShareLinksRequest
-	16, // 18: pitbox.setup.v1.SetupService.RevokeShareLink:input_type -> pitbox.setup.v1.RevokeShareLinkRequest
-	1,  // 19: pitbox.setup.v1.SetupService.CreateSetup:output_type -> pitbox.setup.v1.CreateSetupResponse
-	3,  // 20: pitbox.setup.v1.SetupService.CreateVersion:output_type -> pitbox.setup.v1.CreateVersionResponse
-	5,  // 21: pitbox.setup.v1.SetupService.GetVersion:output_type -> pitbox.setup.v1.GetVersionResponse
-	7,  // 22: pitbox.setup.v1.SetupService.ListSetups:output_type -> pitbox.setup.v1.ListSetupsResponse
-	9,  // 23: pitbox.setup.v1.SetupService.ListVersions:output_type -> pitbox.setup.v1.ListVersionsResponse
-	11, // 24: pitbox.setup.v1.SetupService.CompareVersions:output_type -> pitbox.setup.v1.CompareVersionsResponse
-	13, // 25: pitbox.setup.v1.SetupService.CreateShareLink:output_type -> pitbox.setup.v1.CreateShareLinkResponse
-	15, // 26: pitbox.setup.v1.SetupService.ListShareLinks:output_type -> pitbox.setup.v1.ListShareLinksResponse
-	17, // 27: pitbox.setup.v1.SetupService.RevokeShareLink:output_type -> pitbox.setup.v1.RevokeShareLinkResponse
-	19, // [19:28] is the sub-list for method output_type
-	10, // [10:19] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	24, // 0: pitbox.setup.v1.CreateSetupRequest.sheet_template:type_name -> pitbox.setup.v1.SheetTemplateRef
+	25, // 1: pitbox.setup.v1.CreateSetupResponse.setup:type_name -> pitbox.setup.v1.Setup
+	26, // 2: pitbox.setup.v1.CreateVersionRequest.data:type_name -> google.protobuf.Struct
+	27, // 3: pitbox.setup.v1.CreateVersionResponse.version:type_name -> pitbox.setup.v1.SetupVersionRef
+	28, // 4: pitbox.setup.v1.GetVersionResponse.version:type_name -> pitbox.setup.v1.SetupVersion
+	25, // 5: pitbox.setup.v1.ListSetupsResponse.setups:type_name -> pitbox.setup.v1.Setup
+	27, // 6: pitbox.setup.v1.ListVersionsResponse.versions:type_name -> pitbox.setup.v1.SetupVersionRef
+	29, // 7: pitbox.setup.v1.CompareVersionsResponse.differences:type_name -> pitbox.setup.v1.SetupDifference
+	30, // 8: pitbox.setup.v1.CreateShareLinkRequest.expires_in:type_name -> pitbox.setup.v1.ShareLinkExpiry
+	31, // 9: pitbox.setup.v1.CreateShareLinkResponse.share_link:type_name -> pitbox.setup.v1.ShareLinkWithToken
+	32, // 10: pitbox.setup.v1.ListShareLinksResponse.share_links:type_name -> pitbox.setup.v1.ShareLink
+	33, // 11: pitbox.setup.v1.ListSheetTemplatesResponse.templates:type_name -> pitbox.setup.v1.SheetTemplate
+	34, // 12: pitbox.setup.v1.GetSheetTemplateVersionResponse.version:type_name -> pitbox.setup.v1.SheetTemplateVersion
+	33, // 13: pitbox.setup.v1.DuplicateSheetTemplateResponse.template:type_name -> pitbox.setup.v1.SheetTemplate
+	0,  // 14: pitbox.setup.v1.SetupService.CreateSetup:input_type -> pitbox.setup.v1.CreateSetupRequest
+	2,  // 15: pitbox.setup.v1.SetupService.CreateVersion:input_type -> pitbox.setup.v1.CreateVersionRequest
+	4,  // 16: pitbox.setup.v1.SetupService.GetVersion:input_type -> pitbox.setup.v1.GetVersionRequest
+	6,  // 17: pitbox.setup.v1.SetupService.ListSetups:input_type -> pitbox.setup.v1.ListSetupsRequest
+	8,  // 18: pitbox.setup.v1.SetupService.ListVersions:input_type -> pitbox.setup.v1.ListVersionsRequest
+	10, // 19: pitbox.setup.v1.SetupService.CompareVersions:input_type -> pitbox.setup.v1.CompareVersionsRequest
+	12, // 20: pitbox.setup.v1.SetupService.CreateShareLink:input_type -> pitbox.setup.v1.CreateShareLinkRequest
+	14, // 21: pitbox.setup.v1.SetupService.ListShareLinks:input_type -> pitbox.setup.v1.ListShareLinksRequest
+	16, // 22: pitbox.setup.v1.SetupService.RevokeShareLink:input_type -> pitbox.setup.v1.RevokeShareLinkRequest
+	18, // 23: pitbox.setup.v1.SetupService.ListSheetTemplates:input_type -> pitbox.setup.v1.ListSheetTemplatesRequest
+	20, // 24: pitbox.setup.v1.SetupService.GetSheetTemplateVersion:input_type -> pitbox.setup.v1.GetSheetTemplateVersionRequest
+	22, // 25: pitbox.setup.v1.SetupService.DuplicateSheetTemplate:input_type -> pitbox.setup.v1.DuplicateSheetTemplateRequest
+	1,  // 26: pitbox.setup.v1.SetupService.CreateSetup:output_type -> pitbox.setup.v1.CreateSetupResponse
+	3,  // 27: pitbox.setup.v1.SetupService.CreateVersion:output_type -> pitbox.setup.v1.CreateVersionResponse
+	5,  // 28: pitbox.setup.v1.SetupService.GetVersion:output_type -> pitbox.setup.v1.GetVersionResponse
+	7,  // 29: pitbox.setup.v1.SetupService.ListSetups:output_type -> pitbox.setup.v1.ListSetupsResponse
+	9,  // 30: pitbox.setup.v1.SetupService.ListVersions:output_type -> pitbox.setup.v1.ListVersionsResponse
+	11, // 31: pitbox.setup.v1.SetupService.CompareVersions:output_type -> pitbox.setup.v1.CompareVersionsResponse
+	13, // 32: pitbox.setup.v1.SetupService.CreateShareLink:output_type -> pitbox.setup.v1.CreateShareLinkResponse
+	15, // 33: pitbox.setup.v1.SetupService.ListShareLinks:output_type -> pitbox.setup.v1.ListShareLinksResponse
+	17, // 34: pitbox.setup.v1.SetupService.RevokeShareLink:output_type -> pitbox.setup.v1.RevokeShareLinkResponse
+	19, // 35: pitbox.setup.v1.SetupService.ListSheetTemplates:output_type -> pitbox.setup.v1.ListSheetTemplatesResponse
+	21, // 36: pitbox.setup.v1.SetupService.GetSheetTemplateVersion:output_type -> pitbox.setup.v1.GetSheetTemplateVersionResponse
+	23, // 37: pitbox.setup.v1.SetupService.DuplicateSheetTemplate:output_type -> pitbox.setup.v1.DuplicateSheetTemplateResponse
+	26, // [26:38] is the sub-list for method output_type
+	14, // [14:26] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_pitbox_setup_v1_setup_service_proto_init() }
@@ -1279,13 +1681,14 @@ func file_pitbox_setup_v1_setup_service_proto_init() {
 	file_pitbox_setup_v1_setup_service_proto_msgTypes[4].OneofWrappers = []any{}
 	file_pitbox_setup_v1_setup_service_proto_msgTypes[6].OneofWrappers = []any{}
 	file_pitbox_setup_v1_setup_service_proto_msgTypes[12].OneofWrappers = []any{}
+	file_pitbox_setup_v1_setup_service_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pitbox_setup_v1_setup_service_proto_rawDesc), len(file_pitbox_setup_v1_setup_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

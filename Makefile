@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: template-migration help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate db-backup db-restore db-restore-live db-backup-test app-preview serve-phone serve-phone-off run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
+.PHONY: template-migration help tools-check init up down reset ps logs health s3-smoke gen gen-check sqlc-check check-tool-versions lint lint-proto lint-go lint-app breaking test test-app fuzz app-install app-dev app-lint app-typecheck app-test app-build app-e2e app-e2e-sync secrets vuln workflows ci hooks db-validate db-lint db-test db-new db-migrate db-backup db-restore db-restore-live db-backup-test app-preview serve-phone serve-phone-off android-debug android-diagnostics android-install android-logs run-api run-worker smoke-api smoke-auth zitadel-provision test-scripts authz-test
 
 COMPOSE_DIR := deploy/compose
 ENV_FILE    := $(COMPOSE_DIR)/.env
@@ -186,6 +186,27 @@ serve-phone: ## Expõe a app e o Zitadel SÓ na tailnet (tailscale serve, nunca 
 
 serve-phone-off: ## Corta o acesso do telemóvel (tailscale serve reset) e mostra o estado
 	@bash scripts/serve-phone.sh off
+
+ADB := $(HOME)/Android/Sdk/platform-tools/adb
+APK := app/android/app/build/outputs/apk/debug/app-debug.apk
+
+android-debug: ## APK de DEBUG da app Android (F2-06): API em https://$(PITBOX_TAILNET_HOST), abre a app normal, com DevTools. Não é um build de release
+	@test -n "$(TAILNET_HOST)" || { echo "Define PITBOX_TAILNET_HOST em $(ENV_FILE) (ver deploy/README.md)."; exit 1; }
+	cd app && PITBOX_API_ORIGIN="https://$(TAILNET_HOST)" PITBOX_ANDROID_DEBUG=1 pnpm build:android
+	cd app/android && ./gradlew assembleDebug
+
+android-diagnostics: ## Como android-debug, mas a app abre na página «Diagnóstico nativo» (chave do Keystore, base cifrada)
+	@test -n "$(TAILNET_HOST)" || { echo "Define PITBOX_TAILNET_HOST em $(ENV_FILE) (ver deploy/README.md)."; exit 1; }
+	cd app && PITBOX_API_ORIGIN="https://$(TAILNET_HOST)" PITBOX_ANDROID_DEBUG=1 PITBOX_DIAGNOSTICS=1 pnpm build:android
+	cd app/android && ./gradlew assembleDebug
+
+android-install: ## Instala o APK de debug no telemóvel ligado por adb (adb connect antes) e abre a app
+	@test -f $(APK) || { echo "Falta o APK: corre 'make android-debug'."; exit 1; }
+	$(ADB) install -r $(APK)
+	$(ADB) shell am start -n app.pitbox.mobile/.MainActivity
+
+android-logs: ## Resultado do diagnóstico e erros da app no logcat do telemóvel
+	$(ADB) logcat -d -v brief | grep -E "\[diag\]|FATAL|Capacitor/Console" | sed 's/.*Msg: //'
 
 run-api: ## Corre o pitbox-api em 127.0.0.1:8081 com traces para o Jaeger; com login se `make zitadel-provision` já correu (Ctrl+C para parar)
 	@bash scripts/run-api.sh

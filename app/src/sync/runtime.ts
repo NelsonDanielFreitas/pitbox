@@ -1,6 +1,10 @@
-import { hashUserId } from "@/db/client";
+import { PitboxSecure } from "pitbox-secure";
 
-import { IndexedDbKeyStore } from "./device-key";
+import { hashUserId } from "@/db/client";
+import { isNativePlatform } from "@/shared/lib/platform";
+
+import { IndexedDbKeyStore, WebDeviceKeys, type DeviceKeys } from "./device-key";
+import { NativeDeviceKeys } from "./device-key-native";
 import { SyncEngine, type SyncSnapshot } from "./engine";
 import { assertSafeToErase, UnsyncedChangesError } from "./logout-guard";
 import { onLocalWrite } from "./outbox";
@@ -63,6 +67,20 @@ function webLockExclusive(name: string) {
   };
 }
 
+/**
+ * Where the device key lives (ADR 0033): the Android Keystore inside the APK, a non-extractable
+ * WebCrypto key in a browser. A Keystore without secure hardware is refused unless the build was
+ * made on purpose with VITE_ALLOW_SOFTWARE_KEYSTORE=1 (emulator testing); release builds never are.
+ */
+function createDeviceKeys(): DeviceKeys {
+  if (isNativePlatform()) {
+    return new NativeDeviceKeys(PitboxSecure, {
+      allowSoftwareKeys: import.meta.env.VITE_ALLOW_SOFTWARE_KEYSTORE === "1",
+    });
+  }
+  return new WebDeviceKeys(new IndexedDbKeyStore());
+}
+
 export async function startSync(options: RuntimeOptions): Promise<void> {
   if (engine && activeUser === options.userId) return;
   stopSync();
@@ -74,8 +92,7 @@ export async function startSync(options: RuntimeOptions): Promise<void> {
     api: new ConnectSyncApi(),
     userId: options.userId,
     userHash,
-    keyStore: new IndexedDbKeyStore(),
-    deviceName: "Browser",
+    deviceKeys: createDeviceKeys(),
     exclusive: webLockExclusive(`pitbox-sync-${userHash}`),
     onDataChanged: () => {
       options.onDataChanged();

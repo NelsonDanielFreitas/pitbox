@@ -23,7 +23,9 @@ export class NodeSqliteExecutor implements SqlExecutor {
 
   static async create(): Promise<NodeSqliteExecutor> {
     const wasmBinary = readFileSync(require.resolve("wa-sqlite/dist/wa-sqlite.wasm"));
-    const module = await SQLiteESMFactory({ wasmBinary });
+    // wa-sqlite's own typings also declare this module (as Promise<any>); which declaration wins
+    // depends on file load order, so the type is pinned here.
+    const module: unknown = await SQLiteESMFactory({ wasmBinary });
     const sqlite3 = SQLite.Factory(module);
     const vfs = await MemoryVFS.create("memory", module);
     sqlite3.vfs_register(vfs as never, false);

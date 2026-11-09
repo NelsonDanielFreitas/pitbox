@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { sessionQueryOptions, useSession } from "@/auth/session-query";
 import { useSessionRecovery } from "@/auth/use-session-recovery";
+import { AppLockGate } from "@/app/AppLockGate";
 import { DatabaseGate } from "@/app/DatabaseGate";
 import { StorageNotices } from "@/app/StorageNotices";
 import { RootError } from "@/app/routes/__root";
@@ -33,8 +34,10 @@ function AuthenticatedLayout() {
   if (!userId) return null;
   return (
     // key: another user starts with a fresh gate, so the previous user's screens unmount.
-    <DatabaseGate key={userId} userId={userId}>
-      <AppShell notices={<StorageNotices />} />
-    </DatabaseGate>
+    <AppLockGate>
+      <DatabaseGate key={userId} userId={userId}>
+        <AppShell notices={<StorageNotices />} />
+      </DatabaseGate>
+    </AppLockGate>
   );
 }

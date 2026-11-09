@@ -43,7 +43,7 @@ do Vite em desenvolvimento e `vite preview` nos E2E, ambos na mesma origem.
 - O provisionamento local do Zitadel regista as duas origens locais (`8081` e `5173`), para
   não alternar entre `make run-api` e `make app-dev`.
 - O Capacitor (F2-06) corre noutra origem (`https://localhost` ou `capacitor://localhost`),
-  usa Bearer/AppAuth e **não** usa o cookie de sessão web. Nesse cartão entra CORS com
+  usa Bearer/AppAuth (F2-06b) e **não** usa o cookie de sessão web. No F2-06b entra CORS com
   allowlist dessas origens e **sem** `Access-Control-Allow-Credentials`.
 - A arquitetura §11.1 e §13 passam a refletir esta decisão.
 

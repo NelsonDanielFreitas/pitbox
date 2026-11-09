@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as ConfirmEmailRouteImport } from './routes/confirm-email'
+import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as InviteRouteImport } from './routes/invite'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedTeamsRouteRouteImport } from './routes/_authenticated/teams/route'
@@ -62,6 +63,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const ConfirmEmailRoute = ConfirmEmailRouteImport.update({
   id: '/confirm-email',
   path: '/confirm-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DiagnosticsRoute = DiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InviteRoute = InviteRouteImport.update({
@@ -285,6 +291,7 @@ const AuthenticatedTeamsTeamIdGarageTyresTyreSetIdEditRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/confirm-email': typeof ConfirmEmailRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
   '/teams': typeof AuthenticatedTeamsRouteRouteWithChildren
@@ -326,6 +333,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/confirm-email': typeof ConfirmEmailRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
   '/teams/new': typeof AuthenticatedTeamsNewRoute
@@ -364,6 +372,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/confirm-email': typeof ConfirmEmailRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
   '/_authenticated/teams': typeof AuthenticatedTeamsRouteRouteWithChildren
@@ -407,6 +416,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/confirm-email'
+    | '/diagnostics'
     | '/invite'
     | '/login'
     | '/teams'
@@ -448,6 +458,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/confirm-email'
+    | '/diagnostics'
     | '/invite'
     | '/login'
     | '/teams/new'
@@ -485,6 +496,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/confirm-email'
+    | '/diagnostics'
     | '/invite'
     | '/login'
     | '/_authenticated/teams'
@@ -528,6 +540,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   ConfirmEmailRoute: typeof ConfirmEmailRoute
+  DiagnosticsRoute: typeof DiagnosticsRoute
   InviteRoute: typeof InviteRoute
   LoginRoute: typeof LoginRoute
 }
@@ -553,6 +566,13 @@ declare module '@tanstack/react-router' {
       path: '/confirm-email'
       fullPath: '/confirm-email'
       preLoaderRoute: typeof ConfirmEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/diagnostics': {
+      id: '/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof DiagnosticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite': {
@@ -990,6 +1010,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   ConfirmEmailRoute: ConfirmEmailRoute,
+  DiagnosticsRoute: DiagnosticsRoute,
   InviteRoute: InviteRoute,
   LoginRoute: LoginRoute,
 }

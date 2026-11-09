@@ -181,7 +181,7 @@ Os RPCs são traçados só pelo `otelconnect`, que não confia no `traceparent` 
 | Postgres | jackc/pgx v5 + sqlc |
 | Migrações | Atlas Community: SQL escrito à mão, `atlas.sum`, teste de desvio contra `schema.sql` e lint por script (ADR 0010) |
 | Fila de tarefas | outbox + poller próprio (F1-05b, ADR 0015); `riverqueue/river` no F2-04 |
-| OIDC | coreos/go-oidc v3 + golang.org/x/oauth2 (login e ID token). `lestrrat-go/jwx` só se o F2-06 (Bearer) o exigir (ADR 0013) |
+| OIDC | coreos/go-oidc v3 + golang.org/x/oauth2 (login e ID token). `lestrrat-go/jwx` só se o F2-06b (Bearer) o exigir (ADR 0013) |
 | Valkey | valkey-io/valkey-go (sessões BFF, locks, rate limiting; sem `valkeylock`) |
 | Autorização | OpenFGA Go SDK (secção 6) |
 | Configuração | variáveis de ambiente + caarlos0/env; segredos do gestor de segredos |
@@ -199,7 +199,7 @@ Utilizadores autenticam-se no Zitadel por OIDC com PKCE; o backend nunca vê pal
 - **Web**: padrão BFF. O `pitbox-api` faz o fluxo Authorization Code + PKCE (S256) como cliente confidencial; o estado do pré-login vai num cookie cifrado (`__Host-pitbox_login`, Lax) e a sessão no Valkey, com o cookie `__Host-pitbox_session` (HttpOnly, Secure, SameSite=Strict) a guardar só um valor aleatório (no Valkey fica o SHA-256). A sessão guarda identificadores e o refresh token cifrado; nenhum token no JavaScript (ADR 0013)
 - **Android/iOS (Capacitor)**: Authorization Code + PKCE com o browser do sistema (AppAuth); tokens no Keychain/Keystore
 - **Tokens**: ID token validado no login (`go-oidc`, algoritmo fixo em `PITBOX_OIDC_ALLOWED_ALGS`, por omissão ES256 configurado nas *web keys* do Zitadel); access token de 10 min, ID token de 5 min, refresh token com 168 h de inatividade e 720 h absolutas. O Zitadel rota o refresh token mas **não revoga a família** se um antigo for reutilizado (ADR 0004, emenda)
-- **Validação no backend** (BFF): a API autentica pela sessão do cookie. O ID token é verificado no callback: assinatura, `iss`, `aud`, `exp` (sem tolerância), `nbf` (tolerância fixa de 5 min do `go-oidc`) e `nonce` (à mão). O JWKS é pedido pelo `go-oidc`, que não tem TTL (só volta ao JWKS numa falha); isto só é aceitável enquanto o único JWT validado vier do endpoint de tokens. O caminho `Authorization: Bearer` (telemóvel) fica no F2-06
+- **Validação no backend** (BFF): a API autentica pela sessão do cookie. O ID token é verificado no callback: assinatura, `iss`, `aud`, `exp` (sem tolerância), `nbf` (tolerância fixa de 5 min do `go-oidc`) e `nonce` (à mão). O JWKS é pedido pelo `go-oidc`, que não tem TTL (só volta ao JWKS numa falha); isto só é aceitável enquanto o único JWT validado vier do endpoint de tokens. O caminho `Authorization: Bearer` (telemóvel) fica no F2-06b
 - **Principal interno**: `{user_id, session_id, amr, auth_time}` lido da **sessão**, não do token (`auth_time`, `amr` e `sid` só existem no ID token); as equipas e papéis não vêm da sessão, são verificados no motor de autorização
 - **Utilizador desativado**: o access token de 10 min é a janela de revogação. No refresh seguinte o Zitadel recusa (`invalid_grant`, ou `invalid_request` com `Errors.User.*`) e a sessão acaba; uma falha do Zitadel ou do Valkey nunca desloga (`UNAVAILABLE`, graça de 2 min)
 - **Operações sensíveis** (F1-03c) exigem `auth_time` ≤ 5 min e `amr` com fator forte (lidos da sessão, renovados por reautenticação com `prompt=login`); caso contrário a API devolve `UNAUTHENTICATED` com pedido de reautenticação (step-up). OTP por SMS e por email estão desligados no Zitadel: dão `amr` `mfa` e estragariam esta regra
@@ -484,7 +484,7 @@ A segurança segue o modelo de defesa em profundidade: cada camada assume que a 
 | Camada | Controlos |
 | --- | --- |
 | Borda | Cloudflare WAF (OWASP CRS), anti-DDoS, bot management, TLS 1.3 + HSTS preload; a origem só aceita tráfego da Cloudflare (autenticação de origem / mTLS) |
-| API | Rate limiting por IP, utilizador e equipa; limites de tamanho; deadlines; web na mesma origem (ADR 0017), CORS só para o Capacitor no F2-06; reflection desligado |
+| API | Rate limiting por IP, utilizador e equipa; limites de tamanho; deadlines; web na mesma origem (ADR 0017), CORS só para o Capacitor no F2-06b; reflection desligado |
 | Identidade | OIDC + PKCE, passkeys, MFA obrigatório para donos; tokens de 10 min; step-up para operações sensíveis |
 | Autorização | OpenFGA por chamada + RLS no Postgres; testes de acesso cruzado entre equipas em cada endpoint |
 | Dados | TLS até à base de dados; cifra em repouso; cifra por envelope em campos sensíveis; backups cifrados e imutáveis |

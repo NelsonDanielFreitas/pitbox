@@ -19,13 +19,13 @@ O ADR 0004 fixou o padrão BFF e deixou por decidir o que o `pitbox-api` guarda,
 
 ### Âmbito
 
-O `pitbox-api` é um cliente OIDC confidencial (Authorization Code + PKCE S256, `client_secret_basic`). No browser só existe um cookie de sessão. O caminho `Authorization: Bearer` **não existe neste cartão**: passa para o F2-06 (telemóvel). No BFF o único JWT que o servidor valida é o **ID token**, recebido do endpoint de tokens numa ligação TLS iniciada por nós; não há JWT de origem não confiável, logo nenhuma amplificação de pedidos ao JWKS por pedidos forjados.
+O `pitbox-api` é um cliente OIDC confidencial (Authorization Code + PKCE S256, `client_secret_basic`). No browser só existe um cookie de sessão. O caminho `Authorization: Bearer` **não existe neste cartão**: passa para o F2-06b (telemóvel). No BFF o único JWT que o servidor valida é o **ID token**, recebido do endpoint de tokens numa ligação TLS iniciada por nós; não há JWT de origem não confiável, logo nenhuma amplificação de pedidos ao JWKS por pedidos forjados.
 
 ### Tokens e validação
 
 - Algoritmo **ES256** (web keys ECDSA P-256 configuradas no primeiro arranque, ver o runbook); lista aceite em `PITBOX_OIDC_ALLOWED_ALGS`, por omissão `ES256` (agilidade criptográfica).
 - Tempos da instância: access token 10 min, ID token 5 min, refresh token 168 h de inatividade e 720 h absolutas. As quatro são definidas em conjunto, senão o arranque do Zitadel falha.
-- **O access token é opaco** (`OIDC_TOKEN_TYPE_BEARER`): o BFF nunca o lê, só o apresenta ao `userinfo`. Um JWT convidaria a confundi-lo com o ID token (mesma chave, mesma `aud`). Quando houver Bearer (F2-06), decide-se se o access token passa a JWT (validação local) ou se fica opaco (introspeção).
+- **O access token é opaco** (`OIDC_TOKEN_TYPE_BEARER`): o BFF nunca o lê, só o apresenta ao `userinfo`. Um JWT convidaria a confundi-lo com o ID token (mesma chave, mesma `aud`). Quando houver Bearer (F2-06b), decide-se se o access token passa a JWT (validação local) ou se fica opaco (introspeção).
 - **O ID token não leva dados pessoais.** Vai no `id_token_hint` do redirect de logout (histórico do browser, logs de proxy), por isso a app é registada sem `idTokenUserinfoAssertion`. O email, o `email_verified` e o nome obtêm-se no callback pelo endpoint `userinfo` (`go-oidc` `Provider.UserInfo`), do lado do servidor, com o access token recebido na troca do código. O `sub` do `userinfo` tem de ser igual ao do ID token (OIDC Core 5.3.2); se não for, o login é recusado. Uma falha do `userinfo` é 503 (o IdP está com problemas), não 403.
 - ID token validado com `oidc.IDTokenVerifier` (`SupportedSigningAlgs` da configuração, `ClientID`, issuer) e `nonce` verificado à mão. Tolerâncias reais do `go-oidc`: `exp` sem tolerância, `nbf` com 5 min fixos.
 - Descoberta do provider **preguiçosa** com novas tentativas: o arranque do `pitbox-api` não depende do Zitadel; `/auth/login` responde 503 até haver provider; `/healthz` não é afetado.
@@ -146,7 +146,7 @@ A RLS de `identity.user_account` bloqueia o `SELECT` por `idp_subject` e o `INSE
 
 Script Python idempotente por estado desejado (`scripts/zitadel-provision.py`). O PAT de `IAM_OWNER` tem validade de 30 dias, fica num ficheiro 0600 fora do repositório (e coberto pelo `.gitignore`), e nunca aparece no output. O `client_id` e o segredo vão para o `.env` local. Desliga-se o OTP por SMS e por email na política de login: no Zitadel ambos dão `amr` `mfa`, o que estragaria o *step-up* do F1-03c.
 
-### Para o F2-06 (Bearer, telemóvel)
+### Para o F2-06b (Bearer, telemóvel)
 
 Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a mesma `aud` do ID token (segundo a revisão do código; hoje a app usa access tokens opacos). Quando o Bearer existir: exigir o *claim* `client_id` numa lista de permitidos, **rejeitar tokens com `nonce`, `at_hash` ou `auth_time`** (são ID tokens) e testar um ID token apresentado como Bearer. Aí é preciso também decidir o JWKS: o `RemoteKeySet` sem TTL e com pedido por assinatura inválida deixa de ser aceitável (ver o contexto).
 
@@ -164,7 +164,7 @@ Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a
 ## Consequências
 
 - O Valkey guarda segredos (TM-AUTH-06): em produção exige TLS e autenticação; ACL restrita desde já.
-- O Zitadel não revoga a família de refresh tokens: a spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06**. No BFF o risco é menor (o refresh token nunca sai do servidor).
+- O Zitadel não revoga a família de refresh tokens: a spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06b**. No BFF o risco é menor (o refresh token nunca sai do servidor).
 - A arquitetura §5.1 (principal e *step-up*) passa a ler `auth_time` e `amr` da sessão e não do token.
 - A app deve avisar os donos de equipa que precisam de passkey ou TOTP para fazer login; os códigos de recuperação são o plano B.
 - O endpoint de back-channel logout tem de estar registado no `post_logout_redirect_uri`/back-channel settings do Zitadel pelo script de provisionamento.
@@ -176,4 +176,4 @@ Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a
 - A chave ES256 não se configura por variáveis de ambiente do Zitadel (o Viper só aplica variáveis a chaves presentes no `defaults.yaml`; verificado: o arranque falha com `Errors.WebKey.Config`): `make zitadel-provision` cria e ativa-a.
 - `/auth/*` fica sem rate limiting no servidor: risco aceite e ligado ao F5-05 (Cloudflare, por IP).
 - Em desenvolvimento só o Chrome e o Firefox funcionam com `__Host-` sobre `http://localhost`; o Safari espera pelo HTTPS local do F1-09.
-- Revisitar se o Zitadel passar a revogar a família de refresh tokens, ou antes do F2-06.
+- Revisitar se o Zitadel passar a revogar a família de refresh tokens, ou antes do F2-06b.

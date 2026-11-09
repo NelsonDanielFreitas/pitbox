@@ -903,6 +903,15 @@ export const en = {
     errorBody: "Check browser storage and try again.",
     clear: "Clear local data",
   },
+  lock: {
+    title: "Session locked",
+    body: "Use your fingerprint, face or phone PIN to continue.",
+    unlock: "Unlock",
+    retry: "Try again",
+    unavailable: "Set a screen lock (PIN, pattern or biometrics) in the phone settings to use PitBox.",
+    failed: "We could not confirm it is you.",
+    prompt: "Unlock PitBox",
+  },
   errors: {
     title: "Something went wrong",
     notFoundTitle: "Page not found",

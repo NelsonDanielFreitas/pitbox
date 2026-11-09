@@ -1,7 +1,31 @@
 // The device key (ECDSA P-256) signs every operation and proves possession at registration.
 // It is generated non-extractable: script code (and an XSS payload) can ask it to sign while
-// the page is open, but can never read the private key out. On native (F2-06) the key moves
-// to the Keychain/Keystore; the KeyStore interface is where that plugs in.
+// the page is open, but can never read the private key out.
+//
+// The sync engine only sees `DeviceKeys` / `DeviceSigner` below: "give me the public key" and
+// "sign these bytes". It never gets a key object, so the same engine works with a WebCrypto key
+// in the browser (this file) and a hardware-backed Android Keystore key (device-key-native.ts,
+// ADR 0033), where there is no key object to hand out at all.
+
+export type DevicePlatform = "web" | "android";
+
+/** Signs on behalf of one user of this device. The private key is not reachable from here. */
+export interface DeviceSigner {
+  /** SPKI DER (91 bytes for P-256): what RegisterDevice expects. */
+  publicKey(): Promise<Uint8Array>;
+  /** ECDSA P-256 / SHA-256 as IEEE P1363 (r||s, 64 bytes), the format of ADR 0025. */
+  sign(message: Uint8Array): Promise<Uint8Array>;
+}
+
+export interface DeviceKeys {
+  readonly platform: DevicePlatform;
+  /** Shown to the owner in the device list. */
+  readonly deviceName: string;
+  /** The signer of this user on this device; creates the key the first time. */
+  loadOrCreate(userHash: string): Promise<DeviceSigner>;
+  /** Drops the key of this user (revoked device, new registration). Missing is not an error. */
+  forget(userHash: string): Promise<void>;
+}
 
 export interface KeyStore {
   get(name: string): Promise<CryptoKeyPair | undefined>;
@@ -107,4 +131,24 @@ export async function signBytes(pair: CryptoKeyPair, message: Uint8Array): Promi
   );
   if (signature.length !== 64) throw new Error("unexpected signature length");
   return signature;
+}
+
+/** The browser: a non-extractable WebCrypto key pair kept in a `KeyStore` (IndexedDB). */
+export class WebDeviceKeys implements DeviceKeys {
+  readonly platform = "web";
+  readonly deviceName = "Browser";
+
+  constructor(private readonly store: KeyStore) {}
+
+  async loadOrCreate(userHash: string): Promise<DeviceSigner> {
+    const pair = await loadOrCreateDeviceKey(this.store, userHash);
+    return {
+      publicKey: () => exportPublicKey(pair),
+      sign: (message) => signBytes(pair, message),
+    };
+  }
+
+  forget(userHash: string): Promise<void> {
+    return forgetDeviceKey(this.store, userHash);
+  }
 }

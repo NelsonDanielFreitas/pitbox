@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-import { DEV_NONCE, securityHeaders } from "./security-headers.ts";
+import { DEV_NONCE, nativeCSP, parseApiOrigin, securityHeaders } from "./security-headers.ts";
 import { parseTailnetHost } from "./tailnet-host.ts";
 
 const apiTarget = process.env.PITBOX_API_URL ?? "http://127.0.0.1:8081";
@@ -40,12 +40,39 @@ function canonicalDevHost(): Plugin {
   };
 }
 
-export default defineConfig(({ command }) => {
+// Capacitor build (`vite build --mode android`, F2-06, ADR 0033). The WebView serves the bundle
+// without our HTTP headers, so the CSP goes into a <meta>, and the service worker is not built:
+// the bundle ships inside the APK and updating means a new APK.
+function nativeCspMeta(apiOrigin: string | undefined): Plugin {
+  return {
+    name: "pitbox-native-csp",
+    transformIndexHtml: () => [
+      {
+        tag: "meta",
+        attrs: { "http-equiv": "Content-Security-Policy", content: nativeCSP(apiOrigin) },
+        injectTo: "head-prepend",
+      },
+    ],
+  };
+}
+
+export default defineConfig(({ command, mode }) => {
   const development = command === "serve";
+  const native = mode === "android";
+  // One validated https origin (or none). It feeds both the CSP and the API client of the native build.
+  const apiOrigin = native ? parseApiOrigin(process.env.PITBOX_API_ORIGIN) : undefined;
 
   return {
+    define: {
+      "import.meta.env.VITE_API_ORIGIN": JSON.stringify(apiOrigin ?? ""),
+      // Only a build made on purpose for it (make android-diagnostics) has the diagnostics page.
+      "import.meta.env.VITE_DIAGNOSTICS": JSON.stringify(
+        native && process.env.PITBOX_DIAGNOSTICS === "1" ? "1" : "",
+      ),
+    },
     plugins: [
       canonicalDevHost(),
+      ...(native ? [nativeCspMeta(apiOrigin)] : []),
       tanstackRouter({
         target: "react",
         autoCodeSplitting: true,
@@ -58,6 +85,7 @@ export default defineConfig(({ command }) => {
       // runtimeCaching, so nothing from /auth/* or /pitbox.* can reach the Cache Storage, and
       // no skipWaiting: a new version waits until the user accepts it.
       VitePWA({
+        disable: native, // no sw.js inside the APK; the virtual module stays as a no-op
         strategies: "generateSW",
         registerType: "prompt",
         injectRegister: false,

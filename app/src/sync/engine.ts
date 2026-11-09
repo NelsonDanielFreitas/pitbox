@@ -5,13 +5,7 @@ import type { SqlStatement } from "@/db/protocol";
 import { newId } from "@/shared/lib/id";
 
 import { defaultSyncDatabase, type SyncDatabase } from "./database";
-import {
-  forgetDeviceKey,
-  exportPublicKey,
-  loadOrCreateDeviceKey,
-  signBytes,
-  type KeyStore,
-} from "./device-key";
+import type { DeviceKeys } from "./device-key";
 import { catalogStatements, syncEntities } from "./entities";
 import {
   signingMessage,
@@ -65,8 +59,8 @@ export interface EngineOptions {
   api: SyncApi;
   userId: string;
   userHash: string;
-  keyStore: KeyStore;
-  deviceName?: string;
+  /** Where the signing key lives: WebCrypto in a browser, the Android Keystore in the APK. */
+  deviceKeys: DeviceKeys;
   now?: () => Date;
   random?: () => number;
   pollMs?: number;
@@ -360,19 +354,18 @@ export class SyncEngine {
     const key = `sync.device.${teamId}`;
     const stored = await this.meta(key);
     // A device id without its key (the browser cleared IndexedDB) cannot sign: start over.
-    const pair = await loadOrCreateDeviceKey(this.options.keyStore, this.options.userHash);
+    const signer = await this.options.deviceKeys.loadOrCreate(this.options.userHash);
+    const publicKey = await signer.publicKey();
     if (stored) {
       const known = await this.meta(`sync.device-key.${teamId}`);
-      const spki = toBase64(await exportPublicKey(pair));
-      if (known === spki) return stored;
+      if (known === toBase64(publicKey)) return stored;
     }
-    const publicKey = await exportPublicKey(pair);
-    const proof = await signBytes(pair, registrationMessage(teamId, this.options.userId, publicKey));
+    const proof = await signer.sign(registrationMessage(teamId, this.options.userId, publicKey));
     const { deviceId } = await this.api.registerDevice({
       teamId,
       requestId: newId(),
-      deviceName: this.options.deviceName ?? "Browser",
-      platform: "web",
+      deviceName: this.options.deviceKeys.deviceName,
+      platform: this.options.deviceKeys.platform,
       publicKey,
       proof,
     });
@@ -404,7 +397,7 @@ export class SyncEngine {
 
   /** The owner revoked this device, or the user did: stop until they register it again. */
   async reregisterDevice(teamId: string): Promise<void> {
-    await forgetDeviceKey(this.options.keyStore, this.options.userHash);
+    await this.options.deviceKeys.forget(this.options.userHash);
     await this.db.transaction([
       { sql: "DELETE FROM app_meta WHERE key IN ($a, $b, $c)", params: {
         $a: `sync.device.${teamId}`, $b: `sync.device-key.${teamId}`, $c: `sync.pass.${teamId}` } },
@@ -417,7 +410,7 @@ export class SyncEngine {
 
   private async push(teamId: string, deviceId: string, initialPass: string): Promise<void> {
     let pass = initialPass;
-    const pair = await loadOrCreateDeviceKey(this.options.keyStore, this.options.userHash);
+    const signer = await this.options.deviceKeys.loadOrCreate(this.options.userHash);
     let renewed = false;
     for (let batch = 0; batch < maxBatchesPerCycle; batch += 1) {
       const rows = await this.db.query<OutboxRow>(
@@ -451,7 +444,7 @@ export class SyncEngine {
           baseVersion: row.base_version,
           clientTsMs: row.client_ts,
         };
-        const signature = await signBytes(pair, await signingMessage(teamId, deviceId, op));
+        const signature = await signer.sign(await signingMessage(teamId, deviceId, op));
         operations.push({ ...op, signature });
       }
 

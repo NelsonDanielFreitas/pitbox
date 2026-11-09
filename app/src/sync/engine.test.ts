@@ -11,9 +11,12 @@ import type { SyncDatabase } from "./database";
 import { openTestDatabase, type NodeSqliteExecutor } from "@/test/sqlite";
 import { teamBootstrapStatements } from "@/sync/team-statements";
 
-import { MemoryKeyStore } from "./device-key";
+import { FakeKeystorePlugin } from "@/test/fake-keystore-plugin";
+
+import { MemoryKeyStore, WebDeviceKeys } from "./device-key";
+import { NativeDeviceKeys } from "./device-key-native";
 import { SyncEngine } from "./engine";
-import { signingMessage } from "./signing";
+import { registrationMessage, signingMessage } from "./signing";
 import type {
   PullPage,
   PushOp,
@@ -22,6 +25,7 @@ import type {
   SyncApi,
 } from "./sync-api";
 
+const p256 = { name: "ECDSA", namedCurve: "P-256" } as const;
 const teamId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60";
 const userId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d99";
 
@@ -59,10 +63,12 @@ class FakeServer implements SyncApi {
   failPushAfterApply = 0;
   failWith: ConnectError | null = null;
   pulls = 0;
+  registrations: Parameters<SyncApi["registerDevice"]>[0][] = [];
 
   async registerDevice(input: Parameters<SyncApi["registerDevice"]>[0]) {
     if (this.failWith) throw this.failWith;
     this.registered += 1;
+    this.registrations.push(input);
     const deviceId = "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d11";
     this.keys.set(
       deviceId,
@@ -184,7 +190,7 @@ beforeEach(async () => {
     api: server,
     userId,
     userHash: "hash",
-    keyStore: new MemoryKeyStore(),
+    deviceKeys: new WebDeviceKeys(new MemoryKeyStore()),
     pollMs: 2_000,
     random: () => 0.5,
   });
@@ -511,7 +517,7 @@ describe("scheduling", () => {
     await engine.close();
     server.failWith = new ConnectError("no", Code.Unauthenticated);
     engine = new SyncEngine({
-      db: serial(db), api: server, userId, userHash: "hash", keyStore: new MemoryKeyStore(),
+      db: serial(db), api: server, userId, userHash: "hash", deviceKeys: new WebDeviceKeys(new MemoryKeyStore()),
       pollMs: 1_000_000, onUnauthenticated,
     });
     engine.start();
@@ -526,5 +532,88 @@ describe("scheduling", () => {
     await Promise.all([engine.syncNow(), engine.syncNow(), engine.syncNow()]);
     // One running cycle plus one follow-up for the requests that arrived meanwhile.
     expect(server.pulls - before).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("with the Android Keystore", () => {
+  const userHash = "c".repeat(64);
+  let plugin: FakeKeystorePlugin;
+
+  async function startNative(): Promise<void> {
+    await engine.close();
+    plugin = new FakeKeystorePlugin();
+    server.registered = 0;
+    server.registrations = [];
+    engine = new SyncEngine({
+      db: serial(db),
+      api: server,
+      userId,
+      userHash,
+      deviceKeys: new NativeDeviceKeys(plugin),
+      pollMs: 1_000_000,
+      random: () => 0.5,
+    });
+    engine.start();
+  }
+
+  it("registers as an Android device, proves possession with the Keystore key and signs operations", async () => {
+    // The beforeEach engine already registered once with a browser key; forget it so this one
+    // registers afresh, the way a first run on the phone does.
+    await db.transaction([{ sql: "DELETE FROM app_meta WHERE key LIKE 'sync.device%'" }]);
+    await startNative();
+    await cars.createCar(teamId, carInput({ nickname: "Native" }));
+    await engine.syncNow();
+
+    expect(server.registrations).toHaveLength(1);
+    const registration = server.registrations[0]!;
+    expect(registration).toMatchObject({ platform: "android", deviceName: "Android" });
+
+    // The proof of possession verifies against the public key it announces (P1363, as the server expects).
+    const key = await crypto.subtle.importKey("spki", registration.publicKey as BufferSource, p256, false, ["verify"]);
+    const proofOk = await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      registration.proof as BufferSource,
+      registrationMessage(teamId, userId, registration.publicKey) as BufferSource,
+    );
+    expect(proofOk).toBe(true);
+
+    // The operation was signed by the Keystore key too: the fake server verifies every signature.
+    expect(server.received.map((op) => op.entity)).toContain("garage.car");
+    expect(engine.getSnapshot()).toMatchObject({ pending: 0, failed: 0 });
+    expect(plugin.calls.filter((c) => c.startsWith("sign:")).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("registers again with a new key after the device key is dropped (revoked device)", async () => {
+    await db.transaction([{ sql: "DELETE FROM app_meta WHERE key LIKE 'sync.device%'" }]);
+    await startNative();
+    await engine.syncNow();
+    const first = server.registrations[0]!.publicKey;
+
+    await engine.reregisterDevice(teamId);
+    await engine.syncNow();
+
+    expect(plugin.calls).toContain(`delete:${userHash.slice(0, 4)}`);
+    expect(server.registrations).toHaveLength(2);
+    expect(server.registrations[1]!.publicKey).not.toEqual(first);
+  });
+
+  it("does not sync, and does not fall back to a weaker key, when the Keystore is not hardware-backed", async () => {
+    await db.transaction([{ sql: "DELETE FROM app_meta WHERE key LIKE 'sync.device%'" }]);
+    await engine.close();
+    plugin = new FakeKeystorePlugin();
+    plugin.securityLevel = "software";
+    server.registrations = [];
+    engine = new SyncEngine({
+      db: serial(db), api: server, userId, userHash, deviceKeys: new NativeDeviceKeys(plugin),
+      pollMs: 1_000_000, random: () => 0.5,
+    });
+    engine.start();
+    await cars.createCar(teamId, carInput());
+    await engine.syncNow();
+
+    expect(server.registrations).toHaveLength(0);
+    expect(server.received).toHaveLength(0);
+    expect(engine.getSnapshot().pending).toBeGreaterThan(0); // nothing lost: it waits in the queue
   });
 });

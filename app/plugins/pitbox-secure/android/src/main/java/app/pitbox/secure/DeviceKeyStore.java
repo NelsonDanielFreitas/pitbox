@@ -28,14 +28,29 @@ import java.security.spec.ECGenParameterSpec;
 final class DeviceKeyStore {
 
     static final String PROVIDER = "AndroidKeyStore";
-    /** One key per user of this phone: a logout or a revocation of one must not touch another. */
-    private static final String ALIAS_PREFIX = "pitbox.device-key.v1.";
-    private static final java.util.regex.Pattern USER_HASH =
-        java.util.regex.Pattern.compile("^[0-9a-f]{64}$");
+    /** The sync key: one per user of this phone (alias = prefix + 64 hex of the user hash). */
+    static final String DEVICE_PREFIX = "pitbox.device-key.v1.";
+    static final String DEVICE_NAME_PATTERN = "^[0-9a-f]{64}$";
+    /** The login session key (ADR 0032): a random 128-bit id, 32 hex, chosen by the plugin. */
+    static final String SESSION_PREFIX = "pitbox.session-key.v1.";
+    static final String SESSION_NAME_PATTERN = "^[0-9a-f]{32}$";
     /** Sync operations are small; this only stops the plugin from being fed arbitrary blobs. */
     static final int MAX_MESSAGE_BYTES = 256 * 1024;
     /** SubjectPublicKeyInfo DER of an uncompressed P-256 key (ADR 0025). */
     static final int SPKI_BYTES = 91;
+
+    private final String aliasPrefix;
+    private final java.util.regex.Pattern namePattern;
+
+    /** The sync key store. */
+    DeviceKeyStore() {
+        this(DEVICE_PREFIX, DEVICE_NAME_PATTERN);
+    }
+
+    DeviceKeyStore(String aliasPrefix, String namePattern) {
+        this.aliasPrefix = aliasPrefix;
+        this.namePattern = java.util.regex.Pattern.compile(namePattern);
+    }
 
     static final class PublicInfo {
 
@@ -92,12 +107,12 @@ final class DeviceKeyStore {
         }
     }
 
-    /** Only a 64-character lowercase hex hash makes an alias; anything else is refused. */
-    static String aliasFor(String userHash) {
-        if (userHash == null || !USER_HASH.matcher(userHash).matches()) {
-            throw new IllegalArgumentException("invalid user hash");
+    /** Only a name of the exact lowercase-hex shape makes an alias; anything else is refused. */
+    String aliasFor(String name) {
+        if (name == null || !namePattern.matcher(name).matches()) {
+            throw new IllegalArgumentException("invalid key name");
         }
-        return ALIAS_PREFIX + userHash;
+        return aliasPrefix + name;
     }
 
     private static KeyStore load() throws GeneralSecurityException, IOException {

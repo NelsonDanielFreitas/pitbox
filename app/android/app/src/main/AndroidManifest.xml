@@ -9,6 +9,19 @@
           "tailscale serve");
         - every component states android:exported.
     -->
+    <!-- Package visibility (Android 11+): the Auth Tab check (ADR 0032) must see the browsers that
+         offer Custom Tabs. Without this the app cannot find Chrome and the login refuses. -->
+    <queries>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:fullBackupContent="@xml/backup_rules"

@@ -13,9 +13,13 @@ export class LocalDatabaseBusyError extends Error {
 }
 
 export class LocalConstraintError extends Error {
-  constructor(message = "local data constraint failed", options?: ErrorOptions) {
+  /** SQLite's constraint text (object names only, no values) when the engine gave one. */
+  readonly detail: string | undefined;
+
+  constructor(message = "local data constraint failed", options?: ErrorOptions & { detail?: string }) {
     super(message, options);
     this.name = "LocalConstraintError";
+    this.detail = options?.detail;
   }
 }
 

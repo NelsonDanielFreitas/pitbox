@@ -29,7 +29,9 @@ import { AppLockGate } from "./AppLockGate";
 
 function renderGate() {
   const queryClient = new QueryClient();
-  const clear = vi.spyOn(queryClient, "clear");
+  queryClient.setQueryData(["auth", "session"], { authenticated: true });
+  queryClient.setQueryData(["teams"], ["private"]);
+  const clear = vi.spyOn(queryClient, "removeQueries");
   render(
     <QueryClientProvider client={queryClient}>
       <AppLockGate>
@@ -37,7 +39,7 @@ function renderGate() {
       </AppLockGate>
     </QueryClientProvider>,
   );
-  return { clear };
+  return { clear, queryClient };
 }
 
 const refusal = (code: string) => Object.assign(new Error("refused"), { code });
@@ -62,10 +64,14 @@ describe("AppLockGate", () => {
   it("starts locked on the phone, asks for the biometrics and shows nothing until they pass", async () => {
     let finish: () => void = () => undefined;
     authenticate.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
-    const { clear } = renderGate();
+    const { clear, queryClient } = renderGate();
     expect(screen.queryByText("dados da equipa")).not.toBeInTheDocument();
     await waitFor(() => expect(authenticate).toHaveBeenCalledTimes(1));
     expect(clear).toHaveBeenCalled();
+    // Locking drops the readable data but keeps the session query: the layout above the gate
+    // reads it, and losing it unmounted the gate in a loop (found on the phone, F2-06b).
+    expect(queryClient.getQueryData(["teams"])).toBeUndefined();
+    expect(queryClient.getQueryData(["auth", "session"])).toEqual({ authenticated: true });
     expect(closeDatabase).toHaveBeenCalled();
     finish();
     expect(await screen.findByText("dados da equipa")).toBeInTheDocument();

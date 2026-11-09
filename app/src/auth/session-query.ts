@@ -1,8 +1,9 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
+import { sessionQueryKey } from "./session-key";
 import { loadSession } from "./session-load";
 
-export const sessionQueryKey = ["auth", "session"] as const;
+export { sessionQueryKey };
 
 export const sessionQueryOptions = queryOptions({
   queryKey: sessionQueryKey,

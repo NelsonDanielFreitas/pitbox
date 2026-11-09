@@ -15,6 +15,10 @@ const config: CapacitorConfig = {
     // The default, stated on purpose: the bundle is served from https://localhost.
     androidScheme: "https",
   },
+  // Capacitor logs every plugin call and result in verbose mode: the login code, the state and the
+  // local database statements would end up in `adb logcat`. Only the debug build (the one with
+  // DevTools) logs them; anything else logs nothing (ADR 0032).
+  loggingBehavior: process.env.PITBOX_ANDROID_DEBUG === "1" ? "debug" : "none",
   android: {
     allowMixedContent: false,
     // Chrome DevTools on the WebView only in builds made with PITBOX_ANDROID_DEBUG=1.

@@ -261,6 +261,21 @@ describe("errors", () => {
     expect(mapped.cause).toBe(raw);
   });
 
+  it("keeps SQLite's constraint text (object names only) in `detail`, never in the message", () => {
+    const raw = new Error("Run: UNIQUE constraint failed: tyre_set.team_id, tyre_set.label (code 2067)");
+    const mapped = toLocalError(raw);
+    expect(mapped).toBeInstanceOf(LocalConstraintError);
+    expect((mapped as LocalConstraintError).detail).toBe("UNIQUE constraint failed: tyre_set.team_id, tyre_set.label");
+    expect(mapped.message).toBe("local data constraint failed");
+  });
+
+  it("drops SQL text and values from the detail", () => {
+    const raw = new Error("constraint violation near INSERT INTO car VALUES ('secret')");
+    expect((toLocalError(raw) as LocalConstraintError).detail).toBeUndefined();
+    const withSql = new Error("NOT NULL constraint failed: car.make (INSERT INTO car VALUES ('secret'))");
+    expect((toLocalError(withSql) as LocalConstraintError).detail).toBe("NOT NULL constraint failed: car.make");
+  });
+
   it.each([
     ["database is locked", "LocalDatabaseBusyError"],
     ["file is not a database", "CorruptLocalDataError"],

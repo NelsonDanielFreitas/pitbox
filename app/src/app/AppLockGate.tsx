@@ -4,6 +4,7 @@ import { PitboxSecure } from "pitbox-secure";
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { sessionQueryKey } from "@/auth/session-key";
 import { closeDatabase } from "@/db/client";
 import { AppLockController } from "@/native/app-lock";
 import { isNativePlatform } from "@/shared/lib/platform";
@@ -52,7 +53,10 @@ function NativeAppLock({ children }: { children: ReactNode }) {
   // emptied and the database connection is closed. Opening it again needs the unlock.
   useEffect(() => {
     if (lockState !== "locked") return;
-    queryClient.clear();
+    // Not clear(): that would also drop the session query the layout above this gate reads,
+    // which unmounts the gate, which mounts locked again and clears again, forever. The session
+    // holds only the user id; everything else readable goes.
+    queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionQueryKey[0] });
     void closeDatabase().catch(() => undefined);
   }, [lockState, queryClient]);
 

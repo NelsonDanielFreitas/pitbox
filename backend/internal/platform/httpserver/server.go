@@ -49,6 +49,8 @@ type Options struct {
 	// RPC would have two server spans, and otelconnect would not apply its rule of not
 	// trusting the caller's traceparent (it only does when there is no span yet).
 	SkipTracing func(*http.Request) bool
+	// CORSOrigins is the exact allow-list of browser origins (ADR 0032); empty: no CORS.
+	CORSOrigins []string
 }
 
 // Server wraps http.Server with readiness state and graceful shutdown.
@@ -69,6 +71,9 @@ func New(o Options) (*Server, error) {
 		return nil, errors.New("httpserver: Logger and TracerProvider are required")
 	}
 
+	if !corsOriginsValid(o.CORSOrigins) {
+		return nil, errors.New("httpserver: invalid CORS origin")
+	}
 	mux := http.NewServeMux()
 	s := &Server{log: o.Logger, drain: o.Drain, timeout: o.ShutdownTimeout}
 	mux.HandleFunc("GET "+healthPath, handleHealth)
@@ -98,7 +103,7 @@ func New(o Options) (*Server, error) {
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method }),
 	)
 
-	handler = securityHeaders(handler)
+	handler = securityHeaders(cors(o.CORSOrigins, handler))
 
 	// Requests derive from this context, not from the signal context, so that
 	// in-flight requests can finish during a graceful shutdown.

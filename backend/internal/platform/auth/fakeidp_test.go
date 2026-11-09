@@ -23,19 +23,24 @@ type fakeIdP struct {
 	t   *testing.T
 	srv *httptest.Server
 	key *ecdsa.PrivateKey
-	kid string
+	kid string // the kid published in the JWKS
+	// signKid, when set, is the kid written in the headers of the tokens instead of kid.
+	signKid string
 
 	mu       sync.Mutex
 	codes    map[string]codeGrant // code -> what it was issued for
 	refresh  map[string]string    // refresh token -> subject
+	owner    map[string]string    // code or refresh token -> the client it was issued to (a binding, as in Zitadel)
 	access   map[string]string    // access token -> subject
 	revoked  []string
 	refreshN atomic.Int32 // refresh grants served
 	tokenN   atomic.Int32 // token endpoint calls (any grant)
+	keysN    atomic.Int32 // JWKS requests served
 	now      func() time.Time
 
 	// Knobs.
 	clientID, clientSecret string
+	mobileClientID         string        // the public application of the mobile login
 	refreshErr             string        // e.g. "invalid_grant": the refresh grant fails with it
 	refreshErrDesc         string        // its error_description
 	refreshStatus          int           // e.g. 503
@@ -61,8 +66,8 @@ func newFakeIdP(t *testing.T, now func() time.Time) *fakeIdP {
 		t.Fatalf("key: %v", err)
 	}
 	f := &fakeIdP{
-		t: t, key: key, kid: "kid-1", now: now, codes: map[string]codeGrant{}, refresh: map[string]string{}, access: map[string]string{},
-		clientID: "pitbox-client", clientSecret: "pitbox-secret", idTokenAlg: "ES256",
+		t: t, key: key, kid: "kid-1", now: now, codes: map[string]codeGrant{}, refresh: map[string]string{}, access: map[string]string{}, owner: map[string]string{},
+		clientID: "pitbox-client", clientSecret: "pitbox-secret", mobileClientID: "pitbox-android-client", idTokenAlg: "ES256",
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", f.discovery)
@@ -88,6 +93,7 @@ func (f *fakeIdP) discovery(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (f *fakeIdP) keys(w http.ResponseWriter, _ *http.Request) {
+	f.keysN.Add(1)
 	pub, err := f.key.PublicKey.Bytes() // uncompressed point: 0x04 || X || Y
 	if err != nil {
 		f.t.Errorf("public key: %v", err)
@@ -101,25 +107,39 @@ func (f *fakeIdP) keys(w http.ResponseWriter, _ *http.Request) {
 
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
+// clientOf says which application is calling: the web one authenticates with client_secret_basic;
+// the mobile one is public and names itself with client_id in the body, with no secret.
+func (f *fakeIdP) clientOf(r *http.Request) (string, bool) {
+	_ = r.ParseForm()
+	if id, secret, ok := r.BasicAuth(); ok {
+		return f.clientID, id == f.clientID && secret == f.clientSecret
+	}
+	if r.PostForm.Get("client_id") == f.mobileClientID {
+		return f.mobileClientID, true
+	}
+	return "", false
+}
+
 func (f *fakeIdP) authenticated(r *http.Request) bool {
-	id, secret, ok := r.BasicAuth()
-	return ok && id == f.clientID && secret == f.clientSecret
+	_, ok := f.clientOf(r)
+	return ok
 }
 
 func (f *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 	f.tokenN.Add(1)
-	if !f.authenticated(r) {
+	client, ok := f.clientOf(r)
+	if !ok {
 		writeErr(w, http.StatusUnauthorized, "invalid_client")
 		return
 	}
-	_ = r.ParseForm()
 	switch r.PostForm.Get("grant_type") {
 	case "authorization_code":
 		f.mu.Lock()
 		g, ok := f.codes[r.PostForm.Get("code")]
 		delete(f.codes, r.PostForm.Get("code")) // single use
+		bound := f.owner[r.PostForm.Get("code")]
 		f.mu.Unlock()
-		if !ok {
+		if !ok || (bound != "" && bound != client) { // a code only works for the client it was issued to
 			writeErr(w, http.StatusBadRequest, "invalid_grant")
 			return
 		}
@@ -128,7 +148,7 @@ func (f *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "invalid_grant") // PKCE failed
 			return
 		}
-		f.respond(w, g.subject, g.nonce)
+		f.respondTo(w, client, g.subject, g.nonce)
 	case "refresh_token":
 		if f.refreshDelay > 0 {
 			time.Sleep(f.refreshDelay)
@@ -146,13 +166,14 @@ func (f *fakeIdP) token(w http.ResponseWriter, r *http.Request) {
 		}
 		f.mu.Lock()
 		sub, ok := f.refresh[r.PostForm.Get("refresh_token")]
+		bound := f.owner[r.PostForm.Get("refresh_token")]
 		delete(f.refresh, r.PostForm.Get("refresh_token")) // rotation: the old one stops working
 		f.mu.Unlock()
-		if !ok {
+		if !ok || (bound != "" && bound != client) {
 			writeErr(w, http.StatusBadRequest, "invalid_grant")
 			return
 		}
-		f.respond(w, sub, "")
+		f.respondTo(w, client, sub, "")
 	default:
 		writeErr(w, http.StatusBadRequest, "unsupported_grant_type")
 	}
@@ -164,16 +185,17 @@ func writeErr(w http.ResponseWriter, code int, e string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": e})
 }
 
-func (f *fakeIdP) respond(w http.ResponseWriter, subject, nonce string) {
+func (f *fakeIdP) respondTo(w http.ResponseWriter, client, subject, nonce string) {
 	rt, at := "rt-"+randomHexT(f.t), "at-"+randomHexT(f.t)
 	f.mu.Lock()
 	f.refresh[rt] = subject
+	f.owner[rt] = client
 	f.access[at] = subject
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"access_token": at, "token_type": "Bearer", "expires_in": 600,
-		"refresh_token": rt, "id_token": f.idToken(subject, nonce),
+		"refresh_token": rt, "id_token": f.idTokenFor(client, subject, nonce),
 	})
 }
 
@@ -218,11 +240,10 @@ func (f *fakeIdP) revoke(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 }
 
-// claims returns the standard claims of a valid ID token for subject.
-func (f *fakeIdP) claims(subject, nonce string) map[string]any {
+func (f *fakeIdP) claimsFor(client, subject, nonce string) map[string]any {
 	now := f.now()
 	c := map[string]any{
-		"iss": f.srv.URL, "sub": subject, "aud": []string{f.clientID}, "iat": now.Unix(),
+		"iss": f.srv.URL, "sub": subject, "aud": []string{client}, "iat": now.Unix(),
 		"exp": now.Add(5 * time.Minute).Unix(), "auth_time": now.Add(-time.Minute).Unix(),
 		"amr": []string{"pwd", "mfa"}, "sid": "sid-" + subject,
 		// No email or name: they come from the userinfo endpoint (ADR 0013).
@@ -236,9 +257,9 @@ func (f *fakeIdP) claims(subject, nonce string) map[string]any {
 	return c
 }
 
-func (f *fakeIdP) idToken(subject, nonce string) string {
-	header := map[string]any{"alg": f.idTokenAlg, "typ": "JWT", "kid": f.kid}
-	payload := f.claims(subject, nonce)
+func (f *fakeIdP) idTokenFor(client, subject, nonce string) string {
+	header := map[string]any{"alg": f.idTokenAlg, "typ": "JWT", "kid": f.headerKid()}
+	payload := f.claimsFor(client, subject, nonce)
 	if f.signWith != nil {
 		return f.signWith(header, payload)
 	}
@@ -246,7 +267,7 @@ func (f *fakeIdP) idToken(subject, nonce string) string {
 }
 
 func (f *fakeIdP) logoutToken(subject, sid string, mutate func(map[string]any)) string {
-	header := map[string]any{"alg": f.idTokenAlg, "typ": "JWT", "kid": f.kid}
+	header := map[string]any{"alg": f.idTokenAlg, "typ": "JWT", "kid": f.headerKid()}
 	payload := map[string]any{
 		"iss":    f.srv.URL,
 		"sub":    subject,
@@ -279,9 +300,17 @@ func (f *fakeIdP) sign(header, payload map[string]any) string {
 
 // issueCode registers an authorization code for what /authorize would have recorded.
 func (f *fakeIdP) issueCode(subject, nonce, challenge string) string {
+	return f.issueCodeFor("", subject, nonce, challenge)
+}
+
+// issueCodeFor binds the code to a client ("" leaves it unbound, like the older tests).
+func (f *fakeIdP) issueCodeFor(client, subject, nonce, challenge string) string {
 	code := "code-" + randomHexT(f.t)
 	f.mu.Lock()
 	f.codes[code] = codeGrant{subject: subject, nonce: nonce, challenge: challenge}
+	if client != "" {
+		f.owner[code] = client
+	}
 	f.mu.Unlock()
 	return code
 }
@@ -299,4 +328,11 @@ func randomHexT(t *testing.T) string {
 		t.Fatalf("random: %v", err)
 	}
 	return b64(b)
+}
+
+func (f *fakeIdP) headerKid() string {
+	if f.signKid != "" {
+		return f.signKid
+	}
+	return f.kid
 }

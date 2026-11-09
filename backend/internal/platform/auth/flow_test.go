@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html"
 	"log/slog"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/ratelimit"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/testutil"
 )
 
@@ -153,6 +155,7 @@ func newFlowHarness(t *testing.T) *flowHarness {
 		Provider: NewProvider(ProviderConfig{
 			Issuer: idp.srv.URL, ClientID: idp.clientID, ClientSecret: idp.clientSecret,
 			RedirectURL: publicURL + CallbackPath, AllowedAlgs: []string{"ES256"}, Now: clock,
+			MobileClientID: idp.mobileClientID, MobileRedirectURL: mobileRedirect,
 		}),
 		Store:              store,
 		LoginCookies:       NewLoginCookies(sealer(t, PurposeLoginCookie, key("k1", 1)), clock),
@@ -161,7 +164,7 @@ func newFlowHarness(t *testing.T) *flowHarness {
 		RecoveryCodeHasher: recoveryHasher(t, key("k1", 1)),
 		Audit:              f.audit,
 		Log:                slog.New(slog.NewJSONHandler(logs, nil)), Refusals: f.refusals,
-		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock,
+		PublicURL: publicURL, SessionMaxAge: 720 * time.Hour, Now: clock, Limiter: fixedLimiter{ratelimit.Allowed},
 	}
 	f.h.Authn = &Authenticator{Provider: f.h.Provider, Store: store, Audit: f.audit, Log: f.h.Log, Now: clock}
 	f.h.Mount(f.mux)
@@ -1380,5 +1383,38 @@ func TestRecoveryCodeSurvivesKeyRotation(t *testing.T) {
 	f.mux.ServeHTTP(w, r)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("old code after rotation: status %d, want 204", w.Code)
+	}
+}
+
+// The back-channel logout endpoint is public and verifies a JWT, so anyone can send it tokens
+// with kids the identity provider never published. That must not turn into a stream of
+// requests to the identity provider (ADR 0032, section 7).
+func TestBackchannelLogoutUnknownKidBurstIsBounded(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	post := func(tok string) int {
+		form := url.Values{"logout_token": {tok}}
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+BackChannelLogoutPath, strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		f.mux.ServeHTTP(w, r)
+		return w.Code
+	}
+
+	for i := range 300 {
+		f.idp.signKid = fmt.Sprintf("forged-%d", i)
+		if code := post(f.idp.logoutToken("sub-alice", "sid-alice", nil)); code != http.StatusBadRequest {
+			t.Fatalf("a token with an unknown kid got status %d, want 400", code)
+		}
+	}
+	if got := f.idp.keysN.Load(); got > 1 {
+		t.Fatalf("%d JWKS requests for 300 forged tokens, want at most 1", got)
+	}
+
+	// The real key still works afterwards: the limit refuses strangers, not the provider.
+	f.idp.signKid = ""
+	_ = f.login("sub-alice", "sid-alice", []string{"user"})
+	if code := post(f.idp.logoutToken("sub-alice", "sid-alice", nil)); code != http.StatusOK {
+		t.Fatalf("a valid logout token got status %d after the burst, want 200", code)
 	}
 }

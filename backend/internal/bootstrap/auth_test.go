@@ -76,7 +76,7 @@ func TestAuthStackWiring(t *testing.T) {
 	}
 	t.Cleanup(vkClient.Close)
 
-	stack, err := newAuthStack(context.Background(), cfg, logger, vkClient)
+	stack, err := newAuthStack(context.Background(), cfg, logger, vkClient, nil)
 	if err != nil {
 		t.Fatalf("newAuthStack: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestUnconfiguredAuthenticationRefusesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
-	stack, err := newAuthStack(context.Background(), cfg, slog.New(slog.NewJSONHandler(&syncBuffer{}, nil)), nil)
+	stack, err := newAuthStack(context.Background(), cfg, slog.New(slog.NewJSONHandler(&syncBuffer{}, nil)), nil, nil)
 	if err != nil {
 		t.Fatalf("newAuthStack: %v", err)
 	}

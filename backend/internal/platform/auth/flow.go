@@ -64,7 +64,9 @@ type Handler struct {
 	Audit              Auditor
 	Log                *slog.Logger
 	// Refusals counts callbacks refused before their state was validated (nil: not counted).
-	Refusals       RefusalCounter
+	Refusals RefusalCounter
+	// Limiter limits the public mobile endpoints per client address (nil: unlimited, tests only).
+	Limiter        PublicLimiter
 	PublicURL      string // origin the browser sees, without a trailing slash
 	ClientIPHeader string // "" = TCP peer
 	SessionMaxAge  time.Duration
@@ -85,6 +87,9 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+BackChannelLogoutPath, h.backchannelLogout)
 	mux.HandleFunc("POST "+RecoveryCodesPath, h.generateRecoveryCodes)
 	mux.HandleFunc("POST "+RecoveryCodeConsumePath, h.consumeRecoveryCode)
+	if h.Provider.MobileEnabled() {
+		h.mountMobile(mux)
+	}
 }
 
 func noStore(w http.ResponseWriter) {
@@ -242,7 +247,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, msgBadRequest)
 		return
 	}
-	claims, err := h.verifyIDToken(exCtx, prov, tok, st.Nonce)
+	claims, err := h.verifyIDToken(exCtx, prov.verifier, tok, st.Nonce)
 	if err != nil {
 		h.discardTokens(ctx, tok)
 		h.failLogin(ctx, r, err.Error(), "")
@@ -297,40 +302,14 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. The PitBox user. Refused logins look the same to the person; the reason is audited.
-	userID, err := h.Users.ResolveLogin(ctx, claims.Subject, claims.Email, claims.Name)
-	switch {
-	case errors.Is(err, ErrEmailInUse):
-		h.discardTokens(ctx, tok)
-		h.failLogin(ctx, r, "email_in_use", claims.Subject)
+	// 3. The PitBox user, and the owners' strong-factor rule (shared with the mobile login).
+	userID, admit := h.admitLogin(ctx, r, tok, claims)
+	switch admit {
+	case admitRefused:
 		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
-	case errors.Is(err, ErrAccountDeleted):
-		h.discardTokens(ctx, tok)
-		h.failLogin(ctx, r, "account_deleted", claims.Subject)
-		fail(w, http.StatusForbidden, msgNotAllowed)
-		return
-	case err != nil:
-		h.discardTokens(ctx, tok)
-		h.Log.ErrorContext(ctx, "resolve login", slog.String("reason", "directory"))
+	case admitUnavailable:
 		fail(w, http.StatusServiceUnavailable, msgUnavailable)
-		return
-	}
-
-	// 3.1 Owners must authenticate with a strong factor (passkey or TOTP). This is checked
-	// after resolving the user so we can look up their team roles, and before creating the
-	// session so a password-only login is never accepted for an owner.
-	isOwner, err := h.Users.IsOwner(ctx, userID)
-	if err != nil {
-		h.discardTokens(ctx, tok)
-		h.Log.ErrorContext(ctx, "check owner", slog.String("reason", "directory"))
-		fail(w, http.StatusServiceUnavailable, msgUnavailable)
-		return
-	}
-	if isOwner && !principal.IsStrongFactor(claims.AMR) {
-		h.discardTokens(ctx, tok)
-		h.failLogin(ctx, r, "owner_requires_mfa", claims.Subject)
-		fail(w, http.StatusForbidden, msgNotAllowed)
 		return
 	}
 
@@ -375,6 +354,58 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 
 	SetSessionCookie(w, token, h.SessionMaxAge)
 	h.landing(w, st.ReturnTo)
+}
+
+// admission is the outcome of admitLogin.
+type admission int
+
+const (
+	admitOK          admission = iota
+	admitRefused               // the person gets the generic "not allowed"; the reason is audited
+	admitUnavailable           // the directory failed: try again later
+)
+
+// admitLogin maps the verified identity to the PitBox user and applies the rules a login must
+// pass before a session exists: the account must be usable, and an owner of a team must have
+// authenticated with a strong factor (passkey or TOTP). It is the one place for both the web
+// and the mobile login, so the two cannot drift apart. On refusal the refresh token is revoked
+// (it will not be stored) and the reason is audited; the person only learns "not allowed".
+func (h *Handler) admitLogin(ctx context.Context, r *http.Request, tok *oauth2.Token, claims idClaims) (string, admission) {
+	return h.admitLoginFor(ctx, r, tok, claims, false)
+}
+
+func (h *Handler) admitLoginFor(ctx context.Context, r *http.Request, tok *oauth2.Token, claims idClaims, mobile bool) (string, admission) {
+	discard := func() { h.discardTokensFor(ctx, tok, mobile) }
+	userID, err := h.Users.ResolveLogin(ctx, claims.Subject, claims.Email, claims.Name)
+	switch {
+	case errors.Is(err, ErrEmailInUse):
+		discard()
+		h.failLogin(ctx, r, "email_in_use", claims.Subject)
+		return "", admitRefused
+	case errors.Is(err, ErrAccountDeleted):
+		discard()
+		h.failLogin(ctx, r, "account_deleted", claims.Subject)
+		return "", admitRefused
+	case err != nil:
+		discard()
+		h.Log.ErrorContext(ctx, "resolve login", slog.String("reason", "directory"))
+		return "", admitUnavailable
+	}
+
+	// Checked after resolving the user (to look up the team roles) and before creating the
+	// session, so a password-only login is never accepted for an owner.
+	isOwner, err := h.Users.IsOwner(ctx, userID)
+	if err != nil {
+		discard()
+		h.Log.ErrorContext(ctx, "check owner", slog.String("reason", "directory"))
+		return "", admitUnavailable
+	}
+	if isOwner && !principal.IsStrongFactor(claims.AMR) {
+		discard()
+		h.failLogin(ctx, r, "owner_requires_mfa", claims.Subject)
+		return "", admitRefused
+	}
+	return userID, admitOK
 }
 
 // stepUp updates the existing session with the fresh authentication data from the identity
@@ -465,12 +496,12 @@ type userProfile struct{ Email, Name string }
 // verifyIDToken checks the ID token (signature, issuer, audience, expiry and the algorithm
 // list are go-oidc's job), then the nonce, the at_hash if present, and what a login needs.
 // The returned error text is a fixed reason code.
-func (h *Handler) verifyIDToken(ctx context.Context, prov *ready, tok *oauth2.Token, nonce string) (idClaims, error) {
+func (h *Handler) verifyIDToken(ctx context.Context, verifier *oidc.IDTokenVerifier, tok *oauth2.Token, nonce string) (idClaims, error) {
 	raw, _ := tok.Extra("id_token").(string)
 	if raw == "" {
 		return idClaims{}, errors.New("no_id_token")
 	}
-	idt, err := prov.verifier.Verify(ctx, raw)
+	idt, err := verifier.Verify(ctx, raw)
 	if err != nil {
 		return idClaims{}, errors.New("id_token_invalid")
 	}
@@ -604,10 +635,14 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 // discardTokens revokes a refresh token that will not be stored in a session. It is
 // best effort: a failure is logged without the token and never changes the login outcome.
 func (h *Handler) discardTokens(ctx context.Context, tok *oauth2.Token) {
+	h.discardTokensFor(ctx, tok, false)
+}
+
+func (h *Handler) discardTokensFor(ctx context.Context, tok *oauth2.Token, mobile bool) {
 	if tok == nil || tok.RefreshToken == "" {
 		return
 	}
-	if err := h.revoke(ctx, tok.RefreshToken); err != nil {
+	if err := h.revokeFor(ctx, tok.RefreshToken, mobile); err != nil {
 		h.Log.WarnContext(ctx, "discard refresh token", slog.String("reason", "revoke"))
 	}
 }
@@ -695,6 +730,14 @@ func (h *Handler) endSessionURL(sess Session, r *http.Request) string {
 
 // revoke revokes a refresh token at the provider (RFC 7009), as the confidential client.
 func (h *Handler) revoke(ctx context.Context, refreshToken string) error {
+	return h.revokeFor(ctx, refreshToken, false)
+}
+
+// revokeFor revokes a refresh token at the identity provider (RFC 7009). The token belongs to
+// one application and is revoked as that application: the web one is confidential
+// (client_secret_basic); the mobile one is public, so it identifies itself with its client_id
+// in the body. Revoking with the wrong application's credentials would be refused.
+func (h *Handler) revokeFor(ctx context.Context, refreshToken string, mobile bool) error {
 	prov, err := h.Provider.get()
 	if err != nil {
 		return err
@@ -702,11 +745,16 @@ func (h *Handler) revoke(ctx context.Context, refreshToken string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	form := url.Values{"token": {refreshToken}, "token_type_hint": {"refresh_token"}}
+	if mobile {
+		form.Set("client_id", prov.mobileOAuth.ClientID)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, prov.revocation, strings.NewReader(form.Encode()))
 	if err != nil {
 		return fmt.Errorf("new revoke request: %w", err)
 	}
-	req.SetBasicAuth(url.QueryEscape(prov.oauth.ClientID), url.QueryEscape(prov.oauth.ClientSecret))
+	if !mobile {
+		req.SetBasicAuth(url.QueryEscape(prov.oauth.ClientID), url.QueryEscape(prov.oauth.ClientSecret))
+	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := h.Provider.cfg.HTTPClient.Do(req)
 	if err != nil {
@@ -732,12 +780,27 @@ func (h *Handler) signedOut(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	w.Header().Set("Content-Type", "application/json")
-	if foreignRequest(h.PublicURL, r.Header.Get("Origin"), r.Header.Get("Sec-Fetch-Site")) {
+	// The phone asks with its Bearer (ADR 0032): same answer, no cross-site checks (the Bearer
+	// is not ambient), never together with the cookie.
+	bearer, hasBearer := BearerFromHeader(r.Header.Values("Authorization"))
+	var (
+		p   principal.Principal
+		err error
+	)
+	switch {
+	case hasBearer:
+		if bearer == "" || SessionTokenFromHeader(r.Header) != "" {
+			err = ErrUnauthenticated
+		} else {
+			p, err = h.Authn.AuthenticateBearer(r.Context(), bearer)
+		}
+	case foreignRequest(h.PublicURL, r.Header.Get("Origin"), r.Header.Get("Sec-Fetch-Site")):
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"error":"cross-origin request refused"}`))
 		return
+	default:
+		p, err = h.Authn.Authenticate(r.Context(), SessionTokenFromHeader(r.Header))
 	}
-	p, err := h.Authn.Authenticate(r.Context(), SessionTokenFromHeader(r.Header))
 	switch {
 	case errors.Is(err, ErrUnauthenticated):
 		w.WriteHeader(http.StatusUnauthorized)

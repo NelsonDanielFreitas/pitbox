@@ -49,10 +49,21 @@ type Session struct {
 	IDToken       string // kept for id_token_hint at logout; sealed in the store
 	UserAgent     string // for the user's list of sessions; personal data
 	IP            string // for the user's list of sessions; personal data
+	// Kind is KindWeb (the browser, a cookie) or KindMobile (the phone, a Bearer, ADR 0032).
+	Kind string
+	// DevicePub is the phone's session key (SPKI DER, ECDSA P-256) for a mobile session; it
+	// is what every renewal of the Bearer is checked against. Empty for a web session.
+	DevicePub []byte
 
 	ref        string // hex sha256 of the cookie value: the key suffix
 	generation uint64
 }
+
+// Session kinds.
+const (
+	KindWeb    = ""
+	KindMobile = "mobile"
+)
 
 // Ref identifies the session in logs and audit entries. It is the SHA-256 of the cookie
 // value: it cannot be turned back into the cookie, and it is not accepted as one.
@@ -72,6 +83,8 @@ type record struct {
 	SealedID      string    `json:"id,omitempty"` // ID token, sealed
 	UserAgent     string    `json:"ua,omitempty"`
 	IP            string    `json:"ip,omitempty"`
+	Kind          string    `json:"k,omitempty"`
+	DevicePub     []byte    `json:"dp,omitempty"` // SPKI DER of the phone's session key
 }
 
 // Store keeps sessions in Valkey.
@@ -92,7 +105,7 @@ func NewStore(c valkey.Client, sealer *Sealer, idle, absolute time.Duration, now
 var (
 	createScript = valkey.NewLuaScript(`
 if redis.call('EXISTS', KEYS[1]) == 1 then return 0 end
-redis.call('HSET', KEYS[1], 'g', '1', 'd', ARGV[1])
+redis.call('HSET', KEYS[1], 'g', '1', 'd', ARGV[1], 'c', '0')
 redis.call('PEXPIRE', KEYS[1], ARGV[2])
 redis.call('SADD', KEYS[2], ARGV[3])
 redis.call('PEXPIRE', KEYS[2], ARGV[4], 'NX')
@@ -107,7 +120,11 @@ if redis.call('HGET', KEYS[1], 'g') ~= ARGV[1] then return 0 end
 redis.call('HSET', KEYS[1], 'd', ARGV[2], 'g', tostring(tonumber(ARGV[1]) + 1))
 return 1`)
 
+	// ARGV[2] is the prefix of the Bearer keys: a mobile session also takes its current
+	// Bearer with it (the key is built here because it is stored as a hash, not as a key).
 	deleteScript = valkey.NewLuaScript(`
+local b = redis.call('HGET', KEYS[1], 'b')
+if b then redis.call('DEL', ARGV[2] .. b) end
 redis.call('DEL', KEYS[1])
 redis.call('SREM', KEYS[2], ARGV[1])
 if redis.call('GET', KEYS[3]) == ARGV[1] then redis.call('DEL', KEYS[3]) end
@@ -135,6 +152,14 @@ func (s *Store) keys(ref, sub, sid string) (sess, userIdx, sidIdx string) {
 // Create stores a new session and returns the cookie value. The value is 256 random bits;
 // only its SHA-256 reaches the store, so a read of the Valkey does not yield usable cookies.
 func (s *Store) Create(ctx context.Context, sess Session) (token string, err error) {
+	sess.Kind, sess.DevicePub = KindWeb, nil
+	return s.create(ctx, sess)
+}
+
+// create is Create and CreateMobile. The random value is the session's secret: the cookie
+// for a web session; for a mobile session it is never given to anyone, only its hash is the
+// reference (the Bearer is a different random value, issued apart).
+func (s *Store) create(ctx context.Context, sess Session) (token string, err error) {
 	if sess.Subject == "" || sess.UserID == "" {
 		return "", errors.New("auth: a session needs a subject and a user")
 	}
@@ -157,6 +182,7 @@ func (s *Store) Create(ctx context.Context, sess Session) (token string, err err
 		V: 1, UserID: sess.UserID, Subject: sess.Subject, SessionID: sess.SessionID, AMR: sess.AMR,
 		AuthTime: sess.AuthTime, CreatedAt: now, AccessExpires: sess.AccessExpires,
 		SealedRefresh: sealedRT, SealedID: sealedID, UserAgent: sess.UserAgent, IP: sess.IP,
+		Kind: sess.Kind, DevicePub: sess.DevicePub,
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal session: %w", err)
@@ -238,7 +264,7 @@ func (s *Store) GetByRef(ctx context.Context, ref string) (Session, error) {
 	sess := Session{
 		UserID: rec.UserID, Subject: rec.Subject, SessionID: rec.SessionID, AMR: rec.AMR,
 		AuthTime: rec.AuthTime, CreatedAt: rec.CreatedAt, AccessExpires: rec.AccessExpires,
-		UserAgent: rec.UserAgent, IP: rec.IP,
+		UserAgent: rec.UserAgent, IP: rec.IP, Kind: rec.Kind, DevicePub: rec.DevicePub,
 		ref: ref, generation: gen,
 	}
 
@@ -283,6 +309,7 @@ func (s *Store) Update(ctx context.Context, sess Session) error {
 		V: 1, UserID: sess.UserID, Subject: sess.Subject, SessionID: sess.SessionID, AMR: sess.AMR,
 		AuthTime: sess.AuthTime, CreatedAt: sess.CreatedAt, AccessExpires: sess.AccessExpires,
 		SealedRefresh: sealedRT, SealedID: sealedID, UserAgent: sess.UserAgent, IP: sess.IP,
+		Kind: sess.Kind, DevicePub: sess.DevicePub,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
@@ -302,7 +329,7 @@ func (s *Store) Update(ctx context.Context, sess Session) error {
 // gone is not an error.
 func (s *Store) Delete(ctx context.Context, sess Session) error {
 	k, u, sid := s.keys(sess.ref, sess.Subject, sess.SessionID)
-	if err := deleteScript.Exec(ctx, s.c, []string{k, u, sid}, []string{sess.ref}).Error(); err != nil {
+	if err := deleteScript.Exec(ctx, s.c, []string{k, u, sid}, []string{sess.ref, bearerKeyPrefix}).Error(); err != nil {
 		return fmt.Errorf("delete session: %w", err)
 	}
 	return nil

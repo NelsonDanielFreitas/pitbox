@@ -49,7 +49,7 @@ services:
     # para o utilizador "valkey" nesse caso (com "sh -c" ficaria a correr como root).
     # Dois utilizadores (ADR 0013): "default" (palavra-passe VALKEY_PASSWORD) fica para
     # administração e para o health check; a API usa "pitbox_api", que só toca nas chaves
-    # pitbox:sess:*, pitbox:lock:* e pitbox:rl:*, sem @dangerous (nada de FLUSHALL, KEYS,
+    # pitbox:sess:*, pitbox:lock:*, pitbox:mob:* (login móvel, ADR 0032) e pitbox:rl:*, sem @dangerous (nada de FLUSHALL, KEYS,
     # CONFIG, ...) e sem pub/sub. Comandos explícitos: Lua (EVAL/EVALSHA/SCRIPT LOAD) para
     # o compare-and-set e o lock, e os de ligação que o cliente envia ao arrancar.
     command:
@@ -62,6 +62,7 @@ services:
       - ">${VALKEY_API_PASSWORD:?corre 'make init'}"
       - "~pitbox:sess:*"
       - "~pitbox:lock:*"
+      - "~pitbox:mob:*"
       - "~pitbox:rl:*"
       - -@all
       - +@read

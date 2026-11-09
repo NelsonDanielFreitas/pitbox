@@ -44,12 +44,32 @@ func Interceptor(a *Authenticator, origin string, public ...string) connect.Serv
 				return connect.NewError(connect.CodeUnauthenticated, msgUnauthenticated)
 			}
 			hdr := info.RequestHeader()
+			h := http.Header{"Cookie": hdr.Values("Cookie")}
+			cookieToken := SessionTokenFromHeader(h)
+
+			// The phone sends a Bearer (ADR 0032). It is not an ambient credential (the browser
+			// never adds it by itself), so the cross-site checks below do not apply to it; the
+			// CORS allow-list decides which origins may send it. Never both credentials at once,
+			// and an Authorization header that is not exactly a Bearer of ours is refused: the
+			// request does not quietly fall back to the cookie.
+			if bearer, present := BearerFromHeader(hdr.Values("Authorization")); present {
+				if bearer == "" || cookieToken != "" {
+					return connect.NewError(connect.CodeUnauthenticated, msgUnauthenticated)
+				}
+				p, err := a.AuthenticateBearer(ctx, bearer)
+				switch {
+				case errors.Is(err, ErrUnauthenticated):
+					return connect.NewError(connect.CodeUnauthenticated, msgUnauthenticated)
+				case err != nil:
+					return connect.NewError(connect.CodeUnavailable, msgAuthUnavailable).WithCause(err)
+				}
+				return next(principal.With(ctx, p), spec, stream)
+			}
+
 			if foreignRequest(origin, hdr.Get("Origin"), hdr.Get("Sec-Fetch-Site")) {
 				return connect.NewError(connect.CodePermissionDenied, msgCrossOrigin)
 			}
-
-			h := http.Header{"Cookie": hdr.Values("Cookie")}
-			p, err := a.Authenticate(ctx, SessionTokenFromHeader(h))
+			p, err := a.Authenticate(ctx, cookieToken)
 			switch {
 			case errors.Is(err, ErrUnauthenticated):
 				return connect.NewError(connect.CodeUnauthenticated, msgUnauthenticated)

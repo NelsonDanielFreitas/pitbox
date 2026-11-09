@@ -67,10 +67,38 @@ func (a *Authenticator) Authenticate(ctx context.Context, token string) (princip
 		a.Log.ErrorContext(ctx, "read session", slog.String("reason", "store"))
 		return principal.Principal{}, ErrUnavailable
 	}
+	if sess.Kind != KindWeb {
+		// A cookie never opens a mobile session (nor the other way round): the credential
+		// of each kind is separate. Cannot happen by hash; refused anyway.
+		return principal.Principal{}, ErrUnauthenticated
+	}
+	return a.principalFor(ctx, sess)
+}
+
+// AuthenticateBearer resolves a mobile Bearer (ADR 0032) to the principal of the request. The
+// Bearer is opaque and looked up like a cookie value: anything that is not one of ours (a
+// JWT, an ID token, garbage) fails the shape check without touching the store. The session
+// it names is the same kind of record as the web's, so the Zitadel tokens are refreshed the
+// same way, when the access token has expired.
+func (a *Authenticator) AuthenticateBearer(ctx context.Context, bearer string) (principal.Principal, error) {
+	sess, err := a.Store.GetByBearer(ctx, bearer)
+	switch {
+	case errors.Is(err, ErrNoSession):
+		return principal.Principal{}, ErrUnauthenticated
+	case err != nil:
+		a.Log.ErrorContext(ctx, "read session", slog.String("reason", "store"))
+		return principal.Principal{}, ErrUnavailable
+	}
+	return a.principalFor(ctx, sess)
+}
+
+// principalFor refreshes the Zitadel tokens of the session if they expired and returns its
+// principal.
+func (a *Authenticator) principalFor(ctx context.Context, sess Session) (principal.Principal, error) {
 	if a.Now().Before(sess.AccessExpires) {
 		return principalOf(sess), nil
 	}
-	sess, err = a.refresh(ctx, token, sess)
+	sess, err := a.refresh(ctx, sess.Ref(), sess)
 	if err != nil {
 		return principal.Principal{}, err
 	}
@@ -91,7 +119,7 @@ func principalOf(s Session) principal.Principal {
 //   - past it wait for the winner, because a user who was away for longer than the grace
 //     period comes back with several requests at once, and refusing the losers would sign
 //     that user out.
-func (a *Authenticator) refresh(ctx context.Context, token string, sess Session) (Session, error) {
+func (a *Authenticator) refresh(ctx context.Context, ref string, sess Session) (Session, error) {
 	lock, err := a.Store.TryLockRefresh(ctx, sess)
 	if err != nil {
 		a.Log.ErrorContext(ctx, "refresh lock", slog.String("reason", "store"))
@@ -102,7 +130,7 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 		if a.Now().Before(sess.AccessExpires.Add(RefreshGrace)) {
 			return sess, nil
 		}
-		return a.awaitRefresh(ctx, token, sess)
+		return a.awaitRefresh(ctx, ref, sess)
 	}
 	defer func() {
 		// Not the request's context: the lock must be freed even if the caller gave up.
@@ -114,7 +142,7 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 	}()
 
 	// Someone may have refreshed between our read and our lock.
-	fresh, err := a.Store.Get(ctx, token)
+	fresh, err := a.Store.GetByRef(ctx, ref)
 	switch {
 	case errors.Is(err, ErrNoSession):
 		return Session{}, ErrUnauthenticated
@@ -132,7 +160,13 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 	}
 	rctx, cancel := context.WithTimeout(a.Provider.withHTTP(ctx), refreshTimeout)
 	defer cancel()
-	tok, err := prov.oauth.TokenSource(rctx, &oauth2.Token{RefreshToken: fresh.RefreshToken}).Token()
+	// The refresh token is bound to the client it was issued to (the web application's or
+	// the native one's); presenting it as the other client is refused by the provider.
+	oauthCfg := prov.oauth
+	if fresh.Kind == KindMobile {
+		oauthCfg = prov.mobileOAuth
+	}
+	tok, err := oauthCfg.TokenSource(rctx, &oauth2.Token{RefreshToken: fresh.RefreshToken}).Token()
 	if err != nil {
 		var re *oauth2.RetrieveError
 		if errors.As(err, &re) {
@@ -168,7 +202,7 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 	if err := a.Store.Update(ctx, fresh); err != nil {
 		if errors.Is(err, ErrConflict) {
 			// The session changed under us (logout, or an update from elsewhere): reread it.
-			again, gerr := a.Store.Get(ctx, token)
+			again, gerr := a.Store.GetByRef(ctx, ref)
 			if gerr != nil {
 				return Session{}, ErrUnauthenticated
 			}
@@ -184,7 +218,7 @@ func (a *Authenticator) refresh(ctx context.Context, token string, sess Session)
 // its access token moves forward. It gives up after the wait timeout with ErrUnavailable,
 // never ErrUnauthenticated: not getting an answer in time says nothing about the user. A
 // session the winner ended (invalid_grant) is gone, and that one is ErrUnauthenticated.
-func (a *Authenticator) awaitRefresh(ctx context.Context, token string, stale Session) (Session, error) {
+func (a *Authenticator) awaitRefresh(ctx context.Context, ref string, stale Session) (Session, error) {
 	wait := a.WaitTimeout
 	if wait <= 0 {
 		wait = refreshWait
@@ -201,7 +235,7 @@ func (a *Authenticator) awaitRefresh(ctx context.Context, token string, stale Se
 			return Session{}, ErrUnavailable
 		case <-timer.C:
 		}
-		fresh, err := a.Store.Get(ctx, token)
+		fresh, err := a.Store.GetByRef(ctx, ref)
 		switch {
 		case errors.Is(err, ErrNoSession):
 			return Session{}, ErrUnauthenticated

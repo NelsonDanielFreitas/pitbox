@@ -903,6 +903,15 @@ export const ptPT = {
     errorBody: "Verifica o armazenamento do browser e tenta outra vez.",
     clear: "Limpar dados locais",
   },
+  lock: {
+    title: "Sessão bloqueada",
+    body: "Usa a impressão digital, o rosto ou o PIN do telemóvel para continuar.",
+    unlock: "Desbloquear",
+    retry: "Tentar outra vez",
+    unavailable: "Define um bloqueio de ecrã (PIN, padrão ou biometria) nas definições do telemóvel para usar a PitBox.",
+    failed: "Não foi possível confirmar a tua identidade.",
+    prompt: "Desbloquear a PitBox",
+  },
   errors: {
     title: "Algo correu mal",
     notFoundTitle: "Página não encontrada",

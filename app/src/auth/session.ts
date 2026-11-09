@@ -6,6 +6,7 @@ import {
   NetworkError,
   OriginMismatchError,
 } from "@/shared/lib/errors";
+import { apiUrl } from "@/shared/lib/env";
 
 const authenticatedSchema = z
   .object({
@@ -42,7 +43,7 @@ export function isAbortError(error: unknown): boolean {
 export async function fetchSession(signal?: AbortSignal): Promise<OnlineSession | z.infer<typeof unauthenticatedSchema>> {
   let response: Response;
   try {
-    response = await fetch("/auth/session", {
+    response = await fetch(apiUrl("/auth/session"), {
       cache: "no-store",
       credentials: "same-origin",
       signal,

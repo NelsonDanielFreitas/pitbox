@@ -1,0 +1,22 @@
+{
+  "name": "pitbox-secure",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PitBox Android Keystore plugin: non-exportable device signing key and biometric prompt (ADR 0033)",
+  "license": "UNLICENSED",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "src"
+  ],
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  }
+}

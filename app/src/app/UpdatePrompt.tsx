@@ -2,13 +2,23 @@ import { useTranslation } from "react-i18next";
 import { useRegisterSW } from "virtual:pwa-register/react";
 
 import { useSyncStatus } from "@/features/sync/data/use-sync";
+import { isNativePlatform } from "@/shared/lib/platform";
 import { Button } from "@/shared/ui/Button";
+
+/**
+ * Inside the Capacitor shell there is no service worker (ADR 0033): the bundle ships in the APK
+ * and an update is a new APK. `useRegisterSW` registers the worker as soon as it mounts, so the
+ * native check has to happen before that component is rendered, not inside it.
+ */
+export function UpdatePrompt() {
+  return isNativePlatform() ? null : <WebUpdatePrompt />;
+}
 
 /**
  * The new service worker waits until the user says so (ADR 0028): no skipWaiting, because a
  * new shell can carry a local migration and must not replace the code mid-write or mid-sync.
  */
-export function UpdatePrompt() {
+function WebUpdatePrompt() {
   const { t } = useTranslation();
   const {
     needRefresh: [needRefresh],

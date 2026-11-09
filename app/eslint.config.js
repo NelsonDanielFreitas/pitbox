@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "coverage", "src/gen", "src/app/routeTree.gen.ts"],
+    ignores: ["dist", "dist-android", "android", "coverage", "src/gen", "src/app/routeTree.gen.ts"],
   },
   {
     files: ["**/*.{ts,tsx}"],
@@ -156,6 +156,12 @@ export default tseslint.config(
     // The device key is a non-extractable CryptoKey: it can sign but never be read back, which
     // is why it may live in IndexedDB (nothing sensitive is stored there in clear).
     files: ["src/sync/device-key.ts"],
+    rules: { "no-restricted-globals": "off" },
+  },
+  {
+    // The native logout marks (ADR 0033) are user hashes, which are already part of the database
+    // file name: nothing secret. They need a store that is not the user's own database.
+    files: ["src/db/logout-marks.ts"],
     rules: { "no-restricted-globals": "off" },
   },
 );

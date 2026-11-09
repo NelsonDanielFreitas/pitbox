@@ -33,15 +33,18 @@
   },
   "include": [
     "src",
+    "plugins/pitbox-secure/src",
     "tests",
     "vite.config.ts",
     "vitest.config.ts",
+    "capacitor.config.ts",
     "playwright.config.ts", "playwright.sync.config.ts",
     "security-headers.ts",
     "tailnet-host.ts"
   ],
   "exclude": [
     "dist",
+    "dist-android",
     "node_modules"
   ]
 }

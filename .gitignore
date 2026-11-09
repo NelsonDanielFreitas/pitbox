@@ -19,6 +19,7 @@ coverage.out
 # Node / app
 node_modules/
 /app/dist/
+/app/dist-android/
 /app/test-results/
 /app/.e2e/
 /app/playwright-report/
@@ -43,3 +44,12 @@ __pycache__/
 # Claude Code (notas pessoais)
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Android (F2-06): signing keys never in Git (the generated android/.gitignore keeps them commented out)
+*.jks
+*.keystore
+/app/android/local.properties
+/app/android/.gradle/
+/app/android/**/build/
+/app/plugins/*/android/build/
+/app/plugins/*/android/.gradle/

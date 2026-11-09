@@ -59,7 +59,7 @@ import { defaultGarageDatabase, type GarageDatabase } from "./garage-database";
 
 const CAR_COLUMNS = `
   id, team_id, make, model, model_year, serial_number, nickname, transponder_number,
-  status, scale, powertrain, notes, created_at, updated_at, version, local_rev
+  status, scale, powertrain, notes, sheet_template_id, created_at, updated_at, version, local_rev
 `;
 
 const ENGINE_RAW_COLUMNS = `
@@ -190,7 +190,19 @@ export class LocalGarageRepository implements GarageRepository {
     return rows[0] ? this.carFrom(rows[0]) : undefined;
   }
 
+  /** A sheet template must be the catalogue's or the team's own; anything else is "not found". */
+  private async requireVisibleTemplate(teamId: string, templateId: string | null | undefined): Promise<void> {
+    if (!templateId) return;
+    const rows = await this.db.query(
+      `SELECT 1 AS found FROM sheet_template
+        WHERE id = $id AND (team_id IS NULL OR team_id = $teamId) AND deleted_at IS NULL`,
+      { $id: templateId, $teamId: teamId },
+    );
+    if (rows.length === 0) throw new GarageNotFoundError("sheet template not found");
+  }
+
   async createCar(teamId: string, input: CarInput): Promise<Car> {
+    await this.requireVisibleTemplate(teamId, input.sheetTemplateId);
     const id = newId();
     const now = this.now();
     try {
@@ -214,17 +226,18 @@ export class LocalGarageRepository implements GarageRepository {
               scale: "1/8",
               powertrain: "nitro",
               notes: input.notes,
+              ...(input.sheetTemplateId ? { sheet_template_id: input.sheetTemplateId } : {}),
             },
           }),
           {
             sql: `INSERT INTO car (
                     id, team_id, make, model, model_year, serial_number, nickname,
-                    transponder_number, status, scale, powertrain, notes, created_at,
-                    updated_at, version, local_rev
+                    transponder_number, status, scale, powertrain, notes, sheet_template_id,
+                    created_at, updated_at, version, local_rev
                   ) VALUES (
                     $id, $teamId, $make, $model, $modelYear, $serialNumber, $nickname,
-                    $transponderNumber, $status, '1/8', 'nitro', $notes, $createdAt,
-                    $updatedAt, 1, 0
+                    $transponderNumber, $status, '1/8', 'nitro', $notes, $sheetTemplateId,
+                    $createdAt, $updatedAt, 1, 0
                   )
                   RETURNING ${CAR_COLUMNS}`,
             params: {
@@ -238,6 +251,7 @@ export class LocalGarageRepository implements GarageRepository {
               $transponderNumber: input.transponderNumber,
               $status: input.status,
               $notes: input.notes,
+              $sheetTemplateId: input.sheetTemplateId ?? null,
               $createdAt: now,
               $updatedAt: now,
             },
@@ -262,6 +276,7 @@ export class LocalGarageRepository implements GarageRepository {
     }
     const current = await this.getCar(teamId, id);
     if (!current) throw new GarageNotFoundError("car not found");
+    await this.requireVisibleTemplate(teamId, input.sheetTemplateId);
     try {
       const rows = await this.writeTx(
         [
@@ -273,8 +288,10 @@ export class LocalGarageRepository implements GarageRepository {
                      SET make = $make, model = $model, model_year = $modelYear,
                          serial_number = $serialNumber, nickname = $nickname,
                          transponder_number = $transponderNumber, status = $status,
-                         notes = $notes, updated_at = $updatedAt,
-                         local_rev = local_rev + 1
+                         notes = $notes,
+                         sheet_template_id = CASE WHEN $setTemplate = 1 THEN $sheetTemplateId
+                                                  ELSE sheet_template_id END,
+                         updated_at = $updatedAt, local_rev = local_rev + 1
                    WHERE team_id = $teamId AND id = $id AND local_rev = $localRev
                      AND deleted_at IS NULL
                 RETURNING ${CAR_COLUMNS}`,
@@ -290,6 +307,8 @@ export class LocalGarageRepository implements GarageRepository {
               $transponderNumber: input.transponderNumber,
               $status: input.status,
               $notes: input.notes,
+              $setTemplate: input.sheetTemplateId === undefined ? 0 : 1,
+              $sheetTemplateId: input.sheetTemplateId ?? null,
               $updatedAt: this.now(),
             },
           },
@@ -1741,6 +1760,9 @@ export class LocalGarageRepository implements GarageRepository {
     }
     if (current.status !== input.status) fields.status = input.status;
     if (current.notes !== input.notes) fields.notes = input.notes;
+    if (input.sheetTemplateId !== undefined && current.sheetTemplateId !== input.sheetTemplateId) {
+      fields.sheet_template_id = input.sheetTemplateId;
+    }
     if (Object.keys(fields).length === 0) return [];
     return [
       outboxStatement(
@@ -1842,6 +1864,7 @@ export class LocalGarageRepository implements GarageRepository {
       scale: value.scale,
       powertrain: value.powertrain,
       notes: value.notes,
+      sheetTemplateId: value.sheet_template_id,
       createdAt: value.created_at,
       updatedAt: value.updated_at,
       version: value.version,

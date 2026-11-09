@@ -165,7 +165,7 @@ func TestSetupLifecycleLinksAndRoles(t *testing.T) {
 	// Empty setup compared with itself has no differences.
 	diffs, err := h.svc.CompareVersions(h.ctx, uid(owner), tid(team), uuid.MustParse(created.ID), 1, 1)
 	require.NoError(t, err)
-	require.Empty(t, diffs)
+	require.Empty(t, diffs.Differences)
 
 	ref, err := h.svc.CreateVersion(h.ctx, uid(owner), tid(team), app.CreateVersionInput{
 		RequestID: uuid.Must(uuid.NewV7()), SetupID: uuid.MustParse(created.ID), BaseVersion: 1,
@@ -190,7 +190,7 @@ func TestSetupLifecycleLinksAndRoles(t *testing.T) {
 
 	diffs, err = h.svc.CompareVersions(h.ctx, uid(owner), tid(team), uuid.MustParse(created.ID), 1, 3)
 	require.NoError(t, err)
-	require.NotEmpty(t, diffs)
+	require.NotEmpty(t, diffs.Differences)
 
 	// Pilot can read but not write.
 	got, err := h.svc.GetVersion(h.ctx, uid(pilot), tid(team), uuid.MustParse(created.ID), nil)

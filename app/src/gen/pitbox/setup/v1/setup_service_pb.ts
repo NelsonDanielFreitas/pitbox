@@ -6,7 +6,7 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
-import type { Setup, SetupDifference, SetupVersion, SetupVersionRef, ShareLink, ShareLinkExpiry, ShareLinkWithToken } from "./setup_pb";
+import type { Setup, SetupDifference, SetupVersion, SetupVersionRef, ShareLink, ShareLinkExpiry, ShareLinkWithToken, SheetTemplate, SheetTemplateRef, SheetTemplateVersion } from "./setup_pb";
 import { file_pitbox_setup_v1_setup } from "./setup_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 
@@ -14,7 +14,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file pitbox/setup/v1/setup_service.proto.
  */
 export const file_pitbox_setup_v1_setup_service: GenFile = /*@__PURE__*/
-  fileDesc("CiNwaXRib3gvc2V0dXAvdjEvc2V0dXBfc2VydmljZS5wcm90bxIPcGl0Ym94LnNldHVwLnYxIp0CChJDcmVhdGVTZXR1cFJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESGAoGY2FyX2lkGAMgASgJQgi6SAVyA7ABARIXCgRuYW1lGAQgASgJQgm6SAZyBBABGHgSHAoFbm90ZXMYBSABKAlCCLpIBXIDGNAPSACIAQESJgoPc291cmNlX3NldHVwX2lkGAYgASgJQgi6SAVyA7ABAUgBiAEBEiQKDnNvdXJjZV92ZXJzaW9uGAcgASgFQge6SAQaAigBSAKIAQFCCAoGX25vdGVzQhIKEF9zb3VyY2Vfc2V0dXBfaWRCEQoPX3NvdXJjZV92ZXJzaW9uIjwKE0NyZWF0ZVNldHVwUmVzcG9uc2USJQoFc2V0dXAYASABKAsyFi5waXRib3guc2V0dXAudjEuU2V0dXAi8wEKFENyZWF0ZVZlcnNpb25SZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhwKCnJlcXVlc3RfaWQYAiABKAlCCLpIBXIDsAEBEhoKCHNldHVwX2lkGAMgASgJQgi6SAVyA7ABARIdCgxiYXNlX3ZlcnNpb24YBCABKAVCB7pIBBoCKAESLQoEZGF0YRgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RCBrpIA8gBARIlCg5jaGFuZ2Vfc3VtbWFyeRgGIAEoCUIIukgFcgMY9ANIAIgBAUIRCg9fY2hhbmdlX3N1bW1hcnkiSgoVQ3JlYXRlVmVyc2lvblJlc3BvbnNlEjEKB3ZlcnNpb24YASABKAsyIC5waXRib3guc2V0dXAudjEuU2V0dXBWZXJzaW9uUmVmInUKEUdldFZlcnNpb25SZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhoKCHNldHVwX2lkGAIgASgJQgi6SAVyA7ABARIdCgd2ZXJzaW9uGAMgASgFQge6SAQaAigBSACIAQFCCgoIX3ZlcnNpb24iRAoSR2V0VmVyc2lvblJlc3BvbnNlEi4KB3ZlcnNpb24YASABKAsyHS5waXRib3guc2V0dXAudjEuU2V0dXBWZXJzaW9uIpUBChFMaXN0U2V0dXBzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIdCgZjYXJfaWQYAiABKAlCCLpIBXIDsAEBSACIAQESHQoJcGFnZV9zaXplGAMgASgFQgq6SAcaBRjIASgAEhwKCnBhZ2VfdG9rZW4YBCABKAlCCLpIBXIDGIAEQgkKB19jYXJfaWQiVQoSTGlzdFNldHVwc1Jlc3BvbnNlEiYKBnNldHVwcxgBIAMoCzIWLnBpdGJveC5zZXR1cC52MS5TZXR1cBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiiQEKE0xpc3RWZXJzaW9uc1JlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESGgoIc2V0dXBfaWQYAiABKAlCCLpIBXIDsAEBEh0KCXBhZ2Vfc2l6ZRgDIAEoBUIKukgHGgUYyAEoABIcCgpwYWdlX3Rva2VuGAQgASgJQgi6SAVyAxiABCJjChRMaXN0VmVyc2lvbnNSZXNwb25zZRIyCgh2ZXJzaW9ucxgBIAMoCzIgLnBpdGJveC5zZXR1cC52MS5TZXR1cFZlcnNpb25SZWYSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIosBChZDb21wYXJlVmVyc2lvbnNSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhoKCHNldHVwX2lkGAIgASgJQgi6SAVyA7ABARIdCgxmcm9tX3ZlcnNpb24YAyABKAVCB7pIBBoCKAESGwoKdG9fdmVyc2lvbhgEIAEoBUIHukgEGgIoASJ6ChdDb21wYXJlVmVyc2lvbnNSZXNwb25zZRI1CgtkaWZmZXJlbmNlcxgBIAMoCzIgLnBpdGJveC5zZXR1cC52MS5TZXR1cERpZmZlcmVuY2USFAoMZnJvbV92ZXJzaW9uGAIgASgFEhIKCnRvX3ZlcnNpb24YAyABKAUi6AEKFkNyZWF0ZVNoYXJlTGlua1JlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESGgoIc2V0dXBfaWQYAyABKAlCCLpIBXIDsAEBEkAKCmV4cGlyZXNfaW4YBCABKA4yIC5waXRib3guc2V0dXAudjEuU2hhcmVMaW5rRXhwaXJ5Qgq6SAeCAQQQASAAEiQKDnBpbm5lZF92ZXJzaW9uGAUgASgFQge6SAQaAigBSACIAQFCEQoPX3Bpbm5lZF92ZXJzaW9uIlIKF0NyZWF0ZVNoYXJlTGlua1Jlc3BvbnNlEjcKCnNoYXJlX2xpbmsYASABKAsyIy5waXRib3guc2V0dXAudjEuU2hhcmVMaW5rV2l0aFRva2VuIk4KFUxpc3RTaGFyZUxpbmtzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIaCghzZXR1cF9pZBgCIAEoCUIIukgFcgOwAQEiSQoWTGlzdFNoYXJlTGlua3NSZXNwb25zZRIvCgtzaGFyZV9saW5rcxgBIAMoCzIaLnBpdGJveC5zZXR1cC52MS5TaGFyZUxpbmsijgEKFlJldm9rZVNoYXJlTGlua1JlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESGgoIc2V0dXBfaWQYAyABKAlCCLpIBXIDsAEBEh8KDXNoYXJlX2xpbmtfaWQYBCABKAlCCLpIBXIDsAEBIhkKF1Jldm9rZVNoYXJlTGlua1Jlc3BvbnNlMoEHCgxTZXR1cFNlcnZpY2USWAoLQ3JlYXRlU2V0dXASIy5waXRib3guc2V0dXAudjEuQ3JlYXRlU2V0dXBSZXF1ZXN0GiQucGl0Ym94LnNldHVwLnYxLkNyZWF0ZVNldHVwUmVzcG9uc2USXgoNQ3JlYXRlVmVyc2lvbhIlLnBpdGJveC5zZXR1cC52MS5DcmVhdGVWZXJzaW9uUmVxdWVzdBomLnBpdGJveC5zZXR1cC52MS5DcmVhdGVWZXJzaW9uUmVzcG9uc2USWgoKR2V0VmVyc2lvbhIiLnBpdGJveC5zZXR1cC52MS5HZXRWZXJzaW9uUmVxdWVzdBojLnBpdGJveC5zZXR1cC52MS5HZXRWZXJzaW9uUmVzcG9uc2UiA5ACARJaCgpMaXN0U2V0dXBzEiIucGl0Ym94LnNldHVwLnYxLkxpc3RTZXR1cHNSZXF1ZXN0GiMucGl0Ym94LnNldHVwLnYxLkxpc3RTZXR1cHNSZXNwb25zZSIDkAIBEmAKDExpc3RWZXJzaW9ucxIkLnBpdGJveC5zZXR1cC52MS5MaXN0VmVyc2lvbnNSZXF1ZXN0GiUucGl0Ym94LnNldHVwLnYxLkxpc3RWZXJzaW9uc1Jlc3BvbnNlIgOQAgESaQoPQ29tcGFyZVZlcnNpb25zEicucGl0Ym94LnNldHVwLnYxLkNvbXBhcmVWZXJzaW9uc1JlcXVlc3QaKC5waXRib3guc2V0dXAudjEuQ29tcGFyZVZlcnNpb25zUmVzcG9uc2UiA5ACARJkCg9DcmVhdGVTaGFyZUxpbmsSJy5waXRib3guc2V0dXAudjEuQ3JlYXRlU2hhcmVMaW5rUmVxdWVzdBooLnBpdGJveC5zZXR1cC52MS5DcmVhdGVTaGFyZUxpbmtSZXNwb25zZRJmCg5MaXN0U2hhcmVMaW5rcxImLnBpdGJveC5zZXR1cC52MS5MaXN0U2hhcmVMaW5rc1JlcXVlc3QaJy5waXRib3guc2V0dXAudjEuTGlzdFNoYXJlTGlua3NSZXNwb25zZSIDkAIBEmQKD1Jldm9rZVNoYXJlTGluaxInLnBpdGJveC5zZXR1cC52MS5SZXZva2VTaGFyZUxpbmtSZXF1ZXN0GigucGl0Ym94LnNldHVwLnYxLlJldm9rZVNoYXJlTGlua1Jlc3BvbnNlQtEBChNjb20ucGl0Ym94LnNldHVwLnYxQhFTZXR1cFNlcnZpY2VQcm90b1ABWklnaXRodWIuY29tL05lbHNvbkRhbmllbEZyZWl0YXMvcGl0Ym94L2JhY2tlbmQvZ2VuL3BpdGJveC9zZXR1cC92MTtzZXR1cHYxogIDUFNYqgIPUGl0Ym94LlNldHVwLlYxygIPUGl0Ym94XFNldHVwXFYx4gIbUGl0Ym94XFNldHVwXFYxXEdQQk1ldGFkYXRh6gIRUGl0Ym94OjpTZXR1cDo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_struct, file_pitbox_setup_v1_setup]);
+  fileDesc("CiNwaXRib3gvc2V0dXAvdjEvc2V0dXBfc2VydmljZS5wcm90bxIPcGl0Ym94LnNldHVwLnYxIvACChJDcmVhdGVTZXR1cFJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESGAoGY2FyX2lkGAMgASgJQgi6SAVyA7ABARIXCgRuYW1lGAQgASgJQgm6SAZyBBABGHgSHAoFbm90ZXMYBSABKAlCCLpIBXIDGNAPSACIAQESJgoPc291cmNlX3NldHVwX2lkGAYgASgJQgi6SAVyA7ABAUgBiAEBEiQKDnNvdXJjZV92ZXJzaW9uGAcgASgFQge6SAQaAigBSAKIAQESPgoOc2hlZXRfdGVtcGxhdGUYCCABKAsyIS5waXRib3guc2V0dXAudjEuU2hlZXRUZW1wbGF0ZVJlZkgDiAEBQggKBl9ub3Rlc0ISChBfc291cmNlX3NldHVwX2lkQhEKD19zb3VyY2VfdmVyc2lvbkIRCg9fc2hlZXRfdGVtcGxhdGUiPAoTQ3JlYXRlU2V0dXBSZXNwb25zZRIlCgVzZXR1cBgBIAEoCzIWLnBpdGJveC5zZXR1cC52MS5TZXR1cCKYAgoUQ3JlYXRlVmVyc2lvblJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESGgoIc2V0dXBfaWQYAyABKAlCCLpIBXIDsAEBEh0KDGJhc2VfdmVyc2lvbhgEIAEoBUIHukgEGgIoARItCgRkYXRhGAUgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEIGukgDyAEBEiUKDmNoYW5nZV9zdW1tYXJ5GAYgASgJQgi6SAVyAxj0A0gAiAEBEiMKDnNjaGVtYV92ZXJzaW9uGAcgASgFQgu6SAgaBjAAMAEwAkIRCg9fY2hhbmdlX3N1bW1hcnkiSgoVQ3JlYXRlVmVyc2lvblJlc3BvbnNlEjEKB3ZlcnNpb24YASABKAsyIC5waXRib3guc2V0dXAudjEuU2V0dXBWZXJzaW9uUmVmInUKEUdldFZlcnNpb25SZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhoKCHNldHVwX2lkGAIgASgJQgi6SAVyA7ABARIdCgd2ZXJzaW9uGAMgASgFQge6SAQaAigBSACIAQFCCgoIX3ZlcnNpb24iRAoSR2V0VmVyc2lvblJlc3BvbnNlEi4KB3ZlcnNpb24YASABKAsyHS5waXRib3guc2V0dXAudjEuU2V0dXBWZXJzaW9uIpUBChFMaXN0U2V0dXBzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIdCgZjYXJfaWQYAiABKAlCCLpIBXIDsAEBSACIAQESHQoJcGFnZV9zaXplGAMgASgFQgq6SAcaBRjIASgAEhwKCnBhZ2VfdG9rZW4YBCABKAlCCLpIBXIDGIAEQgkKB19jYXJfaWQiVQoSTGlzdFNldHVwc1Jlc3BvbnNlEiYKBnNldHVwcxgBIAMoCzIWLnBpdGJveC5zZXR1cC52MS5TZXR1cBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiiQEKE0xpc3RWZXJzaW9uc1JlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESGgoIc2V0dXBfaWQYAiABKAlCCLpIBXIDsAEBEh0KCXBhZ2Vfc2l6ZRgDIAEoBUIKukgHGgUYyAEoABIcCgpwYWdlX3Rva2VuGAQgASgJQgi6SAVyAxiABCJjChRMaXN0VmVyc2lvbnNSZXNwb25zZRIyCgh2ZXJzaW9ucxgBIAMoCzIgLnBpdGJveC5zZXR1cC52MS5TZXR1cFZlcnNpb25SZWYSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIosBChZDb21wYXJlVmVyc2lvbnNSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhoKCHNldHVwX2lkGAIgASgJQgi6SAVyA7ABARIdCgxmcm9tX3ZlcnNpb24YAyABKAVCB7pIBBoCKAESGwoKdG9fdmVyc2lvbhgEIAEoBUIHukgEGgIoASKQAQoXQ29tcGFyZVZlcnNpb25zUmVzcG9uc2USNQoLZGlmZmVyZW5jZXMYASADKAsyIC5waXRib3guc2V0dXAudjEuU2V0dXBEaWZmZXJlbmNlEhQKDGZyb21fdmVyc2lvbhgCIAEoBRISCgp0b192ZXJzaW9uGAMgASgFEhQKDHNraXBwZWRfa2V5cxgEIAMoCSLoAQoWQ3JlYXRlU2hhcmVMaW5rUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIcCgpyZXF1ZXN0X2lkGAIgASgJQgi6SAVyA7ABARIaCghzZXR1cF9pZBgDIAEoCUIIukgFcgOwAQESQAoKZXhwaXJlc19pbhgEIAEoDjIgLnBpdGJveC5zZXR1cC52MS5TaGFyZUxpbmtFeHBpcnlCCrpIB4IBBBABIAASJAoOcGlubmVkX3ZlcnNpb24YBSABKAVCB7pIBBoCKAFIAIgBAUIRCg9fcGlubmVkX3ZlcnNpb24iUgoXQ3JlYXRlU2hhcmVMaW5rUmVzcG9uc2USNwoKc2hhcmVfbGluaxgBIAEoCzIjLnBpdGJveC5zZXR1cC52MS5TaGFyZUxpbmtXaXRoVG9rZW4iTgoVTGlzdFNoYXJlTGlua3NSZXF1ZXN0EhkKB3RlYW1faWQYASABKAlCCLpIBXIDsAEBEhoKCHNldHVwX2lkGAIgASgJQgi6SAVyA7ABASJJChZMaXN0U2hhcmVMaW5rc1Jlc3BvbnNlEi8KC3NoYXJlX2xpbmtzGAEgAygLMhoucGl0Ym94LnNldHVwLnYxLlNoYXJlTGluayKOAQoWUmV2b2tlU2hhcmVMaW5rUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIcCgpyZXF1ZXN0X2lkGAIgASgJQgi6SAVyA7ABARIaCghzZXR1cF9pZBgDIAEoCUIIukgFcgOwAQESHwoNc2hhcmVfbGlua19pZBgEIAEoCUIIukgFcgOwAQEiGQoXUmV2b2tlU2hhcmVMaW5rUmVzcG9uc2UicwoZTGlzdFNoZWV0VGVtcGxhdGVzUmVxdWVzdBIZCgd0ZWFtX2lkGAEgASgJQgi6SAVyA7ABARIdCglwYWdlX3NpemUYAiABKAVCCrpIBxoFGMgBKAASHAoKcGFnZV90b2tlbhgDIAEoCUIIukgFcgMYgAQiaAoaTGlzdFNoZWV0VGVtcGxhdGVzUmVzcG9uc2USMQoJdGVtcGxhdGVzGAEgAygLMh4ucGl0Ym94LnNldHVwLnYxLlNoZWV0VGVtcGxhdGUSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIoUBCh5HZXRTaGVldFRlbXBsYXRlVmVyc2lvblJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHQoLdGVtcGxhdGVfaWQYAiABKAlCCLpIBXIDsAEBEh0KB3ZlcnNpb24YAyABKAVCB7pIBBoCKAFIAIgBAUIKCghfdmVyc2lvbiJZCh9HZXRTaGVldFRlbXBsYXRlVmVyc2lvblJlc3BvbnNlEjYKB3ZlcnNpb24YASABKAsyJS5waXRib3guc2V0dXAudjEuU2hlZXRUZW1wbGF0ZVZlcnNpb24idwodRHVwbGljYXRlU2hlZXRUZW1wbGF0ZVJlcXVlc3QSGQoHdGVhbV9pZBgBIAEoCUIIukgFcgOwAQESHAoKcmVxdWVzdF9pZBgCIAEoCUIIukgFcgOwAQESHQoLdGVtcGxhdGVfaWQYAyABKAlCCLpIBXIDsAEBIlIKHkR1cGxpY2F0ZVNoZWV0VGVtcGxhdGVSZXNwb25zZRIwCgh0ZW1wbGF0ZRgBIAEoCzIeLnBpdGJveC5zZXR1cC52MS5TaGVldFRlbXBsYXRlMvQJCgxTZXR1cFNlcnZpY2USWAoLQ3JlYXRlU2V0dXASIy5waXRib3guc2V0dXAudjEuQ3JlYXRlU2V0dXBSZXF1ZXN0GiQucGl0Ym94LnNldHVwLnYxLkNyZWF0ZVNldHVwUmVzcG9uc2USXgoNQ3JlYXRlVmVyc2lvbhIlLnBpdGJveC5zZXR1cC52MS5DcmVhdGVWZXJzaW9uUmVxdWVzdBomLnBpdGJveC5zZXR1cC52MS5DcmVhdGVWZXJzaW9uUmVzcG9uc2USWgoKR2V0VmVyc2lvbhIiLnBpdGJveC5zZXR1cC52MS5HZXRWZXJzaW9uUmVxdWVzdBojLnBpdGJveC5zZXR1cC52MS5HZXRWZXJzaW9uUmVzcG9uc2UiA5ACARJaCgpMaXN0U2V0dXBzEiIucGl0Ym94LnNldHVwLnYxLkxpc3RTZXR1cHNSZXF1ZXN0GiMucGl0Ym94LnNldHVwLnYxLkxpc3RTZXR1cHNSZXNwb25zZSIDkAIBEmAKDExpc3RWZXJzaW9ucxIkLnBpdGJveC5zZXR1cC52MS5MaXN0VmVyc2lvbnNSZXF1ZXN0GiUucGl0Ym94LnNldHVwLnYxLkxpc3RWZXJzaW9uc1Jlc3BvbnNlIgOQAgESaQoPQ29tcGFyZVZlcnNpb25zEicucGl0Ym94LnNldHVwLnYxLkNvbXBhcmVWZXJzaW9uc1JlcXVlc3QaKC5waXRib3guc2V0dXAudjEuQ29tcGFyZVZlcnNpb25zUmVzcG9uc2UiA5ACARJkCg9DcmVhdGVTaGFyZUxpbmsSJy5waXRib3guc2V0dXAudjEuQ3JlYXRlU2hhcmVMaW5rUmVxdWVzdBooLnBpdGJveC5zZXR1cC52MS5DcmVhdGVTaGFyZUxpbmtSZXNwb25zZRJmCg5MaXN0U2hhcmVMaW5rcxImLnBpdGJveC5zZXR1cC52MS5MaXN0U2hhcmVMaW5rc1JlcXVlc3QaJy5waXRib3guc2V0dXAudjEuTGlzdFNoYXJlTGlua3NSZXNwb25zZSIDkAIBEmQKD1Jldm9rZVNoYXJlTGluaxInLnBpdGJveC5zZXR1cC52MS5SZXZva2VTaGFyZUxpbmtSZXF1ZXN0GigucGl0Ym94LnNldHVwLnYxLlJldm9rZVNoYXJlTGlua1Jlc3BvbnNlEnIKEkxpc3RTaGVldFRlbXBsYXRlcxIqLnBpdGJveC5zZXR1cC52MS5MaXN0U2hlZXRUZW1wbGF0ZXNSZXF1ZXN0GisucGl0Ym94LnNldHVwLnYxLkxpc3RTaGVldFRlbXBsYXRlc1Jlc3BvbnNlIgOQAgESgQEKF0dldFNoZWV0VGVtcGxhdGVWZXJzaW9uEi8ucGl0Ym94LnNldHVwLnYxLkdldFNoZWV0VGVtcGxhdGVWZXJzaW9uUmVxdWVzdBowLnBpdGJveC5zZXR1cC52MS5HZXRTaGVldFRlbXBsYXRlVmVyc2lvblJlc3BvbnNlIgOQAgESeQoWRHVwbGljYXRlU2hlZXRUZW1wbGF0ZRIuLnBpdGJveC5zZXR1cC52MS5EdXBsaWNhdGVTaGVldFRlbXBsYXRlUmVxdWVzdBovLnBpdGJveC5zZXR1cC52MS5EdXBsaWNhdGVTaGVldFRlbXBsYXRlUmVzcG9uc2VC0QEKE2NvbS5waXRib3guc2V0dXAudjFCEVNldHVwU2VydmljZVByb3RvUAFaSWdpdGh1Yi5jb20vTmVsc29uRGFuaWVsRnJlaXRhcy9waXRib3gvYmFja2VuZC9nZW4vcGl0Ym94L3NldHVwL3YxO3NldHVwdjGiAgNQU1iqAg9QaXRib3guU2V0dXAuVjHKAg9QaXRib3hcU2V0dXBcVjHiAhtQaXRib3hcU2V0dXBcVjFcR1BCTWV0YWRhdGHqAhFQaXRib3g6OlNldHVwOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_struct, file_pitbox_setup_v1_setup]);
 
 /**
  * @generated from message pitbox.setup.v1.CreateSetupRequest
@@ -54,6 +54,14 @@ export type CreateSetupRequest = Message<"pitbox.setup.v1.CreateSetupRequest"> &
    * @generated from field: optional int32 source_version = 7;
    */
   sourceVersion?: number | undefined;
+
+  /**
+   * Opt-in to schema v2: version 1 is created empty for this template. Without it the
+   * setup is created in schema v1, as before.
+   *
+   * @generated from field: optional pitbox.setup.v1.SheetTemplateRef sheet_template = 8;
+   */
+  sheetTemplate?: SheetTemplateRef | undefined;
 };
 
 /**
@@ -113,6 +121,14 @@ export type CreateVersionRequest = Message<"pitbox.setup.v1.CreateVersionRequest
    * @generated from field: optional string change_summary = 6;
    */
   changeSummary?: string | undefined;
+
+  /**
+   * Schema of data: 0 or 1 = v1 (the default, so old clients keep working), 2 = a
+   * template sheet {template, values, refs}. A v2 setup cannot go back to v1.
+   *
+   * @generated from field: int32 schema_version = 7;
+   */
+  schemaVersion: number;
 };
 
 /**
@@ -341,6 +357,13 @@ export type CompareVersionsResponse = Message<"pitbox.setup.v1.CompareVersionsRe
    * @generated from field: int32 to_version = 3;
    */
   toVersion: number;
+
+  /**
+   * Keys that exist in only one of two different templates and so were not compared.
+   *
+   * @generated from field: repeated string skipped_keys = 4;
+   */
+  skippedKeys: string[];
 };
 
 /**
@@ -492,6 +515,145 @@ export const RevokeShareLinkResponseSchema: GenMessage<RevokeShareLinkResponse> 
   messageDesc(file_pitbox_setup_v1_setup_service, 17);
 
 /**
+ * @generated from message pitbox.setup.v1.ListSheetTemplatesRequest
+ */
+export type ListSheetTemplatesRequest = Message<"pitbox.setup.v1.ListSheetTemplatesRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from field: int32 page_size = 2;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 3;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.ListSheetTemplatesRequest.
+ * Use `create(ListSheetTemplatesRequestSchema)` to create a new message.
+ */
+export const ListSheetTemplatesRequestSchema: GenMessage<ListSheetTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup_service, 18);
+
+/**
+ * @generated from message pitbox.setup.v1.ListSheetTemplatesResponse
+ */
+export type ListSheetTemplatesResponse = Message<"pitbox.setup.v1.ListSheetTemplatesResponse"> & {
+  /**
+   * @generated from field: repeated pitbox.setup.v1.SheetTemplate templates = 1;
+   */
+  templates: SheetTemplate[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.ListSheetTemplatesResponse.
+ * Use `create(ListSheetTemplatesResponseSchema)` to create a new message.
+ */
+export const ListSheetTemplatesResponseSchema: GenMessage<ListSheetTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup_service, 19);
+
+/**
+ * @generated from message pitbox.setup.v1.GetSheetTemplateVersionRequest
+ */
+export type GetSheetTemplateVersionRequest = Message<"pitbox.setup.v1.GetSheetTemplateVersionRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from field: string template_id = 2;
+   */
+  templateId: string;
+
+  /**
+   * Without version, the template's current one.
+   *
+   * @generated from field: optional int32 version = 3;
+   */
+  version?: number | undefined;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.GetSheetTemplateVersionRequest.
+ * Use `create(GetSheetTemplateVersionRequestSchema)` to create a new message.
+ */
+export const GetSheetTemplateVersionRequestSchema: GenMessage<GetSheetTemplateVersionRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup_service, 20);
+
+/**
+ * @generated from message pitbox.setup.v1.GetSheetTemplateVersionResponse
+ */
+export type GetSheetTemplateVersionResponse = Message<"pitbox.setup.v1.GetSheetTemplateVersionResponse"> & {
+  /**
+   * @generated from field: pitbox.setup.v1.SheetTemplateVersion version = 1;
+   */
+  version?: SheetTemplateVersion | undefined;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.GetSheetTemplateVersionResponse.
+ * Use `create(GetSheetTemplateVersionResponseSchema)` to create a new message.
+ */
+export const GetSheetTemplateVersionResponseSchema: GenMessage<GetSheetTemplateVersionResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup_service, 21);
+
+/**
+ * @generated from message pitbox.setup.v1.DuplicateSheetTemplateRequest
+ */
+export type DuplicateSheetTemplateRequest = Message<"pitbox.setup.v1.DuplicateSheetTemplateRequest"> & {
+  /**
+   * @generated from field: string team_id = 1;
+   */
+  teamId: string;
+
+  /**
+   * @generated from field: string request_id = 2;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string template_id = 3;
+   */
+  templateId: string;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.DuplicateSheetTemplateRequest.
+ * Use `create(DuplicateSheetTemplateRequestSchema)` to create a new message.
+ */
+export const DuplicateSheetTemplateRequestSchema: GenMessage<DuplicateSheetTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup_service, 22);
+
+/**
+ * @generated from message pitbox.setup.v1.DuplicateSheetTemplateResponse
+ */
+export type DuplicateSheetTemplateResponse = Message<"pitbox.setup.v1.DuplicateSheetTemplateResponse"> & {
+  /**
+   * @generated from field: pitbox.setup.v1.SheetTemplate template = 1;
+   */
+  template?: SheetTemplate | undefined;
+};
+
+/**
+ * Describes the message pitbox.setup.v1.DuplicateSheetTemplateResponse.
+ * Use `create(DuplicateSheetTemplateResponseSchema)` to create a new message.
+ */
+export const DuplicateSheetTemplateResponseSchema: GenMessage<DuplicateSheetTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_pitbox_setup_v1_setup_service, 23);
+
+/**
  * SetupService manages a team's versioned setup sheets.
  *
  * Reads accept any team member (owner, mechanic or pilot). Writes require a
@@ -572,6 +734,35 @@ export const SetupService: GenService<{
     methodKind: "unary";
     input: typeof RevokeShareLinkRequestSchema;
     output: typeof RevokeShareLinkResponseSchema;
+  },
+  /**
+   * Sheet templates (ADR 0030): the global catalogue plus the team's own. A private
+   * template of another team is NOT_FOUND.
+   *
+   * @generated from rpc pitbox.setup.v1.SetupService.ListSheetTemplates
+   */
+  listSheetTemplates: {
+    methodKind: "unary";
+    input: typeof ListSheetTemplatesRequestSchema;
+    output: typeof ListSheetTemplatesResponseSchema;
+  },
+  /**
+   * @generated from rpc pitbox.setup.v1.SetupService.GetSheetTemplateVersion
+   */
+  getSheetTemplateVersion: {
+    methodKind: "unary";
+    input: typeof GetSheetTemplateVersionRequestSchema;
+    output: typeof GetSheetTemplateVersionResponseSchema;
+  },
+  /**
+   * Copies a global template into the team (mechanic or owner).
+   *
+   * @generated from rpc pitbox.setup.v1.SetupService.DuplicateSheetTemplate
+   */
+  duplicateSheetTemplate: {
+    methodKind: "unary";
+    input: typeof DuplicateSheetTemplateRequestSchema;
+    output: typeof DuplicateSheetTemplateResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_pitbox_setup_v1_setup_service, 0);

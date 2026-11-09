@@ -27,6 +27,8 @@ type CreateSetupInput struct {
 	Notes         *string
 	SourceSetupID *uuid.UUID
 	SourceVersion *int32
+	// Template opts in to schema v2 (see prepareInitial).
+	Template *TemplateRef
 }
 
 type CreateVersionInput struct {
@@ -35,6 +37,8 @@ type CreateVersionInput struct {
 	BaseVersion   int32
 	Data          map[string]any
 	ChangeSummary *string
+	// SchemaVersion is 0 or 1 for v1 data, 2 for a template sheet.
+	SchemaVersion int32
 }
 
 type idCursor struct {
@@ -86,34 +90,11 @@ func (s *Service) CreateSetup(ctx context.Context, user db.UserID, team db.TeamI
 			return fmt.Errorf("check car: %w", domain.ErrNotFound)
 		}
 
-		data := map[string]any{}
-		var basedOnSetup *uuid.UUID
-		var basedOnVersion *int32
-		if in.SourceSetupID != nil {
-			sourceVersion := int32(0)
-			if in.SourceVersion != nil {
-				sourceVersion = *in.SourceVersion
-			}
-			source, err := s.store.GetVersion(ctx, tx, uuid.UUID(team), *in.SourceSetupID, sourceVersion)
-			if err != nil {
-				return err
-			}
-			if source.Ref.SchemaVersion != domain.SchemaVersion {
-				return fmt.Errorf("source schema: %w", domain.ErrInvalid)
-			}
-			if _, err := domain.MarshalV1(source.Data); err != nil {
-				return err
-			}
-			data = source.Data
-			basedOnSetup = in.SourceSetupID
-			basedOnVersion = &source.Ref.Version
-		}
-
-		created, err := s.store.CreateSetup(ctx, tx, uuid.UUID(team), uuid.UUID(user), in.CarID, name, notes)
+		initial, err := s.prepareInitial(ctx, tx, team, in.Template, in.SourceSetupID, in.SourceVersion)
 		if err != nil {
 			return err
 		}
-		raw, err := domain.MarshalV1(data)
+		created, err := s.store.CreateSetup(ctx, tx, uuid.UUID(team), uuid.UUID(user), in.CarID, name, notes)
 		if err != nil {
 			return err
 		}
@@ -121,7 +102,7 @@ func (s *Service) CreateSetup(ctx context.Context, user db.UserID, team db.TeamI
 		if err != nil {
 			return err
 		}
-		if _, err := s.store.CreateVersion(ctx, tx, uuid.UUID(team), uuid.UUID(user), createdID, 1, raw, basedOnSetup, basedOnVersion, nil); err != nil {
+		if _, err := s.store.CreateVersion(ctx, tx, uuid.UUID(team), uuid.UUID(user), createdID, 1, initial.schema, initial.raw, initial.basedSetup, initial.basedVersion, nil); err != nil {
 			return err
 		}
 		if err := s.saveResource(ctx, tx, uuid.UUID(user), in.RequestID, created); err != nil {
@@ -143,9 +124,14 @@ func (s *Service) CreateVersion(ctx context.Context, user db.UserID, team db.Tea
 	if in.Data == nil {
 		return domain.VersionRef{}, fmt.Errorf("version data: %w", domain.ErrInvalid)
 	}
-	data, err := domain.MarshalV1(in.Data)
-	if err != nil {
-		return domain.VersionRef{}, err
+	schema := normalizeSchema(in.SchemaVersion)
+	if schema != domain.SchemaVersion && schema != domain.SchemaVersionV2 {
+		return domain.VersionRef{}, &domain.ValidationError{Path: "schema_version", RuleID: domain.RuleSchemaVersion}
+	}
+	if schema == domain.SchemaVersion { // v1 needs no template: reject early, before the transaction
+		if _, err := domain.MarshalV1(in.Data); err != nil {
+			return domain.VersionRef{}, err
+		}
 	}
 	summary, err := domain.NormalizeChangeSummary(in.ChangeSummary)
 	if err != nil {
@@ -156,7 +142,8 @@ func (s *Service) CreateVersion(ctx context.Context, user db.UserID, team db.Tea
 		BaseVersion int32          `json:"base_version"`
 		Data        map[string]any `json:"data"`
 		Summary     *string        `json:"change_summary"`
-	}{in.SetupID, in.BaseVersion, in.Data, summary})
+		Schema      int32          `json:"schema_version"`
+	}{in.SetupID, in.BaseVersion, in.Data, summary, schema})
 	if err != nil {
 		return domain.VersionRef{}, fmt.Errorf("hash setup version: %w", err)
 	}
@@ -190,11 +177,18 @@ func (s *Service) CreateVersion(ctx context.Context, user db.UserID, team db.Tea
 		if err != nil {
 			return err
 		}
+		if base.Ref.SchemaVersion == domain.SchemaVersionV2 && schema != domain.SchemaVersionV2 {
+			return fmt.Errorf("a template setup cannot go back to schema v1: %w", domain.ErrInvalid)
+		}
+		data, err := s.marshalVersionData(ctx, tx, team, schema, in.Data)
+		if err != nil {
+			return err
+		}
 		if err := s.validateChangedReferences(ctx, tx, team, base.Data, in.Data); err != nil {
 			return err
 		}
 		next := in.BaseVersion + 1
-		createdRef, err := s.store.CreateVersion(ctx, tx, uuid.UUID(team), uuid.UUID(user), in.SetupID, next, data, &in.SetupID, &in.BaseVersion, summary)
+		createdRef, err := s.store.CreateVersion(ctx, tx, uuid.UUID(team), uuid.UUID(user), in.SetupID, next, schema, data, &in.SetupID, &in.BaseVersion, summary)
 		if err != nil {
 			return err
 		}
@@ -280,8 +274,17 @@ func (s *Service) ListVersions(ctx context.Context, user db.UserID, team db.Team
 	return out, next, nil
 }
 
-func (s *Service) CompareVersions(ctx context.Context, user db.UserID, team db.TeamID, setupID uuid.UUID, from, to int32) ([]domain.Difference, error) {
-	var out []domain.Difference
+// CompareResult is what CompareVersions returns.
+type CompareResult struct {
+	Differences []domain.Difference
+	Skipped     []string
+}
+
+// CompareVersions compares two versions of one setup. Two v1 versions keep the v1 paths;
+// anything involving a v2 version goes through the templates (by key for the same template,
+// by canonical path across templates, with the keys that had no counterpart in Skipped).
+func (s *Service) CompareVersions(ctx context.Context, user db.UserID, team db.TeamID, setupID uuid.UUID, from, to int32) (CompareResult, error) {
+	var out CompareResult
 	err := s.withMemberReadTx(ctx, user, team, func(ctx context.Context, tx db.DBTX, _ string) error {
 		a, err := s.store.GetVersion(ctx, tx, uuid.UUID(team), setupID, from)
 		if err != nil {
@@ -291,7 +294,21 @@ func (s *Service) CompareVersions(ctx context.Context, user db.UserID, team db.T
 		if err != nil {
 			return err
 		}
-		out = domain.Compare(a.Data, b.Data)
+		if a.Ref.SchemaVersion == domain.SchemaVersion && b.Ref.SchemaVersion == domain.SchemaVersion {
+			out.Differences = domain.Compare(a.Data, b.Data)
+			return nil
+		}
+		var generic domain.Template
+		va, err := s.view(ctx, tx, team, &generic, a)
+		if err != nil {
+			return err
+		}
+		vb, err := s.view(ctx, tx, team, &generic, b)
+		if err != nil {
+			return err
+		}
+		res := domain.CompareVersions(va, vb)
+		out = CompareResult{Differences: res.Differences, Skipped: res.Skipped}
 		return nil
 	})
 	return out, err

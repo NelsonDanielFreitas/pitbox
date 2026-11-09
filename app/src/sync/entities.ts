@@ -40,6 +40,8 @@ const carWire = z.object({
   notes: nullableString,
   created_at: timestamp,
   version: z.number().int().min(1),
+  // Absent from an older server: the car then keeps the generic sheet.
+  sheet_template_id: z.uuid().nullish(),
 });
 
 const engineWire = z.object({
@@ -118,10 +120,12 @@ function carUpsert(teamId: string, id: string, data: unknown, now: string): SqlS
       // instead of silently writing over it. The team guard stops an id from another team.
       sql: `INSERT INTO car (
               id, team_id, make, model, model_year, serial_number, nickname, transponder_number,
-              status, scale, powertrain, notes, created_at, updated_at, version, local_rev
+              status, scale, powertrain, notes, created_at, updated_at, version, local_rev,
+              sheet_template_id
             ) VALUES (
               $id, $teamId, $make, $model, $modelYear, $serial, $nickname, $transponder,
-              $status, $scale, $powertrain, $notes, $createdAt, $now, $version, 0
+              $status, $scale, $powertrain, $notes, $createdAt, $now, $version, 0,
+              $sheetTemplate
             )
             ON CONFLICT(id) DO UPDATE SET
               make = excluded.make, model = excluded.model, model_year = excluded.model_year,
@@ -129,6 +133,7 @@ function carUpsert(teamId: string, id: string, data: unknown, now: string): SqlS
               transponder_number = excluded.transponder_number, status = excluded.status,
               scale = excluded.scale, powertrain = excluded.powertrain, notes = excluded.notes,
               version = excluded.version, updated_at = excluded.updated_at,
+              sheet_template_id = excluded.sheet_template_id,
               deleted_at = NULL, local_rev = car.local_rev + 1
             WHERE car.team_id = excluded.team_id`,
       params: {
@@ -147,6 +152,7 @@ function carUpsert(teamId: string, id: string, data: unknown, now: string): SqlS
         $createdAt: car.created_at,
         $now: now,
         $version: car.version,
+        $sheetTemplate: car.sheet_template_id ?? null,
       },
     },
   ];
@@ -567,6 +573,106 @@ function versionsUpsert(teamId: string, id: string, data: unknown): SqlStatement
   }));
 }
 
+
+// --- sheet templates (ADR 0030) -----------------------------------------------------------
+
+const definitionWire = z.record(z.string(), z.unknown());
+
+const templateVersionWire = z.object({
+  version: z.number().int().min(1),
+  definition: definitionWire,
+});
+
+const templateCore = {
+  id: z.uuid(),
+  slug: z.string().min(1).max(63),
+  make: z.string().min(1).max(80),
+  model: z.string().min(1).max(80),
+  scale: z.string().min(1).max(20),
+  powertrain: z.string().min(1).max(20),
+  name: z.string().min(1).max(120),
+  source_url: z.string().max(500).nullable(),
+  current_version: z.number().int().min(1),
+};
+
+const teamTemplateWire = z.object({
+  ...templateCore,
+  based_on_id: z.uuid().nullable(),
+  version: z.number().int().min(1),
+  versions: z.array(templateVersionWire).max(50),
+});
+
+const catalogTemplateWire = z.object({
+  ...templateCore,
+  truncated: z.boolean(),
+  versions: z.array(templateVersionWire).max(50),
+});
+
+function templateStatements(
+  teamId: string | null,
+  t: z.infer<typeof teamTemplateWire> | z.infer<typeof catalogTemplateWire>,
+  now: string,
+): SqlStatement[] {
+  const truncated = "truncated" in t && t.truncated ? 1 : 0;
+  const basedOn = "based_on_id" in t ? t.based_on_id : null;
+  const version = "version" in t ? t.version : 1;
+  return [
+    {
+      // The team guard stops an id that belongs to another team (or to the catalogue).
+      sql: `INSERT INTO sheet_template (
+              id, team_id, slug, make, model, scale, powertrain, name, source_url,
+              current_version, based_on_id, truncated, version, updated_at
+            ) VALUES (
+              $id, $teamId, $slug, $make, $model, $scale, $powertrain, $name, $sourceUrl,
+              $current, $basedOn, $truncated, $version, $now
+            )
+            ON CONFLICT(id) DO UPDATE SET
+              slug = excluded.slug, make = excluded.make, model = excluded.model,
+              scale = excluded.scale, powertrain = excluded.powertrain, name = excluded.name,
+              source_url = excluded.source_url, current_version = excluded.current_version,
+              truncated = excluded.truncated, version = excluded.version,
+              updated_at = excluded.updated_at, deleted_at = NULL
+            WHERE sheet_template.team_id IS excluded.team_id`,
+      params: {
+        $id: t.id,
+        $teamId: teamId,
+        $slug: t.slug,
+        $make: t.make,
+        $model: t.model,
+        $scale: t.scale,
+        $powertrain: t.powertrain,
+        $name: t.name,
+        $sourceUrl: t.source_url,
+        $current: t.current_version,
+        $basedOn: basedOn,
+        $truncated: truncated,
+        $version: version,
+        $now: now,
+      },
+    },
+    // A published version never changes, so a repeat is ignored. The EXISTS keeps a version
+    // from attaching to a template row that belongs to someone else.
+    ...t.versions.map((v) => ({
+      sql: `INSERT OR IGNORE INTO sheet_template_version (template_id, version, definition)
+            SELECT $id, $version, $definition
+             WHERE EXISTS (SELECT 1 FROM sheet_template WHERE id = $id AND team_id IS $teamId)`,
+      params: {
+        $id: t.id,
+        $teamId: teamId,
+        $version: v.version,
+        $definition: JSON.stringify(v.definition),
+      },
+    })),
+  ];
+}
+
+function templateUpsert(teamId: string, id: string, data: unknown, now: string): SqlStatement[] {
+  const t = teamTemplateWire.parse(data);
+  // The id of the change must be the id of the payload.
+  if (t.id !== id) throw new Error("sheet template id mismatch");
+  return templateStatements(teamId, t, now);
+}
+
 export interface SyncEntity {
   upsert: ChangeStatements;
   remove: ChangeStatements;
@@ -627,6 +733,20 @@ export const syncEntities: Readonly<Record<string, SyncEntity>> = {
     upsert: (teamId, id, data) => versionsUpsert(teamId, id, data),
     remove: noop,
   },
+  // Team copies of a catalogue template (duplicate and rename).
+  "setup.sheet_template": {
+    upsert: templateUpsert,
+    remove: (teamId, id, _data, now) => [
+      {
+        sql: "UPDATE sheet_template SET deleted_at = $now WHERE team_id = $teamId AND id = $id",
+        params: { $teamId: teamId, $id: id, $now: now },
+      },
+    ],
+    adopt: (teamId, id, version) => ({
+      sql: "UPDATE sheet_template SET version = $version WHERE team_id = $teamId AND id = $id",
+      params: { $teamId: teamId, $id: id, $version: version },
+    }),
+  },
   // After the versions it hangs from.
   "setup.setup_feedback": {
     upsert: (teamId, id, data) => feedbackUpsert(teamId, id, data),
@@ -656,10 +776,12 @@ const catalogWire = z.object({
       }),
     )
     .max(200),
+  // Absent from an older server.
+  sheet_templates: z.array(catalogTemplateWire).max(500).optional(),
 });
 
 /** Replaces the catalogues. A value the server dropped is switched off, never deleted (cars use it). */
-export function catalogStatements(snapshot: unknown): SqlStatement[] {
+export function catalogStatements(snapshot: unknown, now: string = new Date().toISOString()): SqlStatement[] {
   const catalog = catalogWire.parse(snapshot);
   return [
     { sql: "UPDATE scale SET active = 0" },
@@ -683,5 +805,7 @@ export function catalogStatements(snapshot: unknown): SqlStatement[] {
         $sort: p.sort_order,
       },
     })),
+    // Global templates are only added or updated: a setup may still point at an old one.
+    ...(catalog.sheet_templates ?? []).flatMap((t) => templateStatements(null, t, now)),
   ];
 }

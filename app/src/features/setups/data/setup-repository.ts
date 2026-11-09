@@ -17,6 +17,8 @@ export interface CreateSetupInput {
   name: string;
   notes: string | null;
   source: SetupSource | null;
+  /** The sheet template version a new (non-copied) setup starts on; omitted = the v1 sheet. */
+  template?: { id: string; version: number } | null;
   createdBy: string;
 }
 
@@ -26,6 +28,8 @@ export interface CreateVersionInput {
   data: SetupData;
   changeSummary: string | null;
   createdBy: string;
+  /** 2 for a template sheet; omitted = the schema of the version being edited. */
+  schemaVersion?: number;
 }
 
 export interface SetupRepository {

@@ -16,7 +16,7 @@ var (
 	ErrShareLinkFull = fmt.Errorf("setup: too many active share links: %w", apperr.ErrFailedPrecondition)
 )
 
-// ValidationError is a schema v1 violation. It carries a stable path and rule
+// ValidationError is a schema (v1, v2 or template) violation. It carries a stable path and rule
 // id and never the rejected value.
 type ValidationError struct {
 	Path   string
@@ -39,4 +39,20 @@ const (
 	RuleLength        = "setup.data.length"
 	RuleUUID          = "setup.data.uuid"
 	RuleBarsConflict  = "setup.data.bars_conflict"
+
+	// Rules of schema v2 data (validated against a sheet template).
+	RuleTemplateUnknown = "setup.data.template_unknown"
+	RuleOptionUnknown   = "setup.data.option_unknown"
+	RuleStep            = "setup.data.step"
+
+	// Rules of the sheet template itself.
+	RuleTemplateInvalid  = "setup.template.invalid"
+	RuleTemplateLimits   = "setup.template.limits"
+	RuleKeyDuplicate     = "setup.template.key_duplicate"
+	RuleCanonicalUnknown = "setup.template.canonical_unknown"
+	RuleCanonicalType    = "setup.template.canonical_type"
+	RuleDiagramUnknown   = "setup.template.diagram_unknown"
+	RuleDiagramParams    = "setup.template.diagram_params"
+	RuleHelpLength       = "setup.template.help_length"
+	RuleTableLayout      = "setup.template.table_layout"
 )

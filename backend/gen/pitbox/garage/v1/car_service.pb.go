@@ -39,8 +39,10 @@ type Car struct {
 	Notes             *string                `protobuf:"bytes,11,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
 	CreatedAt         *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Version           int32                  `protobuf:"varint,13,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Manufacturer sheet template of this car (ADR 0030); unset = the generic sheet.
+	SheetTemplateId *string `protobuf:"bytes,14,opt,name=sheet_template_id,json=sheetTemplateId,proto3,oneof" json:"sheet_template_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Car) Reset() {
@@ -162,6 +164,13 @@ func (x *Car) GetVersion() int32 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *Car) GetSheetTemplateId() string {
+	if x != nil && x.SheetTemplateId != nil {
+		return *x.SheetTemplateId
+	}
+	return ""
 }
 
 type GetCarRequest struct {
@@ -386,6 +395,7 @@ type CreateCarRequest struct {
 	Scale             string                 `protobuf:"bytes,10,opt,name=scale,proto3" json:"scale,omitempty"`
 	Powertrain        string                 `protobuf:"bytes,11,opt,name=powertrain,proto3" json:"powertrain,omitempty"`
 	Notes             *string                `protobuf:"bytes,12,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
+	SheetTemplateId   *string                `protobuf:"bytes,13,opt,name=sheet_template_id,json=sheetTemplateId,proto3,oneof" json:"sheet_template_id,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -504,6 +514,13 @@ func (x *CreateCarRequest) GetNotes() string {
 	return ""
 }
 
+func (x *CreateCarRequest) GetSheetTemplateId() string {
+	if x != nil && x.SheetTemplateId != nil {
+		return *x.SheetTemplateId
+	}
+	return ""
+}
+
 type CreateCarResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Car           *Car                   `protobuf:"bytes,1,opt,name=car,proto3" json:"car,omitempty"`
@@ -565,8 +582,10 @@ type UpdateCarRequest struct {
 	Powertrain        string                 `protobuf:"bytes,13,opt,name=powertrain,proto3" json:"powertrain,omitempty"`
 	Notes             *string                `protobuf:"bytes,14,opt,name=notes,proto3,oneof" json:"notes,omitempty"`
 	CarId             string                 `protobuf:"bytes,15,opt,name=car_id,json=carId,proto3" json:"car_id,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Mask path "sheet_template_id"; unset with the path in the mask clears the link.
+	SheetTemplateId *string `protobuf:"bytes,16,opt,name=sheet_template_id,json=sheetTemplateId,proto3,oneof" json:"sheet_template_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateCarRequest) Reset() {
@@ -700,6 +719,13 @@ func (x *UpdateCarRequest) GetNotes() string {
 func (x *UpdateCarRequest) GetCarId() string {
 	if x != nil {
 		return x.CarId
+	}
+	return ""
+}
+
+func (x *UpdateCarRequest) GetSheetTemplateId() string {
+	if x != nil && x.SheetTemplateId != nil {
+		return *x.SheetTemplateId
 	}
 	return ""
 }
@@ -856,7 +882,7 @@ var File_pitbox_garage_v1_car_service_proto protoreflect.FileDescriptor
 
 const file_pitbox_garage_v1_car_service_proto_rawDesc = "" +
 	"\n" +
-	"\"pitbox/garage/v1/car_service.proto\x12\x10pitbox.garage.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpitbox/garage/v1/garage.proto\"\x8e\x04\n" +
+	"\"pitbox/garage/v1/car_service.proto\x12\x10pitbox.garage.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dpitbox/garage/v1/garage.proto\"\xd5\x04\n" +
 	"\x03Car\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04make\x18\x02 \x01(\tR\x04make\x12\x14\n" +
@@ -875,12 +901,14 @@ const file_pitbox_garage_v1_car_service_proto_rawDesc = "" +
 	"\x05notes\x18\v \x01(\tH\x04R\x05notes\x88\x01\x01\x129\n" +
 	"\n" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
-	"\aversion\x18\r \x01(\x05R\aversionB\r\n" +
+	"\aversion\x18\r \x01(\x05R\aversion\x12/\n" +
+	"\x11sheet_template_id\x18\x0e \x01(\tH\x05R\x0fsheetTemplateId\x88\x01\x01B\r\n" +
 	"\v_model_yearB\x10\n" +
 	"\x0e_serial_numberB\v\n" +
 	"\t_nicknameB\x15\n" +
 	"\x13_transponder_numberB\b\n" +
-	"\x06_notes\"S\n" +
+	"\x06_notesB\x14\n" +
+	"\x12_sheet_template_id\"S\n" +
 	"\rGetCarRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12\x1f\n" +
 	"\x06car_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05carId\"9\n" +
@@ -894,7 +922,7 @@ const file_pitbox_garage_v1_car_service_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"e\n" +
 	"\x10ListCarsResponse\x12)\n" +
 	"\x04cars\x18\x01 \x03(\v2\x15.pitbox.garage.v1.CarR\x04cars\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe6\x04\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb7\x05\n" +
 	"\x10CreateCarRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -912,14 +940,16 @@ const file_pitbox_garage_v1_car_service_proto_rawDesc = "" +
 	"\n" +
 	"powertrain\x18\v \x01(\tB\a\xbaH\x04r\x02\x18 R\n" +
 	"powertrain\x12#\n" +
-	"\x05notes\x18\f \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fH\x04R\x05notes\x88\x01\x01B\r\n" +
+	"\x05notes\x18\f \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fH\x04R\x05notes\x88\x01\x01\x129\n" +
+	"\x11sheet_template_id\x18\r \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x05R\x0fsheetTemplateId\x88\x01\x01B\r\n" +
 	"\v_model_yearB\x10\n" +
 	"\x0e_serial_numberB\v\n" +
 	"\t_nicknameB\x15\n" +
 	"\x13_transponder_numberB\b\n" +
-	"\x06_notes\"<\n" +
+	"\x06_notesB\x14\n" +
+	"\x12_sheet_template_id\"<\n" +
 	"\x11CreateCarResponse\x12'\n" +
-	"\x03car\x18\x01 \x01(\v2\x15.pitbox.garage.v1.CarR\x03car\"\xeb\x05\n" +
+	"\x03car\x18\x01 \x01(\v2\x15.pitbox.garage.v1.CarR\x03car\"\xbc\x06\n" +
 	"\x10UpdateCarRequest\x12!\n" +
 	"\ateam_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06teamId\x12'\n" +
 	"\n" +
@@ -941,12 +971,14 @@ const file_pitbox_garage_v1_car_service_proto_rawDesc = "" +
 	"powertrain\x18\r \x01(\tB\a\xbaH\x04r\x02\x18 R\n" +
 	"powertrain\x12#\n" +
 	"\x05notes\x18\x0e \x01(\tB\b\xbaH\x05r\x03\x18\xd0\x0fH\x04R\x05notes\x88\x01\x01\x12\x1f\n" +
-	"\x06car_id\x18\x0f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05carIdB\r\n" +
+	"\x06car_id\x18\x0f \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05carId\x129\n" +
+	"\x11sheet_template_id\x18\x10 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x05R\x0fsheetTemplateId\x88\x01\x01B\r\n" +
 	"\v_model_yearB\x10\n" +
 	"\x0e_serial_numberB\v\n" +
 	"\t_nicknameB\x15\n" +
 	"\x13_transponder_numberB\b\n" +
-	"\x06_notes\"<\n" +
+	"\x06_notesB\x14\n" +
+	"\x12_sheet_template_id\"<\n" +
 	"\x11UpdateCarResponse\x12'\n" +
 	"\x03car\x18\x01 \x01(\v2\x15.pitbox.garage.v1.CarR\x03car\"\xa2\x01\n" +
 	"\x10DeleteCarRequest\x12!\n" +

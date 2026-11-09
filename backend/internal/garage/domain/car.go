@@ -25,8 +25,10 @@ type Car struct {
 	Scale             string
 	Powertrain        string
 	Notes             *string
-	CreatedAt         time.Time
-	Version           int32
+	// SheetTemplateID is the manufacturer sheet (ADR 0030); nil = the generic sheet.
+	SheetTemplateID *uuid.UUID
+	CreatedAt       time.Time
+	Version         int32
 }
 
 // NewCar validates a new chassis. Empty scale/powertrain use the v0.1 defaults.
@@ -94,11 +96,14 @@ type CarUpdate struct {
 	Powertrain        *string
 	NotesSet          bool
 	Notes             *string
+	// SheetTemplateSet with a nil SheetTemplateID clears the link.
+	SheetTemplateSet bool
+	SheetTemplateID  *uuid.UUID
 }
 
 func (u CarUpdate) Empty() bool {
 	return u.Make == nil && u.Model == nil && !u.ModelYearSet && !u.SerialNumberSet && !u.NicknameSet &&
-		!u.TransponderSet && u.Status == nil && u.Scale == nil && u.Powertrain == nil && !u.NotesSet
+		!u.TransponderSet && u.Status == nil && u.Scale == nil && u.Powertrain == nil && !u.NotesSet && !u.SheetTemplateSet
 }
 
 func ApplyCarUpdate(c Car, u CarUpdate) (Car, error) {
@@ -147,6 +152,12 @@ func ApplyCarUpdate(c Car, u CarUpdate) (Car, error) {
 		if err != nil {
 			return Car{}, err
 		}
+	}
+	if u.SheetTemplateSet {
+		if u.SheetTemplateID != nil && *u.SheetTemplateID == uuid.Nil {
+			return Car{}, fmt.Errorf("%w: sheet template id", ErrInvalid)
+		}
+		c.SheetTemplateID = u.SheetTemplateID
 	}
 	if u.Status != nil {
 		if !ValidAssetStatus(*u.Status) {

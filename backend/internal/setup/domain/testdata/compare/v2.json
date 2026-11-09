@@ -1,0 +1,660 @@
+{
+ "templates": {
+  "a": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+   "slug": "model-a",
+   "version": 1,
+   "make": "Acme",
+   "model": "A8",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Acme A8",
+    "en": "Acme A8"
+   },
+   "groups": [
+    {
+     "key": "front",
+     "label": {
+      "pt": "Front",
+      "en": "Front"
+     },
+     "fields": [
+      {
+       "key": "front_cst",
+       "label": {
+        "pt": "Front diff",
+        "en": "Front diff"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 1000000,
+       "canonical": "diffs.front_cst"
+      },
+      {
+       "key": "tower",
+       "label": {
+        "pt": "Tower",
+        "en": "Tower"
+       },
+       "type": "choice",
+       "options": [
+        "1",
+        "2",
+        "3"
+       ],
+       "kit": "2",
+       "diagram": {
+        "kind": "hole_row",
+        "count": 3
+       }
+      },
+      {
+       "key": "stiffener",
+       "label": {
+        "pt": "Stiffener",
+        "en": "Stiffener"
+       },
+       "type": "flag",
+       "part_ref": "T2311",
+       "kit": false
+      },
+      {
+       "key": "camber",
+       "label": {
+        "pt": "Camber",
+        "en": "Camber"
+       },
+       "type": "number",
+       "unit": "°",
+       "min": -5,
+       "max": 5,
+       "step": 0.5,
+       "kit": -1
+      },
+      {
+       "key": "remarks",
+       "label": {
+        "pt": "Remarks",
+        "en": "Remarks"
+       },
+       "type": "text",
+       "max_len": 10
+      }
+     ]
+    }
+   ]
+  },
+  "a2": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+   "slug": "model-a",
+   "version": 2,
+   "make": "Acme",
+   "model": "A8",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Acme A8",
+    "en": "Acme A8"
+   },
+   "groups": [
+    {
+     "key": "front",
+     "label": {
+      "pt": "Front",
+      "en": "Front"
+     },
+     "fields": [
+      {
+       "key": "front_cst",
+       "label": {
+        "pt": "Front diff",
+        "en": "Front diff"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 1000000,
+       "canonical": "diffs.front_cst"
+      },
+      {
+       "key": "tower",
+       "label": {
+        "pt": "Tower",
+        "en": "Tower"
+       },
+       "type": "choice",
+       "options": [
+        "1",
+        "2",
+        "3"
+       ],
+       "kit": "2",
+       "diagram": {
+        "kind": "hole_row",
+        "count": 3
+       }
+      },
+      {
+       "key": "stiffener",
+       "label": {
+        "pt": "Stiffener",
+        "en": "Stiffener"
+       },
+       "type": "flag",
+       "part_ref": "T2311",
+       "kit": false
+      },
+      {
+       "key": "camber",
+       "label": {
+        "pt": "Camber",
+        "en": "Camber"
+       },
+       "type": "number",
+       "unit": "°",
+       "min": -5,
+       "max": 5,
+       "step": 0.5,
+       "kit": -1
+      },
+      {
+       "key": "remarks",
+       "label": {
+        "pt": "Remarks",
+        "en": "Remarks"
+       },
+       "type": "text",
+       "max_len": 10
+      }
+     ]
+    }
+   ]
+  },
+  "b": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4b02",
+   "slug": "model-b",
+   "version": 2,
+   "make": "Beta",
+   "model": "B8",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Beta B8",
+    "en": "Beta B8"
+   },
+   "groups": [
+    {
+     "key": "main",
+     "label": {
+      "pt": "Main",
+      "en": "Main"
+     },
+     "fields": [
+      {
+       "key": "diff_f",
+       "label": {
+        "pt": "Front diff",
+        "en": "Front diff"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 1000000,
+       "canonical": "diffs.front_cst"
+      },
+      {
+       "key": "only_b",
+       "label": {
+        "pt": "Only B",
+        "en": "Only B"
+       },
+       "type": "flag"
+      }
+     ]
+    }
+   ]
+  },
+  "m": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+   "slug": "multi-table",
+   "version": 1,
+   "make": "Test",
+   "model": "Multi",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Multi e tabela"
+   },
+   "groups": [
+    {
+     "key": "parts",
+     "label": {
+      "pt": "Peças"
+     },
+     "fields": [
+      {
+       "key": "kingpin",
+       "label": {
+        "pt": "Kingpin"
+       },
+       "type": "multi",
+       "options": [
+        "E0160",
+        "E0159",
+        "E2218",
+        "E2146"
+       ]
+      }
+     ]
+    },
+    {
+     "key": "shocks",
+     "label": {
+      "pt": "Amortecedores"
+     },
+     "table": {
+      "columns": [
+       {
+        "pt": "Frente"
+       },
+       {
+        "pt": "Trás"
+       }
+      ],
+      "rows": [
+       {
+        "label": {
+         "pt": "Óleo"
+        },
+        "cells": [
+         "oil_front",
+         "oil_rear"
+        ]
+       },
+       {
+        "label": {
+         "pt": "Mola"
+        },
+        "cells": [
+         "spring_front",
+         ""
+        ]
+       }
+      ]
+     },
+     "fields": [
+      {
+       "key": "oil_front",
+       "label": {
+        "pt": "Óleo frente"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 2000
+      },
+      {
+       "key": "oil_rear",
+       "label": {
+        "pt": "Óleo trás"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 2000
+      },
+      {
+       "key": "spring_front",
+       "label": {
+        "pt": "Mola frente"
+       },
+       "type": "number",
+       "min": 0,
+       "max": 20
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "cases": [
+  {
+   "name": "same template by key",
+   "a": {
+    "template": "a",
+    "values": {
+     "front_cst": 500,
+     "tower": "1"
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "a",
+    "values": {
+     "front_cst": 600,
+     "stiffener": true
+    },
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "front_cst",
+     "kind": "changed",
+     "before": 500,
+     "after": 600
+    },
+    {
+     "path": "stiffener",
+     "kind": "added",
+     "after": true
+    },
+    {
+     "path": "tower",
+     "kind": "removed",
+     "before": "1"
+    }
+   ],
+   "skipped": []
+  },
+  {
+   "name": "same template other version",
+   "a": {
+    "template": "a",
+    "values": {
+     "front_cst": 500
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "a2",
+    "values": {
+     "front_cst": 500
+    },
+    "refs": {}
+   },
+   "differences": [],
+   "skipped": []
+  },
+  {
+   "name": "different templates by canonical",
+   "a": {
+    "template": "a",
+    "values": {
+     "front_cst": 500,
+     "tower": "2"
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "b",
+    "values": {
+     "diff_f": 700,
+     "only_b": true
+    },
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "diffs.front_cst",
+     "kind": "changed",
+     "before": 500,
+     "after": 700
+    }
+   ],
+   "skipped": [
+    "only_b",
+    "tower"
+   ]
+  },
+  {
+   "name": "different templates equal canonical",
+   "a": {
+    "template": "a",
+    "values": {
+     "front_cst": 500
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "b",
+    "values": {
+     "diff_f": 500
+    },
+    "refs": {}
+   },
+   "differences": [],
+   "skipped": []
+  },
+  {
+   "name": "refs differ",
+   "a": {
+    "template": "a",
+    "values": {},
+    "refs": {
+     "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    }
+   },
+   "b": {
+    "template": "a",
+    "values": {},
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "refs.engine_id",
+     "kind": "removed",
+     "before": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    }
+   ],
+   "skipped": []
+  },
+  {
+   "name": "equal",
+   "a": {
+    "template": "a",
+    "values": {
+     "front_cst": 500
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "a",
+    "values": {
+     "front_cst": 500
+    },
+    "refs": {}
+   },
+   "differences": [],
+   "skipped": []
+  },
+  {
+   "name": "multi: same ticks",
+   "a": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E2146"
+     ]
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E2146"
+     ]
+    },
+    "refs": {}
+   },
+   "differences": [],
+   "skipped": []
+  },
+  {
+   "name": "multi: one tick added is one change",
+   "a": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160"
+     ]
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E0159"
+     ]
+    },
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "kingpin",
+     "kind": "changed",
+     "before": [
+      "E0160"
+     ],
+     "after": [
+      "E0160",
+      "E0159"
+     ]
+    }
+   ],
+   "skipped": []
+  },
+  {
+   "name": "multi: first tick removed is one change",
+   "a": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E0159"
+     ]
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0159"
+     ]
+    },
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "kingpin",
+     "kind": "changed",
+     "before": [
+      "E0160",
+      "E0159"
+     ],
+     "after": [
+      "E0159"
+     ]
+    }
+   ],
+   "skipped": []
+  },
+  {
+   "name": "multi: first time ticked",
+   "a": {
+    "template": "m",
+    "values": {},
+    "refs": {}
+   },
+   "b": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E2218"
+     ]
+    },
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "kingpin",
+     "kind": "added",
+     "after": [
+      "E2218"
+     ]
+    }
+   ],
+   "skipped": []
+  },
+  {
+   "name": "multi: cleared",
+   "a": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E2218"
+     ]
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "m",
+    "values": {},
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "kingpin",
+     "kind": "removed",
+     "before": [
+      "E2218"
+     ]
+    }
+   ],
+   "skipped": []
+  },
+  {
+   "name": "multi with a table field",
+   "a": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160"
+     ],
+     "oil_front": 750
+    },
+    "refs": {}
+   },
+   "b": {
+    "template": "m",
+    "values": {
+     "kingpin": [
+      "E0160"
+     ],
+     "oil_front": 800
+    },
+    "refs": {}
+   },
+   "differences": [
+    {
+     "path": "oil_front",
+     "kind": "changed",
+     "before": 750,
+     "after": 800
+    }
+   ],
+   "skipped": []
+  }
+ ]
+}

@@ -10,10 +10,16 @@ import { SelectInput } from "@/shared/ui/SelectInput";
 
 import { setupQueryOptions, versionsQueryOptions } from "../data/setup-queries";
 import type { SetupRepository } from "../data/setup-repository";
-import { compareSetupData } from "../domain/compare";
+import { compareSetupData, compareVersions } from "../domain/compare";
+import { defaultTemplateRepository, type TemplateRepository } from "../data/template-repository";
 import { SetupsLoading, SetupsNotFound, SetupsPageHeader } from "./common";
 import { SetupChanges } from "./SetupChanges";
 import { useGarageChoices } from "./use-choices";
+import { useSetupLabels } from "./labels";
+import { templateFields, type Template } from "../domain/template";
+import { localized } from "./template/text";
+import { makeDescriber } from "./template/describe";
+import { useVersionViews } from "./template/use-version-views";
 
 /** Two versions of one setup, with every difference listed as before → after. */
 export function SetupComparePage({
@@ -23,6 +29,7 @@ export function SetupComparePage({
   to,
   repository,
   garageRepository,
+  templateRepository = defaultTemplateRepository,
 }: {
   teamId: string;
   setupId: string;
@@ -30,12 +37,15 @@ export function SetupComparePage({
   to?: number | undefined;
   repository: SetupRepository;
   garageRepository: GarageRepository;
+  templateRepository?: TemplateRepository;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const labels = useSetupLabels();
   const navigate = useNavigate();
   const setup = useQuery(setupQueryOptions(repository, teamId, setupId));
   const versions = useQuery(versionsQueryOptions(repository, teamId, setupId));
   const { names } = useGarageChoices(garageRepository, teamId);
+  const views = useVersionViews(templateRepository, teamId, versions.data ?? []);
 
   if (setup.isPending || versions.isPending) return <SetupsLoading />;
   if (setup.isError || versions.isError) {
@@ -58,7 +68,21 @@ export function SetupComparePage({
   const fromVersion = from ?? (toVersion !== undefined ? toVersion - 1 : undefined);
   const before = all.find((v) => v.version === fromVersion);
   const after = all.find((v) => v.version === toVersion);
-  const differences = before && after ? compareSetupData(before.data, after.data) : [];
+  const onTemplates = before?.schemaVersion === 2 || after?.schemaVersion === 2;
+  const beforeView = before ? views.viewOf(before) : undefined;
+  const afterView = after ? views.viewOf(after) : undefined;
+  // v1 with v1 keeps the v1 comparison; anything on a template goes through its sheet, and two
+  // different sheets are compared by their common (canonical) fields only.
+  const result =
+    before && after && !onTemplates
+      ? { differences: compareSetupData(before.data, after.data), skipped: [] as string[] }
+      : beforeView && afterView
+        ? compareVersions(beforeView, afterView)
+        : { differences: [], skipped: [] as string[] };
+  const differences = result.differences;
+  const describer = onTemplates ? makeDescriber(views.templates, labels, t, i18n.language) : undefined;
+  const sheetMissing = onTemplates && !views.isPending && Boolean(before && after) && (!beforeView || !afterView);
+  const differentSheets = Boolean(beforeView && afterView && beforeView.template.id !== afterView.template.id);
 
   const go = (nextFrom: number | undefined, nextTo: number | undefined) =>
     void navigate({
@@ -105,6 +129,8 @@ export function SetupComparePage({
           </div>
           {!before || !after || before.version === after.version ? (
             <Alert tone="warn">{t("setups.compare.same")}</Alert>
+          ) : sheetMissing ? (
+            <Alert tone="warn">{t("setups.template.missingTemplate")}</Alert>
           ) : differences.length === 0 ? (
             <p className="text-sm text-muted" role="status">
               {t("setups.compare.empty", { from: before.version, to: after.version })}
@@ -118,7 +144,13 @@ export function SetupComparePage({
                   to: after.version,
                 })}
               </p>
-              <SetupChanges differences={differences} names={names} />
+              {differentSheets ? <Alert tone="info">{t("setups.template.comparedByCanonical")}</Alert> : null}
+              <SetupChanges differences={differences} names={names} describer={describer} />
+              {result.skipped.length > 0 ? (
+                <p className="text-sm text-muted">
+                  {t("setups.template.skipped", { fields: skippedLabels(result.skipped, views.templates, i18n.language) })}
+                </p>
+              ) : null}
             </>
           )}
         </div>
@@ -132,4 +164,13 @@ export function SetupComparePage({
       </Link>
     </>
   );
+}
+
+/** The labels of the fields that had no counterpart, in the sheet they belong to. */
+function skippedLabels(keys: readonly string[], templates: readonly Template[], language: string): string {
+  const labels = new Map<string, string>();
+  for (const template of templates) {
+    for (const field of templateFields(template)) labels.set(field.key, localized(field.label, language));
+  }
+  return keys.map((key) => labels.get(key) ?? key).join(", ");
 }

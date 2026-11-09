@@ -37,6 +37,8 @@ message Car {
   optional string notes = 11;
   google.protobuf.Timestamp created_at = 12;
   int32 version = 13;
+  // Manufacturer sheet template of this car (ADR 0030); unset = the generic sheet.
+  optional string sheet_template_id = 14;
 }
 
 message GetCarRequest {
@@ -84,6 +86,7 @@ message CreateCarRequest {
   string scale = 10 [(buf.validate.field).string.max_len = 16];
   string powertrain = 11 [(buf.validate.field).string.max_len = 32];
   optional string notes = 12 [(buf.validate.field).string.max_len = 2000];
+  optional string sheet_template_id = 13 [(buf.validate.field).string.uuid = true];
 }
 
 message CreateCarResponse {
@@ -109,6 +112,8 @@ message UpdateCarRequest {
   string powertrain = 13 [(buf.validate.field).string.max_len = 32];
   optional string notes = 14 [(buf.validate.field).string.max_len = 2000];
   string car_id = 15 [(buf.validate.field).string.uuid = true];
+  // Mask path "sheet_template_id"; unset with the path in the mask clears the link.
+  optional string sheet_template_id = 16 [(buf.validate.field).string.uuid = true];
 }
 
 message UpdateCarResponse {

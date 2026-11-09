@@ -19,7 +19,7 @@ function SetupDetailRoute() {
   const { setupId } = Route.useParams();
   const { v } = Route.useSearch();
   const team = useTeamContext();
-  const { setupRepository, garageRepository } = Route.useRouteContext();
+  const { setupRepository, garageRepository, templateRepository } = Route.useRouteContext();
   return (
     <SetupDetailPage
       teamId={team.id}
@@ -28,6 +28,7 @@ function SetupDetailRoute() {
       role={team.role}
       repository={setupRepository}
       garageRepository={garageRepository}
+      templateRepository={templateRepository}
     />
   );
 }

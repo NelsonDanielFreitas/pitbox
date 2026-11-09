@@ -28,10 +28,19 @@ func (h *Cars) CreateCar(ctx context.Context, req *garagev1.CreateCarRequest) (*
 	if err != nil {
 		return nil, err
 	}
+	var templateID *uuid.UUID
+	if req.SheetTemplateId != nil {
+		id, err := parseOptionalUUID(req.GetSheetTemplateId())
+		if err != nil {
+			return nil, err
+		}
+		templateID = id
+	}
 	car, err := h.svc.CreateCar(ctx, user, team, app.CreateCarInput{
 		RequestID: requestID, Make: req.GetMake(), Model: req.GetModel(), ModelYear: req.ModelYear,
 		SerialNumber: req.SerialNumber, Nickname: req.Nickname, TransponderNumber: req.TransponderNumber,
 		Status: status, Scale: req.GetScale(), Powertrain: req.GetPowertrain(), Notes: req.Notes,
+		SheetTemplateID: templateID,
 	})
 	if err != nil {
 		return nil, err
@@ -146,7 +155,16 @@ func carToProto(c domain.Car) *garagev1.Car {
 		SerialNumber: c.SerialNumber, Nickname: c.Nickname, TransponderNumber: c.TransponderNumber,
 		Status: assetStatusToProto(c.Status), Scale: c.Scale, Powertrain: c.Powertrain,
 		Notes: c.Notes, CreatedAt: timestamp(c.CreatedAt), Version: c.Version,
+		SheetTemplateId: uuidString(c.SheetTemplateID),
 	}
+}
+
+func parseOptionalUUID(v string) (*uuid.UUID, error) {
+	id, err := uuid.Parse(v)
+	if err != nil || id == uuid.Nil {
+		return nil, domain.ErrInvalid
+	}
+	return &id, nil
 }
 
 func carUpdateFromProto(req *garagev1.UpdateCarRequest) (domain.CarUpdate, error) {
@@ -186,6 +204,15 @@ func carUpdateFromProto(req *garagev1.UpdateCarRequest) (domain.CarUpdate, error
 		case "powertrain":
 			v := req.GetPowertrain()
 			u.Powertrain = &v
+		case "sheet_template_id":
+			u.SheetTemplateSet = true
+			if req.SheetTemplateId != nil {
+				id, err := parseOptionalUUID(req.GetSheetTemplateId())
+				if err != nil {
+					return domain.CarUpdate{}, err
+				}
+				u.SheetTemplateID = id
+			}
 		default:
 			return domain.CarUpdate{}, domain.ErrInvalid
 		}

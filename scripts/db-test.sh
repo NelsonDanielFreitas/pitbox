@@ -83,10 +83,36 @@ echo "-- default_privileges_test"
 psql_as "$MIG" postgres < backend/db/tests/default_privileges_test.sql
 echo "-- catalog_test"
 psql_as "$MIG" postgres < backend/db/tests/catalog_test.sql
+echo "-- sheet_template_test"
+psql_as "$MIG" postgres < backend/db/tests/sheet_template_test.sql
 echo "-- os mesmos testes sobre schema.sql"
 for t in rls_and_constraints_test structure_test login_test; do psql_as "$SCH" pitbox_api < "backend/db/tests/$t.sql"; done
 echo "-- catalog_test (schema.sql)"
 psql_as "$SCH" postgres < backend/db/tests/catalog_test.sql
+echo "-- sheet_template_test (schema.sql)"
+psql_as "$SCH" postgres < backend/db/tests/sheet_template_test.sql
+
+echo "== 4b. Desvio dos modelos: cada JSON do repositório tem de ser igual à linha da base"
+shopt -s nullglob
+templates=(backend/internal/setup/templates/*.json)
+[ "${#templates[@]}" -gt 0 ] || fail "nenhum modelo em backend/internal/setup/templates (fail closed)"
+for f in "${templates[@]}"; do
+  for db in "$MIG" "$SCH"; do
+    python3 -I scripts/template-migration.py --drift-sql "$f" | psql_as "$db" postgres \
+      || fail "modelo $(basename "$f") difere da base ($db)"
+  done
+done
+# Prova de que o teste apanha o problema: um modelo publicado e alterado sem versão nova tem de falhar.
+mkdir "$WORK/tampered"
+python3 -I - "${templates[0]}" "$WORK/tampered/$(basename "${templates[0]}")" <<'PY'
+import sys
+src, dst = sys.argv[1:3]
+open(dst, "w", encoding="utf-8").write(open(src, encoding="utf-8").read().replace('"format": 1', '"format": 1, "tampered": true', 1))
+PY
+if python3 -I scripts/template-migration.py --drift-sql "$WORK/tampered/$(basename "${templates[0]}")" | psql_as "$MIG" postgres 2>/dev/null; then
+  fail "o teste de desvio dos modelos não apanhou um JSON alterado"
+fi
+echo "modelos: ${#templates[@]} ficheiro(s) iguais à base; alteração em silêncio apanhada"
 
 echo "== 5. Desvio entre migrações e schema.sql"
 snapshot() {

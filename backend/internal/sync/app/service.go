@@ -25,9 +25,11 @@ const (
 	maxOpRetries = 3
 )
 
-// CatalogSource gives the global catalogues and their hash.
+// CatalogSource gives the global catalogues and their hash. have is the catalogue version the
+// device already holds: the snapshot is built only when it differs, so an up-to-date Pull
+// does not read every template definition.
 type CatalogSource interface {
-	Load(ctx context.Context) (version string, snapshot json.RawMessage, err error)
+	Load(ctx context.Context, have string) (version string, snapshot json.RawMessage, err error)
 }
 
 type Deps struct {

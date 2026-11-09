@@ -1,23 +1,23 @@
 -- name: CreateCar :one
 INSERT INTO garage.car (
   team_id, make, model, model_year, serial_number, nickname, transponder_number,
-  status, scale, powertrain, notes, created_by
+  status, scale, powertrain, notes, created_by, sheet_template_id
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8::garage.asset_status, $9, $10, $11, $12
+  $1, $2, $3, $4, $5, $6, $7, $8::garage.asset_status, $9, $10, $11, $12, $13
 )
 RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
-          status::text AS status, scale, powertrain, notes, created_at, version;
+          status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id;
 
 -- name: GetCar :one
 SELECT id, make, model, model_year, serial_number, nickname, transponder_number,
-       status::text AS status, scale, powertrain, notes, created_at, version
+       status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 FROM garage.car
 WHERE team_id = $1 AND id = $2 AND deleted_at IS NULL;
 
 -- name: ListCars :many
 SELECT id, make, model, model_year, serial_number, nickname, transponder_number,
-       status::text AS status, scale, powertrain, notes, created_at, version
+       status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id
 FROM garage.car
 WHERE team_id = $1 AND deleted_at IS NULL AND id > $2
 ORDER BY id
@@ -27,10 +27,10 @@ LIMIT $3;
 UPDATE garage.car
 SET make = $1, model = $2, model_year = $3, serial_number = $4, nickname = $5,
     transponder_number = $6, status = $7::garage.asset_status, scale = $8,
-    powertrain = $9, notes = $10
-WHERE team_id = $11 AND id = $12 AND version = $13 AND deleted_at IS NULL
+    powertrain = $9, notes = $10, sheet_template_id = $11
+WHERE team_id = $12 AND id = $13 AND version = $14 AND deleted_at IS NULL
 RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
-          status::text AS status, scale, powertrain, notes, created_at, version;
+          status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id;
 
 -- name: SoftDeleteCar :one
 UPDATE garage.car
@@ -48,10 +48,10 @@ SELECT EXISTS (
 -- name: CreateCarWithID :one
 INSERT INTO garage.car (
   id, team_id, make, model, model_year, serial_number, nickname, transponder_number,
-  status, scale, powertrain, notes, created_by
+  status, scale, powertrain, notes, created_by, sheet_template_id
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9::garage.asset_status, $10, $11, $12, $13
+  $1, $2, $3, $4, $5, $6, $7, $8, $9::garage.asset_status, $10, $11, $12, $13, $14
 )
 RETURNING id, make, model, model_year, serial_number, nickname, transponder_number,
-          status::text AS status, scale, powertrain, notes, created_at, version;
+          status::text AS status, scale, powertrain, notes, created_at, version, sheet_template_id;

@@ -1,0 +1,1107 @@
+{
+ "templates": {
+  "a": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+   "slug": "model-a",
+   "version": 1,
+   "make": "Acme",
+   "model": "A8",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Acme A8",
+    "en": "Acme A8"
+   },
+   "groups": [
+    {
+     "key": "front",
+     "label": {
+      "pt": "Front",
+      "en": "Front"
+     },
+     "fields": [
+      {
+       "key": "front_cst",
+       "label": {
+        "pt": "Front diff",
+        "en": "Front diff"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 1000000,
+       "canonical": "diffs.front_cst"
+      },
+      {
+       "key": "tower",
+       "label": {
+        "pt": "Tower",
+        "en": "Tower"
+       },
+       "type": "choice",
+       "options": [
+        "1",
+        "2",
+        "3"
+       ],
+       "kit": "2",
+       "diagram": {
+        "kind": "hole_row",
+        "count": 3
+       }
+      },
+      {
+       "key": "stiffener",
+       "label": {
+        "pt": "Stiffener",
+        "en": "Stiffener"
+       },
+       "type": "flag",
+       "part_ref": "T2311",
+       "kit": false
+      },
+      {
+       "key": "camber",
+       "label": {
+        "pt": "Camber",
+        "en": "Camber"
+       },
+       "type": "number",
+       "unit": "°",
+       "min": -5,
+       "max": 5,
+       "step": 0.5,
+       "kit": -1
+      },
+      {
+       "key": "remarks",
+       "label": {
+        "pt": "Remarks",
+        "en": "Remarks"
+       },
+       "type": "text",
+       "max_len": 10
+      }
+     ]
+    }
+   ]
+  },
+  "a2": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+   "slug": "model-a",
+   "version": 2,
+   "make": "Acme",
+   "model": "A8",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Acme A8",
+    "en": "Acme A8"
+   },
+   "groups": [
+    {
+     "key": "front",
+     "label": {
+      "pt": "Front",
+      "en": "Front"
+     },
+     "fields": [
+      {
+       "key": "front_cst",
+       "label": {
+        "pt": "Front diff",
+        "en": "Front diff"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 1000000,
+       "canonical": "diffs.front_cst"
+      },
+      {
+       "key": "tower",
+       "label": {
+        "pt": "Tower",
+        "en": "Tower"
+       },
+       "type": "choice",
+       "options": [
+        "1",
+        "2",
+        "3"
+       ],
+       "kit": "2",
+       "diagram": {
+        "kind": "hole_row",
+        "count": 3
+       }
+      },
+      {
+       "key": "stiffener",
+       "label": {
+        "pt": "Stiffener",
+        "en": "Stiffener"
+       },
+       "type": "flag",
+       "part_ref": "T2311",
+       "kit": false
+      },
+      {
+       "key": "camber",
+       "label": {
+        "pt": "Camber",
+        "en": "Camber"
+       },
+       "type": "number",
+       "unit": "°",
+       "min": -5,
+       "max": 5,
+       "step": 0.5,
+       "kit": -1
+      },
+      {
+       "key": "remarks",
+       "label": {
+        "pt": "Remarks",
+        "en": "Remarks"
+       },
+       "type": "text",
+       "max_len": 10
+      }
+     ]
+    }
+   ]
+  },
+  "b": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4b02",
+   "slug": "model-b",
+   "version": 2,
+   "make": "Beta",
+   "model": "B8",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Beta B8",
+    "en": "Beta B8"
+   },
+   "groups": [
+    {
+     "key": "main",
+     "label": {
+      "pt": "Main",
+      "en": "Main"
+     },
+     "fields": [
+      {
+       "key": "diff_f",
+       "label": {
+        "pt": "Front diff",
+        "en": "Front diff"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 1000000,
+       "canonical": "diffs.front_cst"
+      },
+      {
+       "key": "only_b",
+       "label": {
+        "pt": "Only B",
+        "en": "Only B"
+       },
+       "type": "flag"
+      }
+     ]
+    }
+   ]
+  },
+  "m": {
+   "format": 1,
+   "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+   "slug": "multi-table",
+   "version": 1,
+   "make": "Test",
+   "model": "Multi",
+   "scale": "1/8",
+   "powertrain": "nitro",
+   "name": {
+    "pt": "Multi e tabela"
+   },
+   "groups": [
+    {
+     "key": "parts",
+     "label": {
+      "pt": "Peças"
+     },
+     "fields": [
+      {
+       "key": "kingpin",
+       "label": {
+        "pt": "Kingpin"
+       },
+       "type": "multi",
+       "options": [
+        "E0160",
+        "E0159",
+        "E2218",
+        "E2146"
+       ]
+      }
+     ]
+    },
+    {
+     "key": "shocks",
+     "label": {
+      "pt": "Amortecedores"
+     },
+     "table": {
+      "columns": [
+       {
+        "pt": "Frente"
+       },
+       {
+        "pt": "Trás"
+       }
+      ],
+      "rows": [
+       {
+        "label": {
+         "pt": "Óleo"
+        },
+        "cells": [
+         "oil_front",
+         "oil_rear"
+        ]
+       },
+       {
+        "label": {
+         "pt": "Mola"
+        },
+        "cells": [
+         "spring_front",
+         ""
+        ]
+       }
+      ]
+     },
+     "fields": [
+      {
+       "key": "oil_front",
+       "label": {
+        "pt": "Óleo frente"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 2000
+      },
+      {
+       "key": "oil_rear",
+       "label": {
+        "pt": "Óleo trás"
+       },
+       "type": "int",
+       "unit": "cSt",
+       "min": 100,
+       "max": 2000
+      },
+      {
+       "key": "spring_front",
+       "label": {
+        "pt": "Mola frente"
+       },
+       "type": "number",
+       "min": 0,
+       "max": 20
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "validate": [
+  {
+   "name": "valid full",
+   "template": "a",
+   "data": {
+    "refs": {
+     "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "camber": 1.5,
+     "front_cst": 500,
+     "remarks": "ok",
+     "stiffener": true,
+     "tower": "3"
+    }
+   },
+   "ok": true,
+   "out": {
+    "refs": {
+     "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "camber": 1.5,
+     "front_cst": 500,
+     "remarks": "ok",
+     "stiffener": true,
+     "tower": "3"
+    }
+   }
+  },
+  {
+   "name": "empty values",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   }
+  },
+  {
+   "name": "no values key",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    }
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   }
+  },
+  {
+   "name": "unknown key",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "nope": 1
+    }
+   },
+   "ok": false,
+   "path": "values",
+   "rule": "setup.data.unknown"
+  },
+  {
+   "name": "type mismatch",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "front_cst": "500"
+    }
+   },
+   "ok": false,
+   "path": "values.front_cst",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "integer expected",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "front_cst": 500.5
+    }
+   },
+   "ok": false,
+   "path": "values.front_cst",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "below min",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "front_cst": 99
+    }
+   },
+   "ok": false,
+   "path": "values.front_cst",
+   "rule": "setup.data.range"
+  },
+  {
+   "name": "above max",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "front_cst": 1000001
+    }
+   },
+   "ok": false,
+   "path": "values.front_cst",
+   "rule": "setup.data.range"
+  },
+  {
+   "name": "off step",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "camber": 0.3
+    }
+   },
+   "ok": false,
+   "path": "values.camber",
+   "rule": "setup.data.step"
+  },
+  {
+   "name": "on step negative",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "camber": -4.5
+    }
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "camber": -4.5
+    }
+   }
+  },
+  {
+   "name": "unknown option",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "tower": "4"
+    }
+   },
+   "ok": false,
+   "path": "values.tower",
+   "rule": "setup.data.option_unknown"
+  },
+  {
+   "name": "option wrong type",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "tower": 3
+    }
+   },
+   "ok": false,
+   "path": "values.tower",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "flag wrong type",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "stiffener": "yes"
+    }
+   },
+   "ok": false,
+   "path": "values.stiffener",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "text too long",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "remarks": "01234567890"
+    }
+   },
+   "ok": false,
+   "path": "values.remarks",
+   "rule": "setup.data.length"
+  },
+  {
+   "name": "text control char",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "remarks": "a\u0001b"
+    }
+   },
+   "ok": false,
+   "path": "values.remarks",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "text newline ok",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "remarks": "a\nb"
+    }
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "remarks": "a\nb"
+    }
+   }
+  },
+  {
+   "name": "null value",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "front_cst": null
+    }
+   },
+   "ok": false,
+   "path": "values.front_cst",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "canonical from client",
+   "template": "a",
+   "data": {
+    "canonical": {
+     "diffs.front_cst": 1
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {
+     "front_cst": 500
+    }
+   },
+   "ok": false,
+   "path": "data",
+   "rule": "setup.data.unknown"
+  },
+  {
+   "name": "extra top-level key",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {},
+    "zzz": 1
+   },
+   "ok": false,
+   "path": "data",
+   "rule": "setup.data.unknown"
+  },
+  {
+   "name": "wrong template id",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4b02",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "template",
+   "rule": "setup.data.template_unknown"
+  },
+  {
+   "name": "wrong template version",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 2
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "template",
+   "rule": "setup.data.template_unknown"
+  },
+  {
+   "name": "template extra key",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1,
+     "x": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "template",
+   "rule": "setup.data.unknown"
+  },
+  {
+   "name": "template missing",
+   "template": "a",
+   "data": {
+    "values": {}
+   },
+   "ok": false,
+   "path": "template",
+   "rule": "setup.data.template_unknown"
+  },
+  {
+   "name": "values not object",
+   "template": "a",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": [
+     1
+    ]
+   },
+   "ok": false,
+   "path": "values",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "refs unknown key",
+   "template": "a",
+   "data": {
+    "refs": {
+     "car_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "refs",
+   "rule": "setup.data.unknown"
+  },
+  {
+   "name": "refs not uuid",
+   "template": "a",
+   "data": {
+    "refs": {
+     "engine_id": "abc"
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "refs.engine_id",
+   "rule": "setup.data.uuid"
+  },
+  {
+   "name": "refs nil uuid",
+   "template": "a",
+   "data": {
+    "refs": {
+     "engine_id": "00000000-0000-0000-0000-000000000000"
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "refs.engine_id",
+   "rule": "setup.data.uuid"
+  },
+  {
+   "name": "refs wrong type",
+   "template": "a",
+   "data": {
+    "refs": {
+     "engine_id": 7
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "refs.engine_id",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "refs empty dropped",
+   "template": "a",
+   "data": {
+    "refs": {},
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   }
+  },
+  {
+   "name": "too deep",
+   "template": "a",
+   "data": {
+    "refs": {
+     "a": {
+      "b": {
+       "c": {
+        "d": {
+         "e": {
+          "f": {
+           "g": {
+            "h": {
+             "i": 1
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    },
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a01",
+     "version": 1
+    },
+    "values": {}
+   },
+   "ok": false,
+   "path": "data",
+   "rule": "setup.data.depth"
+  },
+  {
+   "name": "multi in option order",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E2146",
+      "E0160"
+     ]
+    }
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E2146"
+     ]
+    }
+   }
+  },
+  {
+   "name": "multi single option",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E0159"
+     ]
+    }
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E0159"
+     ]
+    }
+   }
+  },
+  {
+   "name": "multi empty list",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": []
+    }
+   },
+   "ok": false,
+   "path": "values.kingpin",
+   "rule": "setup.data.length"
+  },
+  {
+   "name": "multi duplicate option",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E0160"
+     ]
+    }
+   },
+   "ok": false,
+   "path": "values.kingpin",
+   "rule": "setup.data.option_unknown"
+  },
+  {
+   "name": "multi unknown option",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E0160",
+      "E9999"
+     ]
+    }
+   },
+   "ok": false,
+   "path": "values.kingpin",
+   "rule": "setup.data.option_unknown"
+  },
+  {
+   "name": "multi not a list",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": "E0160"
+    }
+   },
+   "ok": false,
+   "path": "values.kingpin",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "multi item not a string",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "kingpin": [
+      "E0160",
+      1
+     ]
+    }
+   },
+   "ok": false,
+   "path": "values.kingpin",
+   "rule": "setup.data.type"
+  },
+  {
+   "name": "table fields are ordinary fields",
+   "template": "m",
+   "data": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "oil_front": 750,
+     "oil_rear": 600,
+     "spring_front": 9.25
+    }
+   },
+   "ok": true,
+   "out": {
+    "template": {
+     "id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4a09",
+     "version": 1
+    },
+    "values": {
+     "oil_front": 750,
+     "oil_rear": 600,
+     "spring_front": 9.25
+    }
+   }
+  }
+ ],
+ "v1_to_values": [
+  {
+   "name": "known leaves",
+   "data": {
+    "diffs": {
+     "front_cst": 500,
+     "rear_cst": 300
+    },
+    "engine": {
+     "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    }
+   },
+   "values": {
+    "diffs_front_cst": 500,
+    "diffs_rear_cst": 300
+   },
+   "refs": {
+    "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+   }
+  },
+  {
+   "name": "unknown leaf keeps v1 prefix",
+   "data": {
+    "diffs": {
+     "front_cst": 500
+    },
+    "mystery": {
+     "x": 1
+    }
+   },
+   "values": {
+    "diffs_front_cst": 500,
+    "v1:mystery.x": 1
+   },
+   "refs": {}
+  },
+  {
+   "name": "empty known group",
+   "data": {
+    "diffs": {}
+   },
+   "values": {},
+   "refs": {}
+  },
+  {
+   "name": "empty unknown object is a leaf",
+   "data": {
+    "mystery": {}
+   },
+   "values": {
+    "v1:mystery": {}
+   },
+   "refs": {}
+  },
+  {
+   "name": "refs",
+   "data": {
+    "engine": {
+     "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    },
+    "tyres": {
+     "tyre_set_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+    }
+   },
+   "values": {},
+   "refs": {
+    "engine_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03",
+    "tyre_set_id": "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4c03"
+   }
+  }
+ ]
+}

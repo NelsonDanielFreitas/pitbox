@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -19,9 +20,15 @@ type Store interface {
 	ListSetups(ctx context.Context, tx db.DBTX, team, after uuid.UUID, carID *uuid.UUID, limit int32) ([]domain.Setup, error)
 	UpdateCurrentVersion(ctx context.Context, tx db.DBTX, team, id uuid.UUID, current, expected int32) (domain.Setup, error)
 
-	CreateVersion(ctx context.Context, tx db.DBTX, team, user uuid.UUID, setupID uuid.UUID, version int32, data []byte, basedOnSetup *uuid.UUID, basedOnVersion *int32, summary *string) (domain.VersionRef, error)
+	CreateVersion(ctx context.Context, tx db.DBTX, team, user uuid.UUID, setupID uuid.UUID, version, schemaVersion int32, data []byte, basedOnSetup *uuid.UUID, basedOnVersion *int32, summary *string) (domain.VersionRef, error)
 	GetVersion(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID, version int32) (domain.Version, error)
 	ListVersions(ctx context.Context, tx db.DBTX, team, setupID uuid.UUID, before, limit int32) ([]domain.VersionRef, error)
+
+	ListSheetTemplates(ctx context.Context, tx db.DBTX, team, after uuid.UUID, limit int32) ([]domain.SheetTemplateInfo, error)
+	GetSheetTemplate(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.SheetTemplateInfo, error)
+	GetSheetTemplateVersion(ctx context.Context, tx db.DBTX, team, id uuid.UUID, version int32) (domain.SheetTemplateVersionRow, error)
+	CreateTeamSheetTemplate(ctx context.Context, tx db.DBTX, team, user uuid.UUID, t domain.SheetTemplateInfo, definition []byte) (domain.SheetTemplateInfo, error)
+	UpdateTeamSheetTemplate(ctx context.Context, tx db.DBTX, team, id uuid.UUID, expected int32, name string, deletedAt *time.Time) (domain.SheetTemplateInfo, error)
 
 	CreateFeedbackWithID(ctx context.Context, tx db.DBTX, team uuid.UUID, f domain.Feedback) error
 	GetFeedback(ctx context.Context, tx db.DBTX, team, id uuid.UUID) (domain.Feedback, error)

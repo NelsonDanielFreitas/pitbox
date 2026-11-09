@@ -132,6 +132,48 @@ def cookies_of(headers) -> dict:
 
 def cookie_header(**kw) -> str:
     return "; ".join(f"{k}={v}" for k, v in kw.items())
+
+class DeviceKey:
+    """Chave de sessão do telemóvel (ECDSA P-256), feita com o openssl para manter só a biblioteca padrão."""
+
+    def __init__(self, workdir: str):
+        self.pem = os.path.join(workdir, "device-" + secrets.token_hex(4) + ".pem")
+        subprocess.run(["openssl", "ecparam", "-genkey", "-name", "prime256v1", "-noout", "-out", self.pem], check=True, capture_output=True)
+        der = subprocess.run(["openssl", "pkey", "-in", self.pem, "-pubout", "-outform", "DER"], check=True, capture_output=True).stdout
+        self.spki = base64.b64encode(der).decode()
+
+    def proof(self, domain: str, *fields: str) -> str:
+        """Assinatura sobre os campos com prefixo de comprimento (igual a proofMessage em Go), em r||s base64url."""
+        msg = b"".join(len(f).to_bytes(4, "big") + f for f in (x.encode() for x in (domain,) + fields))
+        der = subprocess.run(["openssl", "dgst", "-sha256", "-sign", self.pem], input=msg, check=True, capture_output=True).stdout
+        # DER: 30 len 02 rlen r 02 slen s
+        i = 2 + (der[1] & 0x7F if der[1] & 0x80 else 0)
+        rlen = der[i + 1]
+        r = der[i + 2:i + 2 + rlen]
+        j = i + 2 + rlen
+        slen = der[j + 1]
+        sv = der[j + 2:j + 2 + slen]
+        raw = r.lstrip(b"\0").rjust(32, b"\0") + sv.lstrip(b"\0").rjust(32, b"\0")
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def pkce_pair():
+    verifier = secrets.token_urlsafe(48)
+    import hashlib
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    return verifier, challenge
+
+
+def post_json(url, body, headers=None):
+    h = {"Content-Type": "application/json"}
+    h.update(headers or {})
+    status, hdrs, raw = http_call("POST", url, h, json.dumps(body).encode())
+    try:
+        return status, json.loads(raw or b"{}")
+    except ValueError:
+        return status, {}
+
+
 def mailpit_headers(env: dict) -> dict:
     user = env.get("MAILPIT_UI_USERNAME", "")
     password = env.get("MAILPIT_UI_PASSWORD", "")
@@ -202,7 +244,7 @@ def main() -> int:
         "PITBOX_OPENFGA_ADDR", "PITBOX_OPENFGA_PRESHARED_KEY",
         "PITBOX_OPENFGA_STORE_ID", "PITBOX_OPENFGA_MODEL_ID",
         "MAILPIT_SMTP_USERNAME", "MAILPIT_SMTP_PASSWORD",
-        "MAILPIT_UI_USERNAME", "MAILPIT_UI_PASSWORD",
+        "MAILPIT_UI_USERNAME", "MAILPIT_UI_PASSWORD", "PITBOX_OIDC_MOBILE_CLIENT_ID",
     ):
         if not env.get(k):
             fail(f"falta {k} no .env (make init; make zitadel-provision; make openfga-provision)")
@@ -231,6 +273,8 @@ def main() -> int:
         "PITBOX_OPENFGA_PRESHARED_KEY": env["PITBOX_OPENFGA_PRESHARED_KEY"],
         "PITBOX_OPENFGA_STORE_ID": env["PITBOX_OPENFGA_STORE_ID"],
         "PITBOX_OPENFGA_MODEL_ID": env["PITBOX_OPENFGA_MODEL_ID"],
+        "PITBOX_OIDC_MOBILE_CLIENT_ID": env["PITBOX_OIDC_MOBILE_CLIENT_ID"],
+        "PITBOX_CORS_ORIGINS": env.get("PITBOX_CORS_ORIGINS", "https://localhost"),
     }
     logf = open(logpath, "w")
     proc = subprocess.Popen([binary], env=child_env, stdout=logf, stderr=subprocess.STDOUT)
@@ -361,6 +405,84 @@ def main() -> int:
                           {"Cookie": cookie_header(**{"__Host-pitbox_login": cookies_of(r_start[1])["__Host-pitbox_login"][0]})})
         check(bogus[0] == 400, "state certo com um código que o Zitadel não emitiu -> 400")
 
+        print("== 5b. Login móvel (ADR 0032): Bearer opaco, prova de posse, reutilização e logout")
+        mobile_redirect = "app.pitbox.mobile:/auth/callback"
+        vcli = lambda *a: subprocess.run(["docker", "exec", "-e", f"REDISCLI_AUTH={env['VALKEY_PASSWORD']}", "pitbox-valkey-1", "valkey-cli", "--no-auth-warning", *a],
+                                         capture_output=True, text=True, check=True).stdout.strip()
+
+        def mobile_login(key):
+            verifier, challenge = pkce_pair()
+            st, start = post_json(API + "/auth/mobile/start", {"session_pub": key.spki, "code_challenge": challenge})
+            check(st == 200 and set(start) == {"authorization_url", "state"}, "POST /auth/mobile/start -> 200 com o URL de autorização")
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(start["authorization_url"]).query)
+            check(qs["client_id"] == [env["PITBOX_OIDC_MOBILE_CLIENT_ID"]] and qs["redirect_uri"] == [mobile_redirect]
+                  and qs["code_challenge_method"] == ["S256"] and qs.get("prompt") == ["login"] and "client_secret" not in qs,
+                  "cliente nativo público, redirect próprio, PKCE S256 e prompt=login")
+            a = http_call("GET", start["authorization_url"])
+            check(a[0] in (302, 303), "o Zitadel aceita o pedido do cliente nativo")
+            qa = urllib.parse.parse_qs(urllib.parse.urlparse(a[1]["Location"]).query)
+            auth_request = (qa.get("authRequest") or qa.get("authRequestID") or [""])[0]
+            check(auth_request != "", "auth request do cliente nativo criado")
+            sess = login.call("/v2/sessions", {"checks": {"user": {"loginName": login_name}, "password": {"password": password}}})
+            cb = login.call(f"/v2/oidc/auth_requests/{auth_request}", {"session": {"sessionId": sess["sessionId"], "sessionToken": sess["sessionToken"]}})
+            check(cb["callbackUrl"].startswith(mobile_redirect + "?"), "o Zitadel devolve o redirect do esquema próprio")
+            cq = urllib.parse.parse_qs(urllib.parse.urlparse(cb["callbackUrl"]).query)
+            code, state_m = cq["code"][0], cq["state"][0]
+            check(state_m == start["state"], "o state do redirect é o do /start")
+            secrets_seen.extend([sess["sessionToken"], code, state_m, verifier])
+            return verifier, state_m, code
+
+        key = DeviceKey(work)
+        verifier, state_m, code = mobile_login(key)
+        body_ok = {"state": state_m, "code": code, "code_verifier": verifier, "proof": key.proof("pitbox-mobile-v1/token", state_m, code)}
+        other = DeviceKey(work)
+        st, _ = post_json(API + "/auth/mobile/token", dict(body_ok, proof=other.proof("pitbox-mobile-v1/token", state_m, code)))
+        check(st == 400, "prova assinada por outra chave -> 400 (quem apanha o código não tem a chave)")
+        st, _ = post_json(API + "/auth/mobile/token", body_ok)
+        check(st == 400, "o state foi gasto pela tentativa recusada (uso único)")
+        verifier, state_m, code = mobile_login(key)
+        st, tok = post_json(API + "/auth/mobile/token", {"state": state_m, "code": code, "code_verifier": verifier, "proof": key.proof("pitbox-mobile-v1/token", state_m, code)})
+        check(st == 200 and set(tok) == {"session", "access_token", "expires_in"} and tok["access_token"].startswith("pbm1_") and tok["expires_in"] == 600,
+              "troca do código -> sessão e Bearer opaco de 10 min (sem refresh token nem ID token)")
+        secrets_seen.append(tok["access_token"])
+        bearer = {"Authorization": "Bearer " + tok["access_token"]}
+        who = http_call("GET", API + "/auth/session", bearer)
+        check(who[0] == 200 and json.loads(who[2])["user_id"] == user_id, "/auth/session com o Bearer -> o mesmo utilizador PitBox")
+        mix = http_call("GET", API + "/auth/session", dict(bearer, Cookie=cookie_header(**{"__Host-pitbox_session": sc2})))
+        check(mix[0] == 401, "Bearer e cookie no mesmo pedido -> 401")
+        check(http_call("GET", API + "/auth/session", {"Authorization": "Bearer " + "a.b.c"})[0] == 401, "um JWT como Bearer -> 401")
+        pre = http_call("OPTIONS", API + "/auth/session", {"Origin": "https://localhost", "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "authorization"})
+        check(pre[0] == 204 and pre[1].get("Access-Control-Allow-Origin") == "https://localhost" and "Access-Control-Allow-Credentials" not in pre[1], "CORS: preflight do WebView -> 204, sem credenciais")
+        pre = http_call("OPTIONS", API + "/auth/session", {"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
+        check(pre[0] == 403 and "Access-Control-Allow-Origin" not in pre[1], "CORS: preflight de outra origem -> 403")
+
+        sref = tok["session"]
+        rbody = lambda n: {"session": sref, "counter": n, "proof": key.proof("pitbox-mobile-v1/refresh", sref, str(n))}
+        st, bad = post_json(API + "/auth/mobile/refresh", {"session": sref, "counter": 1, "proof": other.proof("pitbox-mobile-v1/refresh", sref, "1")})
+        check(st == 401, "renovação com prova de outra chave -> 401 (e não gasta o contador)")
+        st, r1 = post_json(API + "/auth/mobile/refresh", rbody(1))
+        check(st == 200 and r1["access_token"] != tok["access_token"], "renovação com contador 1 -> novo Bearer")
+        secrets_seen.append(r1["access_token"])
+        check(http_call("GET", API + "/auth/session", bearer)[0] == 401, "o Bearer anterior deixou de valer logo")
+        newer = {"Authorization": "Bearer " + r1["access_token"]}
+        check(http_call("GET", API + "/auth/session", newer)[0] == 200, "o Bearer novo vale")
+        st, _ = post_json(API + "/auth/mobile/refresh", rbody(1))
+        check(st == 401, "renovação repetida (contador 1) -> 401")
+        check(vcli("EXISTS", "pitbox:sess:" + sref) == "0", "a reutilização apagou a sessão do Valkey")
+        check(http_call("GET", API + "/auth/session", newer)[0] == 401, "e o Bearer legítimo deixou de valer (alarme de reutilização)")
+
+        verifier, state_m, code = mobile_login(key)
+        st, tok2 = post_json(API + "/auth/mobile/token", {"state": state_m, "code": code, "code_verifier": verifier, "proof": key.proof("pitbox-mobile-v1/token", state_m, code)})
+        check(st == 200, "novo login móvel depois do alarme")
+        secrets_seen.append(tok2["access_token"])
+        b2 = {"Authorization": "Bearer " + tok2["access_token"]}
+        st, _, _ = http_call("POST", API + "/auth/mobile/logout", dict(b2, **{"Content-Type": "application/json"}), b"{}")
+        check(st == 204, "logout móvel -> 204")
+        check(http_call("GET", API + "/auth/session", b2)[0] == 401, "o Bearer não vale depois do logout")
+        check(vcli("EXISTS", "pitbox:sess:" + tok2["session"]) == "0", "a sessão foi apagada")
+        check(not [k for k in vcli("KEYS", "pitbox:mob:*").splitlines() if tok["access_token"][5:] in k or tok2["access_token"][5:] in k],
+              "o valor do Bearer não está em nenhuma chave do Valkey")
+
         print("== 6. Refresh real (access token de 5 s) e utilizador desativado")
         short = dict(provision.OIDC_SETTINGS, accessTokenLifetime=5)
         admin.call("/admin/v1/settings/oidc", {k: f"{v}s" for k, v in short.items()}, method="PUT")
@@ -395,7 +517,8 @@ def main() -> int:
         sql = lambda q: psql(env, q)
         rows = sql(f"SELECT action||':'||coalesce(after->>'reason','') FROM audit.audit_log WHERE actor_id='{user_id}' OR (actor_id='anonymous' AND occurred_at > now() - interval '5 minutes') ORDER BY id")
         got = rows.splitlines()
-        check(got.count("auth.login:") == 3 and got.count("auth.logout:") == 1, "auditoria: 3 logins e 1 logout do utilizador")
+        check(got.count("auth.login:") == 3 and got.count("auth.logout:") == 2, "auditoria: 3 logins e 2 logouts do utilizador (web e móvel)")
+        check(got.count("auth.login:mobile") == 2 and "auth.mobile_reuse:refresh_reuse" in got, "auditoria: 2 logins móveis e o alarme de reutilização")
         check("auth.session_revoked:user_not_active" in got, "auditoria: sessão revogada porque o utilizador foi desativado")
         check(not any(g.startswith("auth.login_failed:") and g.split(":", 1)[1] in ("no_login_state", "state_mismatch") for g in got),
               "callbacks sem cookie ou com state errado NÃO foram para a auditoria (só log e contador)")

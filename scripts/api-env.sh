@@ -47,6 +47,13 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
     export PITBOX_OPENFGA_MODEL_ID="$(get PITBOX_OPENFGA_MODEL_ID)"
     echo "api-env: openfga ligado (store $(get PITBOX_OPENFGA_STORE_ID))" >&2
   fi
+  # Login do telemóvel (ADR 0032): tudo ou nada, como o resto. Só com o client_id da app nativa
+  # E a origem CORS; sem um deles o pitbox-api arranca sem o login móvel (a config recusa metade).
+  if [ -n "$(get PITBOX_OIDC_MOBILE_CLIENT_ID)" ] && [ -n "$(get PITBOX_CORS_ORIGINS)" ]; then
+    export PITBOX_OIDC_MOBILE_CLIENT_ID="$(get PITBOX_OIDC_MOBILE_CLIENT_ID)"
+    export PITBOX_CORS_ORIGINS="$(get PITBOX_CORS_ORIGINS)"
+    echo "api-env: login do telemóvel ligado" >&2
+  fi
   LOGIN_CONFIGURED=1
   echo "api-env: login ligado (issuer $PITBOX_OIDC_ISSUER)" >&2
 else

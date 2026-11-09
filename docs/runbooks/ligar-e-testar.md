@@ -65,7 +65,7 @@ make android-install      # instala o último APK e abre no telemóvel
 make android-logs         # resultado do diagnóstico
 ```
 
-Para o diagnóstico: `make android-diagnostics`, `make android-install`, `make android-logs`. Esperado: 7 linhas `OK` (3 do Keystore, 4 da base). A página só existe nesse APK. O botão *Deixar base de teste (adb)* serve o teste de [android-teste-base-cifrada.md](android-teste-base-cifrada.md). O login real no Android ainda não existe (F2-06b): erros de CORS em `/auth/session` são esperados.
+Para o diagnóstico: `make android-diagnostics`, `make android-install`, `make android-logs`. Esperado: 7 linhas `OK` (3 do Keystore, 4 da base). A página só existe nesse APK. O botão *Deixar base de teste (adb)* serve o teste de [android-teste-base-cifrada.md](android-teste-base-cifrada.md). O login no Android existe desde o F2-06b (ADR 0032): Auth Tab no Chrome (versão recente), passkey e Bearer. Precisa de `make run-api` e `make app-preview` a correr (o proxy da tailnet) e de `PITBOX_OIDC_MOBILE_CLIENT_ID`/`PITBOX_CORS_ORIGINS` no `.env` (`make zitadel-provision`). Se alguma coisa falhar, [sessao-movel-reutilizacao.md](sessao-movel-reutilizacao.md).
 
 **Tudo, como o CI (antes de abrir um PR):** `make ci` (precisa do Docker).
 
@@ -77,7 +77,7 @@ Há **dois caminhos**, e não são a mesma coisa:
 | --- | --- | --- |
 | Para quê | Testar ecrãs e features com login e dados reais | Testar o que é nativo (chaves, base cifrada, bloqueio) |
 | Precisa dos 3 terminais? | **Sim** | Não |
-| Login funciona? | Sim | **Ainda não** (F2-06b) |
+| Login funciona? | Sim | Sim (Auth Tab, F2-06b) |
 | Abre em | `https://portatil-wsl.tail9f9359.ts.net` | A app normal (`make android-debug`) ou o diagnóstico (`make android-diagnostics`) |
 
 ### Caminho A: feature nova, testada pelo browser do telemóvel
@@ -109,7 +109,7 @@ make android-install    # instala e abre
 make android-logs       # lê o resultado
 ```
 
-Repete estes três comandos a cada alteração, seja no TypeScript da app ou no plugin Java. Enquanto não houver login móvel (F2-06b), o APK **não mostra os teus dados**: as features novas de ecrãs testam-se pelo caminho A.
+Repete estes três comandos a cada alteração, seja no TypeScript da app ou no plugin Java. Com o login móvel (F2-06b) o APK mostra os teus dados depois de entrares com a passkey.
 
 ### Antes de abrir o PR
 

@@ -15,6 +15,7 @@ import { Route as ConfirmEmailRouteImport } from './routes/confirm-email'
 import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as InviteRouteImport } from './routes/invite'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as AuthenticatedTeamsRouteRouteImport } from './routes/_authenticated/teams/route'
 import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
 import { Route as AuthenticatedTeamsNewRouteImport } from './routes/_authenticated/teams/new'
@@ -79,6 +80,11 @@ const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedTeamsRouteRoute = AuthenticatedTeamsRouteRouteImport.update({
   id: '/teams',
@@ -295,6 +301,7 @@ export interface FileRoutesByFullPath {
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
   '/teams': typeof AuthenticatedTeamsRouteRouteWithChildren
+  '/account': typeof AuthenticatedAccountRoute
   '/teams/$teamId': typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
   '/teams/new': typeof AuthenticatedTeamsNewRoute
   '/teams/': typeof AuthenticatedTeamsIndexRoute
@@ -336,6 +343,7 @@ export interface FileRoutesByTo {
   '/diagnostics': typeof DiagnosticsRoute
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
+  '/account': typeof AuthenticatedAccountRoute
   '/teams/new': typeof AuthenticatedTeamsNewRoute
   '/teams': typeof AuthenticatedTeamsIndexRoute
   '/teams/$teamId/sync': typeof AuthenticatedTeamsTeamIdSyncRoute
@@ -376,6 +384,7 @@ export interface FileRoutesById {
   '/invite': typeof InviteRoute
   '/login': typeof LoginRoute
   '/_authenticated/teams': typeof AuthenticatedTeamsRouteRouteWithChildren
+  '/_authenticated/account': typeof AuthenticatedAccountRoute
   '/_authenticated/teams_/$teamId': typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
   '/_authenticated/teams/new': typeof AuthenticatedTeamsNewRoute
   '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
@@ -420,6 +429,7 @@ export interface FileRouteTypes {
     | '/invite'
     | '/login'
     | '/teams'
+    | '/account'
     | '/teams/$teamId'
     | '/teams/new'
     | '/teams/'
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/diagnostics'
     | '/invite'
     | '/login'
+    | '/account'
     | '/teams/new'
     | '/teams'
     | '/teams/$teamId/sync'
@@ -500,6 +511,7 @@ export interface FileRouteTypes {
     | '/invite'
     | '/login'
     | '/_authenticated/teams'
+    | '/_authenticated/account'
     | '/_authenticated/teams_/$teamId'
     | '/_authenticated/teams/new'
     | '/_authenticated/teams/'
@@ -588,6 +600,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/account': {
+      id: '/_authenticated/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AuthenticatedAccountRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/teams': {
       id: '/_authenticated/teams'
@@ -994,11 +1013,13 @@ const AuthenticatedTeamsTeamIdRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedTeamsRouteRoute: typeof AuthenticatedTeamsRouteRouteWithChildren
+  AuthenticatedAccountRoute: typeof AuthenticatedAccountRoute
   AuthenticatedTeamsTeamIdRouteRoute: typeof AuthenticatedTeamsTeamIdRouteRouteWithChildren
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedTeamsRouteRoute: AuthenticatedTeamsRouteRouteWithChildren,
+  AuthenticatedAccountRoute: AuthenticatedAccountRoute,
   AuthenticatedTeamsTeamIdRouteRoute:
     AuthenticatedTeamsTeamIdRouteRouteWithChildren,
 }

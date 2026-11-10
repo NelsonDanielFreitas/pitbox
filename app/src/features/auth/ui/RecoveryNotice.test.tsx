@@ -9,6 +9,14 @@ vi.mock("@/shared/lib/platform", () => ({ isNativePlatform: () => native.value }
 const generate = vi.hoisted(() => vi.fn());
 vi.mock("@/features/auth/data/recovery-codes", () => ({ generateRecoveryCodes: generate }));
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 const loadSession = vi.hoisted(() => vi.fn());
 vi.mock("@/auth/session-load", () => ({ loadSession }));
 
@@ -58,12 +66,12 @@ describe("RecoveryNotice", () => {
     expect(screen.getByRole("button", { name: "Gerar códigos de recuperação" })).toBeInTheDocument();
   });
 
-  it("on the phone points to the web version instead of offering the button", async () => {
+  it("offers the button on the phone too, and links to the account page", async () => {
     native.value = true;
     loadSession.mockResolvedValue({ ...online, recovery_ready: false });
     renderNotice();
-    expect(await screen.findByText(/versão web/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Gerar códigos de recuperação" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "Gerar códigos de recuperação" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Abrir conta e segurança" })).toHaveAttribute("href", "/account");
   });
 
   it("shows the codes once and forgets them when the dialog closes", async () => {

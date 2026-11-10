@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -65,6 +66,14 @@ export function AccountMenu() {
             sideOffset={8}
             className="z-50 min-w-48 rounded-xl border border-line bg-surface p-1 shadow-lg"
           >
+            <DropdownMenu.Item asChild>
+              <Link
+                to="/account"
+                className="flex min-h-12 w-full items-center rounded-lg px-3 text-left text-sm text-fg outline-none hover:bg-surface-2 focus:bg-surface-2"
+              >
+                {t("account.menuItem")}
+              </Link>
+            </DropdownMenu.Item>
             <DropdownMenu.Item
               className="min-h-12 w-full rounded-lg px-3 text-left text-sm text-fg outline-none hover:bg-surface-2 focus:bg-surface-2"
               onSelect={(event) => {

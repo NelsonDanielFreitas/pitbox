@@ -24,6 +24,33 @@ export const en = {
     nativeRefused: "This account cannot sign in to the app. Check your email and second factor.",
     nativeBusy: "Signing in…",
     cancel: "Cancel",
+    lostPasskey: "I lost my passkey",
+    recoverTitle: "I lost my passkey",
+    recoverBody:
+      "Enter the email of the account. If an account with a passkey exists, we send an email with a link to register a new one.",
+    recoverEmail: "Account email",
+    recoverSubmit: "Send link",
+    recoverBusy: "Sending…",
+    recoverDone:
+      "If an account with a passkey exists, we sent an email with a link to register a new passkey. The link expires soon; also check your spam folder.",
+    recoverInvalid: "Enter a valid email.",
+    recoverRateLimited: "Too many requests. Wait a little and try again.",
+    recoverUnavailable: "Could not send the request. Try again later.",
+    recoveryNoticeTitle: "No plan B for your account",
+    recoveryNoticeBody:
+      "You only have a passkey and no recovery code. If you lose your device you may lose access. Generate the codes and keep them somewhere safe.",
+    recoveryNoticeWebOnly: "Generate the codes in the web version (PitBox in the browser).",
+    recoveryGenerate: "Generate recovery codes",
+    recoveryGenerating: "Generating…",
+    recoveryDialogTitle: "Recovery codes",
+    recoveryDialogBody:
+      "Each code works once. Earlier codes stop working. They are shown only once.",
+    recoveryCodesList: "Recovery codes",
+    recoveryCodesOnce: "Save them now in a password manager or on paper. They are not shown again.",
+    recoverySaved: "I have saved the codes",
+    recoveryStepUp: "To generate codes you must confirm your identity with your passkey.",
+    recoveryStepUpLink: "Confirm identity",
+    recoveryError: "Could not generate the codes. Try again.",
   },
   teams: {
     title: "Choose your team",

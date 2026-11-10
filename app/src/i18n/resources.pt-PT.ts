@@ -24,6 +24,33 @@ export const ptPT = {
     nativeRefused: "Esta conta não pode entrar na app. Verifica o email e o segundo fator.",
     nativeBusy: "A entrar…",
     cancel: "Cancelar",
+    lostPasskey: "Perdi a passkey",
+    recoverTitle: "Perdi a passkey",
+    recoverBody:
+      "Indica o email da conta. Se existir uma conta com passkey, enviamos um email com um link para registares uma nova.",
+    recoverEmail: "Email da conta",
+    recoverSubmit: "Enviar link",
+    recoverBusy: "A enviar…",
+    recoverDone:
+      "Se existir uma conta com passkey, enviámos um email com um link para registar uma nova passkey. O link expira em pouco tempo; confirma também a pasta de spam.",
+    recoverInvalid: "Indica um email válido.",
+    recoverRateLimited: "Demasiados pedidos. Espera um pouco e tenta outra vez.",
+    recoverUnavailable: "Não foi possível enviar o pedido. Tenta outra vez mais tarde.",
+    recoveryNoticeTitle: "Sem plano B para a tua conta",
+    recoveryNoticeBody:
+      "Só tens uma passkey e nenhum código de recuperação. Se perderes o dispositivo, podes ficar sem acesso. Gera os códigos e guarda-os num sítio seguro.",
+    recoveryNoticeWebOnly: "Gera os códigos na versão web (pitbox no browser).",
+    recoveryGenerate: "Gerar códigos de recuperação",
+    recoveryGenerating: "A gerar…",
+    recoveryDialogTitle: "Códigos de recuperação",
+    recoveryDialogBody:
+      "Cada código só funciona uma vez. Os códigos anteriores deixam de valer. Vão ser mostrados uma única vez.",
+    recoveryCodesList: "Códigos de recuperação",
+    recoveryCodesOnce: "Guarda-os agora num gestor de palavras-passe ou em papel. Não voltam a ser mostrados.",
+    recoverySaved: "Já guardei os códigos",
+    recoveryStepUp: "Para gerar códigos tens de confirmar a tua identidade com a passkey.",
+    recoveryStepUpLink: "Confirmar identidade",
+    recoveryError: "Não foi possível gerar os códigos. Tenta outra vez.",
   },
   teams: {
     title: "Escolhe a equipa",

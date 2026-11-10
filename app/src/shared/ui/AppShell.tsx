@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
+import { RecoveryNotice } from "@/features/auth/ui/RecoveryNotice";
 import { SyncIndicator } from "@/features/sync/ui/SyncIndicator";
 
 import { AccountMenu } from "./AccountMenu";
@@ -23,6 +24,7 @@ export function AppShell({ notices }: { notices?: ReactNode }) {
       </header>
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         {notices}
+        <RecoveryNotice />
         <Outlet />
       </main>
     </div>

@@ -37,6 +37,29 @@ describe("fetchSession", () => {
     });
   });
 
+  it("parses recovery_ready from the shared contract fixture", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(fixture("session_recovery_not_ready.json"))));
+    await expect(fetchSession()).resolves.toMatchObject({ authenticated: true, recovery_ready: false });
+  });
+
+  it("rejects a recovery_ready that is not a boolean", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        response(
+          JSON.stringify({
+            authenticated: true,
+            user_id: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60",
+            amr: [],
+            auth_time: "2026-10-13T12:00:00Z",
+            recovery_ready: "no",
+          }),
+        ),
+      ),
+    );
+    await expect(fetchSession()).rejects.toBeInstanceOf(ContractError);
+  });
+
   it("parses 401 as unauthenticated", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(fixture("session_unauthenticated.json"), 401)));
     await expect(fetchSession()).resolves.toEqual({ authenticated: false });

@@ -104,6 +104,15 @@ type Config struct {
 	// agility: change the list, not the code). "none" and HS* are never valid.
 	OIDCAllowedAlgs []string `env:"PITBOX_OIDC_ALLOWED_ALGS" envSeparator:"," envDefault:"ES256"`
 
+	// Mobile login (ADR 0032). It is on when OIDCMobileClientID is set: the id of the public
+	// native application in the identity provider. It has no secret. MobileRedirectURI is the
+	// private-use scheme redirect the app registers (RFC 8252, section 7.1). CORSOrigins are the
+	// exact origins the app's WebView calls from (for example https://localhost); there is no
+	// wildcard and no credentials mode.
+	OIDCMobileClientID string   `env:"PITBOX_OIDC_MOBILE_CLIENT_ID"`
+	MobileRedirectURI  string   `env:"PITBOX_MOBILE_REDIRECT_URI" envDefault:"app.pitbox.mobile:/auth/callback"`
+	CORSOrigins        []string `env:"PITBOX_CORS_ORIGINS" envSeparator:","`
+
 	ValkeyAddr     string `env:"PITBOX_VALKEY_ADDR" envDefault:"127.0.0.1:6379"`
 	ValkeyUsername string `env:"PITBOX_VALKEY_USERNAME" envDefault:"pitbox_api"`
 	ValkeyPassword string `env:"PITBOX_VALKEY_PASSWORD"`
@@ -238,6 +247,7 @@ func (c Config) Validate() error {
 		errs = append(errs, err)
 	}
 	errs = append(errs, c.validateAuth()...)
+	errs = append(errs, c.validateMobile()...)
 	errs = append(errs, c.validateRateLimit()...)
 	errs = append(errs, c.validateOpenFGA()...)
 	errs = append(errs, c.validateOutbox()...)
@@ -393,6 +403,8 @@ func (c Config) LogValue() slog.Value {
 		slog.String("public_url", c.PublicURL),
 		slog.String("oidc_issuer", c.OIDCIssuer),
 		slog.Bool("oidc_local_dial", c.OIDCLocalDial != ""),
+		slog.Bool("mobile_login", c.MobileEnabled()),
+		slog.Int("cors_origins", len(c.CORSOrigins)),
 		slog.Duration("session_idle_timeout", c.SessionIdleTimeout),
 		slog.Duration("session_absolute_timeout", c.SessionAbsoluteTimeout),
 		slog.Int("rl_user_read_rps", c.RateLimitUserReadRPS),

@@ -4,6 +4,7 @@ import {
   type SQLiteDBConnection,
 } from "@capacitor-community/sqlite";
 
+import { splitInsertReturning } from "./insert-returning";
 import type { NativeSqliteDriver, Row } from "./native-database";
 import type { SqlValue } from "./sql-params";
 
@@ -113,6 +114,13 @@ export class CapacitorSqliteDriver implements NativeSqliteDriver {
   }
 
   async write(sql: string, values: SqlValue[], returning: boolean): Promise<Row[]> {
+    const split = returning ? splitInsertReturning(sql) : undefined;
+    if (split) {
+      // The plugin's own RETURNING is unreliable (see insert-returning.ts): run it plain, read it back.
+      await this.db().run(split.insert, values, false, "no");
+      const row = await this.db().query(split.readBack, []);
+      return (row.values ?? []) as Row[];
+    }
     const result = await this.db().run(sql, values, false, returning ? "all" : "no");
     return returning ? ((result.changes?.values ?? []) as Row[]) : [];
   }

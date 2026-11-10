@@ -29,9 +29,12 @@ make smoke-api     # prova ponta a ponta: /healthz, trace no Jaeger e paragem li
 | `PITBOX_PUBLIC_URL` | `http://localhost:8081` | Origem que o browser vê (sem caminho). O redirect do OIDC é `<URL>/auth/callback`. Fora de `local` tem de ser `https` |
 | `PITBOX_OIDC_ISSUER` | `http://localhost:8080` | Issuer do Zitadel, comparado exatamente com o `iss` do ID token. Fora de `local`, `https` |
 | `PITBOX_OIDC_CLIENT_ID`, `PITBOX_OIDC_CLIENT_SECRET` | (vazio) | Escritos no `.env` por `make zitadel-provision`. **Segredo** |
+| `PITBOX_OIDC_MOBILE_CLIENT_ID` | (vazio) | Cliente nativo público (`pitbox-android`), escrito por `make zitadel-provision`. Liga o login móvel (ADR 0032); tudo-ou-nada com os dois seguintes |
+| `PITBOX_MOBILE_REDIRECT_URI` | `app.pitbox.mobile:/auth/callback` | Redirect do cliente nativo (esquema de domínio invertido, caminho exato) |
+| `PITBOX_CORS_ORIGINS` | (vazio) | Lista exata de origens do WebView, separadas por vírgulas (`https://localhost`). Só com o login móvel; sem `*`, sem credenciais |
 | `PITBOX_OIDC_ALLOWED_ALGS` | `ES256` | Algoritmos aceites no ID token, separados por vírgulas (`ES256`, `ES384`, `ES512`, `RS256`, `EdDSA`); `none` e HS* nunca |
 | `PITBOX_VALKEY_ADDR` | `127.0.0.1:6379` | Armazém das sessões |
-| `PITBOX_VALKEY_USERNAME` | `pitbox_api` | Utilizador ACL limitado a `pitbox:sess:*`, `pitbox:lock:*` e `pitbox:rl:*`; nunca o `default` |
+| `PITBOX_VALKEY_USERNAME` | `pitbox_api` | Utilizador ACL limitado a `pitbox:sess:*`, `pitbox:lock:*`, `pitbox:mob:*` e `pitbox:rl:*`; nunca o `default` |
 | `PITBOX_VALKEY_PASSWORD` | (vazio) | **Segredo** |
 | `PITBOX_VALKEY_TLS` | `false` | Obrigatório fora de `local` |
 | `PITBOX_DATABASE_URL` | (vazio) | `postgres://pitbox_api:<palavra-passe>@host:5432/pitbox`; o papel da aplicação (nunca o dono nem o migrador). Fora de `local`, só `sslmode=verify-full` (`require` cifra mas aceita qualquer certificado). **Segredo** |

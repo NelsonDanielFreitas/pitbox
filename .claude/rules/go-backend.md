@@ -51,7 +51,7 @@ paths:
 ## Autenticação
 - Todo o RPC exige sessão: o interceptor de autenticação (lugar 5 da cadeia) é *default deny*. Só um procedimento listado explicitamente como público passa sem sessão; uma falha de armazém ou de IdP é `UNAVAILABLE`, nunca `UNAUTHENTICATED` nem acesso.
 - O `Principal` (`auth.PrincipalFrom(ctx)`) traz `user_id`, `sub`, `amr` e `auth_time` da sessão; equipas e papéis nunca vêm da sessão (verifica-se no OpenFGA). A identidade nunca viaja numa mensagem de pedido.
-- O caminho `Authorization: Bearer` não existe até ao F2-06. Nada de tokens, cookies, `code`, `state`, emails ou *claims* em logs, traces, erros ou auditoria.
+- O caminho `Authorization: Bearer` (F2-06b, ADR 0032) só aceita o Bearer opaco `pbm1_…` da sessão móvel, nunca um JWT, e nunca junto com o cookie. Nada de tokens, cookies, `code`, `state`, emails ou *claims* em logs, traces, erros ou auditoria.
 - Os segredos (`PITBOX_OIDC_CLIENT_SECRET`, `PITBOX_VALKEY_PASSWORD`, `PITBOX_DATABASE_URL`, `PITBOX_AUTH_KEYS`) nunca em `LogValue`, em erros ou em `fmt`; erros sobre eles não repetem o valor.
 
 ## Testes

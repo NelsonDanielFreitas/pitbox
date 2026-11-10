@@ -50,6 +50,11 @@ PAT_IN_CONTAINER = "/zitadel/provisioner/provisioner.pat"
 
 PROJECT_NAME = "pitbox"
 APP_NAME = "pitbox-api"
+# Aplicação nativa pública do telemóvel (ADR 0032): sem segredo, PKCE, esquema próprio.
+MOBILE_APP_NAME = "pitbox-android"
+MOBILE_REDIRECT_URI = "app.pitbox.mobile:/auth/callback"
+# Origem do WebView do Capacitor (androidScheme https); vai para PITBOX_CORS_ORIGINS se ainda não existir.
+MOBILE_CORS_ORIGIN = "https://localhost"
 
 # Tempos de vida desejados, em segundos (têm de coincidir com o docker-compose.yml).
 OIDC_SETTINGS = {
@@ -133,6 +138,31 @@ def desired_oidc_config(public_url: str, tailnet_host: str = "") -> dict:
         "idTokenUserinfoAssertion": False,
         # http só é aceite em modo de desenvolvimento; um URL https não precisa dele.
         "developmentMode": base.startswith("http://"),
+    }
+
+
+def desired_native_config() -> dict:
+    """Configuração OIDC da aplicação nativa do telemóvel (ADR 0032).
+
+    Cliente público: sem segredo (`NONE`), Authorization Code + PKCE e refresh token. O refresh
+    token fica no servidor (token-mediating backend), mas é este cliente que o pede. Sem
+    `developmentMode`: o esquema próprio não precisa dele (verificado no Zitadel 4.19.5). Sem
+    back-channel nem redirect de logout: o fim de sessão do telemóvel passa pelo pitbox-api.
+    O Zitadel acrescenta sozinho `allowedOrigins`; não se compara.
+    """
+    return {
+        "redirectUris": [MOBILE_REDIRECT_URI],
+        "postLogoutRedirectUris": [],
+        "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
+        "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+        "applicationType": "OIDC_APP_TYPE_NATIVE",
+        "authMethodType": "OIDC_AUTH_METHOD_TYPE_NONE",
+        "version": "OIDC_VERSION_1_0",
+        "accessTokenType": "OIDC_TOKEN_TYPE_BEARER",
+        "accessTokenRoleAssertion": False,
+        "idTokenRoleAssertion": False,
+        "idTokenUserinfoAssertion": False,
+        "developmentMode": False,
     }
 
 
@@ -633,6 +663,52 @@ def ensure_app(z: Zitadel, project_id: str, public_url: str, env: dict, rotate: 
     return out
 
 
+def ensure_native_app(z: Zitadel, project_id: str, env: dict, log) -> dict:
+    """App nativa do telemóvel. Devolve as chaves de .env a escrever (vazio se nada mudou).
+
+    Não há segredo: é um cliente público. O que o pitbox-api precisa é do client_id (a audiência
+    do ID token) e da origem CORS do WebView.
+    """
+    desired = desired_native_config()
+    apps = z.call(
+        "/zitadel.application.v2.ApplicationService/ListApplications",
+        {"filters": [{"projectIdFilter": {"projectId": project_id}}]},
+    ).get("applications", [])
+    app = next((a for a in apps if a.get("name") == MOBILE_APP_NAME), None)
+    if app is None:
+        created = z.call(
+            "/zitadel.application.v2.ApplicationService/CreateApplication",
+            {"projectId": project_id, "name": MOBILE_APP_NAME, "oidcConfiguration": desired},
+        )
+        client_id = created.get("oidcConfiguration", {}).get("clientId")
+        if not client_id:
+            raise ProvisionError("o Zitadel criou a aplicação nativa sem devolver o client_id")
+        if created.get("oidcConfiguration", {}).get("clientSecret"):
+            raise ProvisionError("a aplicação nativa devia ser pública e o Zitadel devolveu um segredo")
+        log("aplicação nativa (telemóvel): criada")
+    else:
+        cfg = app.get("oidcConfiguration", {})
+        client_id = cfg.get("clientId")
+        if not client_id:
+            raise ProvisionError("a aplicação nativa existente não tem client_id")
+        drift = config_drift(cfg, desired)
+        if drift:
+            z.call(
+                "/zitadel.application.v2.ApplicationService/UpdateApplication",
+                {"projectId": project_id, "applicationId": app["applicationId"], "oidcConfiguration": desired},
+            )
+            log(f"aplicação nativa (telemóvel): corrigida ({', '.join(drift)})")
+        else:
+            log("aplicação nativa (telemóvel): já correta")
+    out = {}
+    if env.get("PITBOX_OIDC_MOBILE_CLIENT_ID") != client_id:
+        out["PITBOX_OIDC_MOBILE_CLIENT_ID"] = client_id
+    # Só se não existir: quem a editou à mão (outro dispositivo, outra origem) não é sobrescrito.
+    if not env.get("PITBOX_CORS_ORIGINS"):
+        out["PITBOX_CORS_ORIGINS"] = MOBILE_CORS_ORIGIN
+    return out
+
+
 def wait_ready(z: Zitadel) -> None:
     for _ in range(30):
         try:
@@ -676,6 +752,7 @@ def run(
     changes = ensure_smtp(z, env, rotate_smtp_password, log)
     project_id = ensure_project(z, log)
     changes.update(ensure_app(z, project_id, public_url, env, rotate, log, tailnet_host))
+    changes.update(ensure_native_app(z, project_id, env, log))
     if changes:
         write_private(env_file, update_env(env_text, changes))
         log(f"escrito em {env_file.name}: {', '.join(sorted(changes))}")

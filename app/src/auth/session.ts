@@ -7,6 +7,9 @@ import {
   OriginMismatchError,
 } from "@/shared/lib/errors";
 import { apiUrl } from "@/shared/lib/env";
+import { isNativePlatform } from "@/shared/lib/platform";
+
+import { mobileAuth, SessionEndedError } from "./native";
 
 const authenticatedSchema = z
   .object({
@@ -43,12 +46,20 @@ export function isAbortError(error: unknown): boolean {
 export async function fetchSession(signal?: AbortSignal): Promise<OnlineSession | z.infer<typeof unauthenticatedSchema>> {
   let response: Response;
   try {
-    response = await fetch(apiUrl("/auth/session"), {
-      cache: "no-store",
-      credentials: "same-origin",
-      signal,
-    });
+    if (isNativePlatform()) {
+      // No session on this phone: nothing to ask. A session that ended is the same answer.
+      if (!mobileAuth().hasSession()) return { authenticated: false };
+      response = await mobileAuth().authedFetch(apiUrl("/auth/session"), { cache: "no-store", signal });
+    } else {
+      response = await fetch(apiUrl("/auth/session"), {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal,
+      });
+    }
   } catch (error) {
+    if (error instanceof SessionEndedError) return { authenticated: false };
+    if (error instanceof NetworkError || error instanceof AuthUnavailableError || error instanceof ContractError) throw error;
     // Only a fetch that rejects without being cancelled is "no network". Every answer
     // from the server, even an error, takes the paths below and fails closed.
     if (isAbortError(error) || signal?.aborted) throw error;

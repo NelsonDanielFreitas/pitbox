@@ -1092,7 +1092,7 @@ export class LocalGarageRepository implements GarageRepository {
       return this.changeFrom(rows[0]);
     } catch (error) {
       if (error instanceof LocalConstraintError) {
-        const message = error.message.toLowerCase();
+        const message = (error.detail ?? error.message).toLowerCase();
         if (message.includes("reverts_movement_id") || message.includes("unique")) {
           throw new GarageConflictError("undone", "movement already undone", { cause: error });
         }
@@ -1788,7 +1788,7 @@ export class LocalGarageRepository implements GarageRepository {
 
   private rethrowWrite(error: unknown): never {
     if (error instanceof LocalConstraintError) {
-      const message = error.message.toLowerCase();
+      const message = (error.detail ?? error.message).toLowerCase();
       if (message.includes("transponder")) {
         throw new GarageConflictError("transponder", "duplicate transponder", { cause: error });
       }

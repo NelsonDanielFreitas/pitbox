@@ -211,13 +211,18 @@ def make_handler(st: FakeState):
                 return self._send({"applications": st.apps})
             if path.endswith("/CreateApplication"):
                 st.calls.append((method, path))
-                st.apps.append({"applicationId": "a1", "name": body["name"],
-                                "oidcConfiguration": {**body["oidcConfiguration"], "clientId": "cid"}})
-                return self._send({"applicationId": "a1",
-                                   "oidcConfiguration": {"clientId": "cid", "clientSecret": SECRET}})
+                public = body["oidcConfiguration"]["authMethodType"] == "OIDC_AUTH_METHOD_TYPE_NONE"
+                app_id, client_id = (f"a{len(st.apps) + 1}", "cid-mobile" if public else "cid")
+                # Como o Zitadel real: o cliente público não tem segredo e ganha allowedOrigins.
+                extra = {"allowedOrigins": ["app.pitbox.mobile://"]} if public else {}
+                st.apps.append({"applicationId": app_id, "name": body["name"],
+                                "oidcConfiguration": {**body["oidcConfiguration"], "clientId": client_id, **extra}})
+                result = {"clientId": client_id} if public else {"clientId": client_id, "clientSecret": SECRET}
+                return self._send({"applicationId": app_id, "oidcConfiguration": result})
             if path.endswith("/UpdateApplication"):
                 st.calls.append((method, path))
-                st.apps[0]["oidcConfiguration"] = {**body["oidcConfiguration"], "clientId": "cid"}
+                app = next(a for a in st.apps if a["applicationId"] == body["applicationId"])
+                app["oidcConfiguration"] = {**body["oidcConfiguration"], "clientId": app["oidcConfiguration"]["clientId"]}
                 return self._send({})
             if path.endswith("/GenerateClientSecret"):
                 st.calls.append((method, path))
@@ -252,6 +257,12 @@ class ProvisionTest(unittest.TestCase):
         self.env = Path(self.tmp.name) / ".env"
         self.env.write_text("# nota\nVALKEY_PASSWORD=abc\nOUTRA=1\nMAILPIT_SMTP_USERNAME=pitbox-smtp\nMAILPIT_SMTP_PASSWORD=segredo-smtp\n")
 
+    def web_app(self):
+        return next(a for a in self.state.apps if a["name"] == prov.APP_NAME)
+
+    def mobile_app(self):
+        return next(a for a in self.state.apps if a["name"] == prov.MOBILE_APP_NAME)
+
     def run_once(self, **kw):
         out = io.StringIO()
         with redirect_stdout(out):
@@ -263,7 +274,7 @@ class ProvisionTest(unittest.TestCase):
     def test_phone_profile_sends_the_external_host_and_registers_both_origins(self):
         self.run_once(tailnet_host="pc.tail1.ts.net")
         self.assertEqual(self.state.hosts, {"pc.tail1.ts.net:8443"})  # Zitadel picks the instance by Host
-        cfg = self.state.apps[0]["oidcConfiguration"]
+        cfg = self.web_app()["oidcConfiguration"]
         self.assertIn("https://pc.tail1.ts.net/auth/callback", cfg["redirectUris"])
         self.assertIn("http://localhost:8081/auth/callback", cfg["redirectUris"])
         self.assertIn("https://pc.tail1.ts.net/auth/signed-out", cfg["postLogoutRedirectUris"])
@@ -282,7 +293,7 @@ class ProvisionTest(unittest.TestCase):
     def test_localhost_profile_sends_no_host_override(self):
         self.run_once()
         self.assertNotIn("pc.tail1.ts.net:8443", self.state.hosts)
-        cfg = self.state.apps[0]["oidcConfiguration"]
+        cfg = self.web_app()["oidcConfiguration"]
         self.assertFalse(any("ts.net" in u for u in cfg["redirectUris"]))
 
     def test_phone_profile_rejects_a_bad_host(self):
@@ -300,7 +311,7 @@ class ProvisionTest(unittest.TestCase):
             self.assertTrue(self.state.login_policy[key].endswith("s"))
             self.assertNotEqual(self.state.login_policy[key], "0s")
         self.assertEqual(len(self.state.projects), 1)
-        cfg = self.state.apps[0]["oidcConfiguration"]
+        cfg = self.web_app()["oidcConfiguration"]
         self.assertEqual(prov.config_drift(cfg, prov.desired_oidc_config("http://localhost:8081")), [])
         self.assertEqual(cfg["accessTokenType"], "OIDC_TOKEN_TYPE_BEARER")  # opaco
         self.assertEqual(self.state.webkeys[-1]["state"], "STATE_ACTIVE")
@@ -330,6 +341,55 @@ class ProvisionTest(unittest.TestCase):
         for secret in (PAT, SECRET, "cid"):
             self.assertNotIn(secret, out, "o output não pode conter segredos nem o client_id")
 
+    def test_the_native_app_is_public_and_leaves_no_secret(self):
+        out = self.run_once()
+        cfg = self.mobile_app()["oidcConfiguration"]
+        self.assertEqual(prov.config_drift(cfg, prov.desired_native_config()), [])
+        self.assertEqual(cfg["authMethodType"], "OIDC_AUTH_METHOD_TYPE_NONE")
+        self.assertEqual(cfg["applicationType"], "OIDC_APP_TYPE_NATIVE")
+        self.assertEqual(cfg["redirectUris"], [prov.MOBILE_REDIRECT_URI])
+        self.assertFalse(cfg["developmentMode"])
+        env = prov.parse_env(self.env.read_text())
+        self.assertEqual(env["PITBOX_OIDC_MOBILE_CLIENT_ID"], "cid-mobile")
+        self.assertEqual(env["PITBOX_CORS_ORIGINS"], prov.MOBILE_CORS_ORIGIN)
+        self.assertEqual(env["PITBOX_OIDC_CLIENT_ID"], "cid")  # a app web não muda
+        self.assertNotIn("cid-mobile", out, "o output não pode conter o client_id")
+
+    def test_the_native_app_drift_is_corrected(self):
+        self.run_once()
+        cfg = self.mobile_app()["oidcConfiguration"]
+        cfg["redirectUris"] = ["https://evil.example/cb", prov.MOBILE_REDIRECT_URI]
+        cfg["authMethodType"] = "OIDC_AUTH_METHOD_TYPE_BASIC"
+        self.state.calls.clear()
+        self.run_once()
+        self.assertEqual([c[1].rsplit("/", 1)[1] for c in self.state.calls], ["UpdateApplication"])
+        fixed = self.mobile_app()["oidcConfiguration"]
+        self.assertEqual(fixed["redirectUris"], [prov.MOBILE_REDIRECT_URI])
+        self.assertEqual(fixed["authMethodType"], "OIDC_AUTH_METHOD_TYPE_NONE")
+
+    def test_an_edited_cors_origin_is_kept(self):
+        self.run_once()
+        self.env.write_text(self.env.read_text() + "PITBOX_CORS_ORIGINS=https://localhost,http://localhost\n")
+        before = self.env.read_text()
+        self.run_once()
+        self.assertEqual(self.env.read_text(), before)
+
+    def test_a_secret_on_the_native_app_is_refused(self):
+        # Se o Zitadel devolvesse um segredo, o cliente deixou de ser público: parar.
+        def with_secret(*a, **k):
+            return {"applicationId": "a9", "oidcConfiguration": {"clientId": "x", "clientSecret": "s"}}
+        z = prov.Zitadel(self.base, PAT)
+        original = z.call
+        def call(path, body=None, method="POST"):
+            if path.endswith("/CreateApplication") and body["name"] == prov.MOBILE_APP_NAME:
+                return with_secret()
+            return original(path, body, method)
+        z.call = call
+        self.run_once()  # cria o projeto e a app web
+        self.state.apps[:] = [a for a in self.state.apps if a["name"] != prov.MOBILE_APP_NAME]
+        with self.assertRaises(prov.ProvisionError):
+            prov.ensure_native_app(z, "p1", {}, print)
+
     def test_second_run_changes_nothing(self):
         self.run_once()
         before = self.env.read_text()
@@ -351,8 +411,8 @@ class ProvisionTest(unittest.TestCase):
 
     def test_drift_is_corrected_without_rotating_the_secret(self):
         self.run_once()
-        self.state.apps[0]["oidcConfiguration"]["accessTokenType"] = "OIDC_TOKEN_TYPE_BEARER"
-        self.state.apps[0]["oidcConfiguration"]["redirectUris"] = ["http://evil.example/cb"]
+        self.web_app()["oidcConfiguration"]["accessTokenType"] = "OIDC_TOKEN_TYPE_BEARER"
+        self.web_app()["oidcConfiguration"]["redirectUris"] = ["http://evil.example/cb"]
         self.state.calls.clear()
         self.run_once()
         self.assertEqual([c[1].rsplit("/", 1)[1] for c in self.state.calls], ["UpdateApplication"])
@@ -398,6 +458,16 @@ class ProvisionTest(unittest.TestCase):
 
 
 class PureTest(unittest.TestCase):
+    def test_native_config_is_a_public_client_with_a_private_use_scheme(self):
+        cfg = prov.desired_native_config()
+        self.assertEqual(cfg["authMethodType"], "OIDC_AUTH_METHOD_TYPE_NONE")
+        self.assertEqual(cfg["redirectUris"], ["app.pitbox.mobile:/auth/callback"])
+        self.assertEqual(cfg["postLogoutRedirectUris"], [])
+        self.assertNotIn("backChannelLogoutUri", cfg)
+        self.assertIs(cfg["developmentMode"], False)
+        self.assertEqual(cfg["accessTokenType"], "OIDC_TOKEN_TYPE_BEARER")  # opaco
+        self.assertIs(cfg["idTokenUserinfoAssertion"], False)
+
     def test_update_env_replaces_and_appends(self):
         out = prov.update_env("A=1\nB=2\n", {"B": "3", "C": "4"})
         self.assertEqual(out, "A=1\nB=3\nC=4\n")

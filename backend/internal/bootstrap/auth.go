@@ -40,7 +40,7 @@ type authStack struct {
 // Without configuration (possible only in local development, config.Validate) it returns the
 // deny-all interceptor and routes that answer 503: the service stays up and serves nothing,
 // it never serves unauthenticated.
-func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, vk valkey.Client) (*authStack, error) {
+func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, vk valkey.Client, limiter auth.PublicLimiter) (*authStack, error) {
 	if !cfg.AuthConfigured() {
 		logger.WarnContext(ctx, "authentication is not configured: every RPC is refused and /auth/* answers 503")
 		return &authStack{
@@ -96,10 +96,15 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 		logger.WarnContext(ctx, "OIDC local dial is active: the identity provider is reached over plain HTTP on loopback (local phone profile only)",
 			slog.String("dial", cfg.OIDCLocalDial))
 	}
-	provider := auth.NewProvider(auth.ProviderConfig{
+	provCfg := auth.ProviderConfig{
 		Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
 		RedirectURL: origin + auth.CallbackPath, AllowedAlgs: cfg.OIDCAllowedAlgs, HTTPClient: oidcClient, Now: now,
-	})
+	}
+	if cfg.MobileEnabled() {
+		// Config.Validate guarantees all-or-nothing: the native client and its redirect.
+		provCfg.MobileClientID, provCfg.MobileRedirectURL = cfg.OIDCMobileClientID, cfg.MobileRedirectURI
+	}
+	provider := auth.NewProvider(provCfg)
 	auditor := audit.NewWriter(pool)
 	refusals, err := auth.NewRefusalCounter(otel.GetMeterProvider().Meter("pitbox/auth"))
 	if err != nil {
@@ -111,7 +116,7 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 		Users: identity.NewLoginDirectory(pool), RecoveryCodes: identity.NewRecoveryCodeDirectory(pool),
 		RecoveryCodeHasher: recoveryHasher,
 		Audit:              auditor, Log: logger, Refusals: refusals,
-		PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
+		Limiter: limiter, PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
 	}
 	authenticator := &auth.Authenticator{Provider: provider, Store: store, Audit: auditor, Log: logger, Now: now}
 	handler.Authn = authenticator

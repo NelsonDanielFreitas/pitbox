@@ -17,6 +17,12 @@ export const en = {
       "Before signing out, the app sends any changes still waiting to be sent. Then the local data in this browser is deleted and downloaded again when you sign in.",
     logoutConfirmAction: "Delete data and sign out",
     logoutError: "Could not delete local data. Try again.",
+    nativeError: "Could not sign in. Try again.",
+    nativeCancelled: "Sign-in cancelled.",
+    nativeNoAuthTab: "Update Chrome to sign in to the app (a recent version is required).",
+    nativeOffline: "No connection. Connect to the network to sign in.",
+    nativeRefused: "This account cannot sign in to the app. Check your email and second factor.",
+    nativeBusy: "Signing in…",
     cancel: "Cancel",
   },
   teams: {

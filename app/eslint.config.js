@@ -128,9 +128,11 @@ export default tseslint.config(
     },
   },
   {
-    // ADR 0028: the "last user" (only a user id, never a token) is the one other value kept in
-    // localStorage, so a cold start without network knows which local database to try.
-    files: ["src/auth/last-user.ts", "src/auth/*.test.ts"],
+    // ADR 0028: the "last user" (only a user id, never a token) is kept in localStorage, so a
+    // cold start without network knows which local database to try. ADR 0032: so is the mobile
+    // session record (reference, Keystore key id, counter): none of it opens anything without
+    // the key, and the Bearer is never stored.
+    files: ["src/auth/last-user.ts", "src/auth/native/mobile-session.ts", "src/auth/*.test.ts"],
     rules: {
       "no-restricted-globals": [
         "error",

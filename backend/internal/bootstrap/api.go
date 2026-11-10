@@ -65,13 +65,6 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 	}
 	defer vk.Close()
 
-	authn, err := newAuthStack(ctx, cfg, logger, vk)
-	if err != nil {
-		flushTelemetry(ctx, tel, logger)
-		return fmt.Errorf("set up authentication: %w", err)
-	}
-	defer authn.close()
-
 	rlimiter, err := ratelimit.NewLimiter(
 		vk,
 		ratelimit.FromConfig(cfg),
@@ -83,6 +76,13 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		flushTelemetry(ctx, tel, logger)
 		return fmt.Errorf("set up rate limiting: %w", err)
 	}
+
+	authn, err := newAuthStack(ctx, cfg, logger, vk, rlimiter)
+	if err != nil {
+		flushTelemetry(ctx, tel, logger)
+		return fmt.Errorf("set up authentication: %w", err)
+	}
+	defer authn.close()
 
 	authzClient, err := newAuthzClient(ctx, openFGAConfig(
 		cfg.OpenFGAAddr, cfg.OpenFGAStoreID, cfg.OpenFGAModelID,
@@ -186,6 +186,7 @@ func runAPI(ctx context.Context, cfg config.Config, logger *slog.Logger, onListe
 		Drain:           cfg.ShutdownDrain,
 		ShutdownTimeout: cfg.ShutdownTimeout,
 		SkipTracing:     rpcPaths(api, reflection),
+		CORSOrigins:     cfg.CORSOrigins,
 		Routes: func(mux *http.ServeMux) error {
 			authn.mount(mux)
 			return mountRPC(mux, cfg, api, reflection)

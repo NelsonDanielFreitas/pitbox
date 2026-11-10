@@ -1403,15 +1403,15 @@
       ],
       "gate": false,
       "status": "Por fazer",
-      "todo": "ADR 0032; AppAuth com App Link; caminho Authorization: Bearer (client_id permitido, rejeitar nonce/at_hash/auth_time, JWKS com TTL e limite); CORS sem credenciais; revogação da família de refresh tokens; inclui #154 e #158",
+      "todo": "ADR 0032: sessão no servidor ligada à chave do telemóvel (Bearer opaco `pbm1_…`, renovação com prova de posse e contador, Auth Tab em vez de AppAuth); caminho Authorization: Bearer; CORS sem credenciais; JWKS com TTL e limite; deteção de reutilização na nossa camada; inclui #154 e #158 (ADR 0034)",
       "done_when": [
-        "Login no telemóvel pelo browser do sistema, com passkey, e a app chama a API com Bearer",
-        "ID token apresentado como Bearer é rejeitado (teste); token de outro `client_id`, outro emissor, `alg` `none`/HS256 ou expirado também (tabela de testes como o `TestIDTokenValidation`)",
-        "`kid` desconhecido em rajada não gera mais do que N pedidos ao JWKS por minuto (teste)",
-        "Reutilização de um refresh token tem o efeito decidido no ADR 0032 (teste)",
+        "Login no telemóvel pelo browser do sistema (Auth Tab), com passkey, e a app chama a API com o Bearer",
+        "Um JWT ou ID token apresentado como Bearer é rejeitado por formato (teste com ID token real); a tabela de casos (outro `client_id`/audiência, outro emissor, `alg` `none`/HS256, expirado, `nonce`) aplica-se ao ID token do cliente móvel, no estilo `TestIDTokenValidation`",
+        "`kid` desconhecido em rajada não gera mais do que 2 pedidos por minuto ao JWKS (teste, também no back-channel logout)",
+        "Reutilização de um contador de renovação apaga a sessão, revoga o refresh token e audita `auth.mobile_reuse` (teste)",
         "TM-AUTH-03 e TM-AUTH-04 atualizados com prova; CI verde"
       ],
-      "done_when_raw": "Login no telemóvel pelo browser do sistema, com passkey, e a app chama a API com Bearer; ID token apresentado como Bearer é rejeitado (teste); token de outro `client_id`, outro emissor, `alg` `none`/HS256 ou expirado também (tabela de testes como o `TestIDTokenValidation`); `kid` desconhecido em rajada não gera mais do que N pedidos ao JWKS por minuto (teste); Reutilização de um refresh token tem o efeito decidido no ADR 0032 (teste); TM-AUTH-03 e TM-AUTH-04 atualizados com prova; CI verde",
+      "done_when_raw": "Login no telemóvel pelo browser do sistema (Auth Tab), com passkey, e a app chama a API com o Bearer; Um JWT ou ID token apresentado como Bearer é rejeitado por formato (teste com ID token real); a tabela de casos (outro `client_id`/audiência, outro emissor, `alg` `none`/HS256, expirado, `nonce`) aplica-se ao ID token do cliente móvel, no estilo `TestIDTokenValidation`; `kid` desconhecido em rajada não gera mais do que 2 pedidos por minuto ao JWKS (teste, também no back-channel logout); Reutilização de um contador de renovação apaga a sessão, revoga o refresh token e audita `auth.mobile_reuse` (teste); TM-AUTH-03 e TM-AUTH-04 atualizados com prova; CI verde",
       "doc_references": [
         "§5.1"
       ],

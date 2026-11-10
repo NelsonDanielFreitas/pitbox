@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { clearLocalData, lastKnownUserId, UnsyncedChangesError } from "@/auth/local-data";
+import { mobileAuth } from "@/auth/native";
 import { useSession } from "@/auth/session-query";
+import { isNativePlatform } from "@/shared/lib/platform";
 
 import { Alert } from "./Alert";
 import { Button } from "./Button";
@@ -33,6 +35,13 @@ export function AccountMenu() {
         await clearLocalData(userId);
       }
       setConfirming(false);
+      if (isNativePlatform()) {
+        // The server session ends, then the Keystore key and the Bearer go (ADR 0032); the
+        // data was only wiped after it was synced, above.
+        await mobileAuth().logout();
+        window.location.assign("/login?logged_out=1");
+        return;
+      }
       logoutForm.current?.requestSubmit();
     } catch (caught) {
       setError(caught instanceof UnsyncedChangesError ? caught.reason : "local");

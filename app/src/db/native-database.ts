@@ -51,6 +51,19 @@ export interface NativeSqliteDriver {
 const NAME_PREFIX = "pitbox_";
 const READ_KEYWORDS = new Set(["select", "with", "values", "pragma", "explain"]);
 
+/**
+ * What a constraint error may say: SQLite's own words, which name only objects ("UNIQUE constraint
+ * failed: tyre_set.team_id, tyre_set.label") and never a value. The repositories read it to tell
+ * a repeated tyre label from a repeated transponder, as they do on the web; without it every
+ * native failure looked like the generic "conflicts with another record". It travels in `detail`,
+ * never in `message`. Anything that does not look like that is dropped (the plugin message can
+ * carry SQL text).
+ */
+export function constraintDetail(text: string): string | undefined {
+  const found = /(UNIQUE|NOT NULL|CHECK|FOREIGN KEY|PRIMARY KEY) constraint failed(?:: ([A-Za-z0-9_., ]{1,200}))?/.exec(text);
+  return found ? found[0].trim() : undefined;
+}
+
 /** Engine errors never reach the screens as they are: only the classes of `./errors`. */
 export function toLocalError(error: unknown): Error {
   if (
@@ -63,7 +76,7 @@ export function toLocalError(error: unknown): Error {
   }
   const text = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   // Generic messages on purpose: a plugin message can carry SQL text. The cause keeps the original.
-  if (/constraint/i.test(text)) return new LocalConstraintError(undefined, { cause: error });
+  if (/constraint/i.test(text)) return new LocalConstraintError(undefined, { cause: error, detail: constraintDetail(text) });
   if (/busy|locked/i.test(text)) return new LocalDatabaseBusyError(undefined, { cause: error });
   // A wrong or missing key looks like this to SQLCipher. Retrying cannot fix it.
   if (/not a database|file is encrypted|malformed|corrupt|cipher/i.test(text)) {

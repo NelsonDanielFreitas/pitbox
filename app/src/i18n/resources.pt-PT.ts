@@ -17,6 +17,12 @@ export const ptPT = {
       "Antes de sair, a app envia as alterações que ainda estiverem por enviar. Depois, os dados locais deste browser são apagados e voltam a ser descarregados quando iniciares sessão.",
     logoutConfirmAction: "Apagar dados e terminar sessão",
     logoutError: "Não foi possível apagar os dados locais. Tenta outra vez.",
+    nativeError: "Não foi possível entrar. Tenta outra vez.",
+    nativeCancelled: "Início de sessão cancelado.",
+    nativeNoAuthTab: "Atualiza o Chrome para entrares na app (é preciso uma versão recente).",
+    nativeOffline: "Sem ligação. Liga-te à rede para entrar.",
+    nativeRefused: "Esta conta não pode entrar na app. Verifica o email e o segundo fator.",
+    nativeBusy: "A entrar…",
     cancel: "Cancelar",
   },
   teams: {

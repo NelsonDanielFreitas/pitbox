@@ -3,6 +3,8 @@ ext {
     androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.1'
     // Same stable version as @capacitor-community/sqlite, so the two never disagree.
     androidxBiometricVersion = '1.1.0'
+    // Auth Tab (ADR 0032): AuthTabIntent exists in 1.9.0 (checked with javap on the published aar).
+    androidxBrowserVersion = '1.9.0'
 }
 
 buildscript {
@@ -50,5 +52,6 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.biometric:biometric:$androidxBiometricVersion"
+    implementation "androidx.browser:browser:$androidxBrowserVersion"
     testImplementation "junit:junit:$junitVersion"
 }

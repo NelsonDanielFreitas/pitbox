@@ -11,7 +11,10 @@ export type PitboxSecureErrorCode =
   | "BIOMETRIC_UNAVAILABLE" // no biometric and no device credential enrolled
   | "BIOMETRIC_CANCELLED" // the user dismissed the prompt
   | "BIOMETRIC_LOCKED_OUT" // too many attempts
-  | "BIOMETRIC_FAILED"; // any other prompt failure
+  | "BIOMETRIC_FAILED" // any other prompt failure
+  | "AUTH_TAB_UNAVAILABLE" // the system browser has no Auth Tab: login refuses (no fallback)
+  | "LOGIN_CANCELLED" // the user closed the login tab
+  | "LOGIN_FAILED"; // the browser returned something that is not our redirect
 
 /**
  * Every key call names its user with `userHash` (64 lowercase hex characters, the SHA-256 of the
@@ -52,4 +55,26 @@ export interface PitboxSecurePlugin {
    * This is a UI lock. It does not unlock or derive any key (ADR 0033 §4).
    */
   authenticate(options: { title: string; subtitle?: string }): Promise<void>;
+
+  /**
+   * Creates the key of one login session (ADR 0032), distinct from the sync key. The plugin
+   * chooses the random 128-bit id, so the alias can never be steered by the caller.
+   *
+   * @returns `keyId` (32 lowercase hex) and `publicKey` (base64 SPKI DER, 91 bytes).
+   */
+  createSessionKey(): Promise<{ keyId: string; publicKey: string; securityLevel: SecurityLevel }>;
+
+  /** ECDSA-SHA256 with a session key; `message` is base64, 1 to 1024 bytes; DER signature back. */
+  signWithSessionKey(options: { keyId: string; message: string }): Promise<{ signature: string }>;
+
+  /** Deletes a session key. Resolves also when there was none. */
+  deleteSessionKey(options: { keyId: string }): Promise<void>;
+
+  /**
+   * Opens `url` in the system browser's Auth Tab and resolves with the authorization `code` and
+   * `state` of the redirect. The plugin only opens an https URL that names our own redirect URI
+   * and only accepts a redirect of exactly that URI with exactly `code` and `state`. Without Auth
+   * Tab support it rejects with `AUTH_TAB_UNAVAILABLE`.
+   */
+  loginWithBrowser(options: { url: string }): Promise<{ code: string; state: string }>;
 }

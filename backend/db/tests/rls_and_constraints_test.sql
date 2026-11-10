@@ -385,6 +385,21 @@ DO $$ BEGIN
   EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
 END $$;
 
+-- Códigos por usar (F2-06b, #158): conta só os do utilizador e só os não usados.
+DO $$ DECLARE n int; BEGIN
+  PERFORM identity.replace_recovery_codes(
+    app.current_user_id(),
+    ARRAY[decode(repeat('01', 32), 'hex'), decode(repeat('02', 32), 'hex'), decode(repeat('03', 32), 'hex')],
+    'k1');
+  SELECT identity.count_unused_recovery_codes(app.current_user_id()) INTO n;
+  IF n <> 3 THEN RAISE EXCEPTION 'FALHOU: esperava 3 códigos por usar, vi %', n; END IF;
+  PERFORM identity.consume_recovery_code(app.current_user_id(), ARRAY[decode(repeat('02', 32), 'hex')]);
+  SELECT identity.count_unused_recovery_codes(app.current_user_id()) INTO n;
+  IF n <> 2 THEN RAISE EXCEPTION 'FALHOU: esperava 2 códigos por usar depois de consumir um, vi %', n; END IF;
+  SELECT identity.count_unused_recovery_codes('01900000-0000-7000-8000-0000000000ff') INTO n;
+  IF n <> 0 THEN RAISE EXCEPTION 'FALHOU: utilizador sem códigos devia dar 0, vi %', n; END IF;
+END $$;
+
 -- Equipa: category e club têm limites de tamanho (alinhados com o protovalidate)
 DO $$ DECLARE v text; BEGIN
   FOREACH v IN ARRAY ARRAY['', repeat('x', 41)] LOOP

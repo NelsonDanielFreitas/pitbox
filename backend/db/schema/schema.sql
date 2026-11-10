@@ -1875,6 +1875,22 @@ GRANT EXECUTE ON FUNCTION identity.consume_recovery_code(uuid, bytea[]) TO pitbo
 COMMENT ON FUNCTION identity.consume_recovery_code(uuid, bytea[]) IS
   'Consome um código de recuperação de MFA. SECURITY DEFINER, só pitbox_app.';
 
+-- identity.count_unused_recovery_codes — quantos códigos por usar tem o utilizador (F2-06b, #158).
+CREATE OR REPLACE FUNCTION identity.count_unused_recovery_codes(p_user_id uuid)
+  RETURNS integer
+  LANGUAGE sql
+  STABLE
+  SECURITY DEFINER
+  SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT count(*)::integer FROM identity.recovery_code WHERE user_id = p_user_id AND used_at IS NULL
+$$;
+
+REVOKE ALL ON FUNCTION identity.count_unused_recovery_codes(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION identity.count_unused_recovery_codes(uuid) TO pitbox_app;
+COMMENT ON FUNCTION identity.count_unused_recovery_codes(uuid) IS
+  'Número de códigos de recuperação por usar. SECURITY DEFINER, só pitbox_app.';
+
 CREATE OR REPLACE FUNCTION identity.accept_invitation(p_token_hash bytea)
   RETURNS TABLE (out_team_id uuid, out_role identity.team_role, out_consumed boolean)
   LANGUAGE plpgsql

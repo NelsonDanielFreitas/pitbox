@@ -30,6 +30,8 @@ Só na **primeira vez** ou depois de um `make reset`: `make zitadel-provision` e
 
 Para trabalhar na app web com recarga automática, usa em vez do terminal 2: `make app-dev` e abre `http://localhost:5173` (**não** `127.0.0.1`).
 
+Se o Zitadel local está no perfil telemóvel, `make run-api` define também `PITBOX_OIDC_LOCAL_LOGOUT_ISSUER` (o back-channel logout, #154) e, havendo `PITBOX_ZITADEL_RECOVERY_PAT` no `.env` (criado por `make zitadel-provision`), liga a recuperação «Perdi a passkey» (#158). Depois de atualizar o repositório corre `make up` (monta `deploy/compose/zitadel/roles.yaml`), `make db-migrate` e `make zitadel-provision`.
+
 Verificar: `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/healthz` deve dar `200`; no telemóvel abre `https://portatil-wsl.tail9f9359.ts.net`.
 
 ## 3. Testar

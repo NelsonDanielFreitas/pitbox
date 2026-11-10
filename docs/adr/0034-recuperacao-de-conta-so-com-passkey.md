@@ -1,9 +1,9 @@
 # 0034 — Recuperação de conta só com passkey
 
-- **Estado:** Aceite (confirmado pelo Nelson em 2026-11-09); implementação por fazer
+- **Estado:** Aceite (confirmado pelo Nelson em 2026-11-09); implementado (F2-06b, 2026-11-10)
 - **Data:** 2026-11-09
 - **Cartão:** F2-06b (#166), issue #158
-- **Relacionado:** [ADR 0019](0019-defesa-palavra-passe-login.md) (defesa de palavra-passe e login, anti-enumeração parcial), [ADR 0032](0032-login-movel-e-sessao-ligada-ao-dispositivo.md); ameaças TM-AUTH-* (linha nova a criar).
+- **Relacionado:** [ADR 0019](0019-defesa-palavra-passe-login.md) (defesa de palavra-passe e login, anti-enumeração parcial), [ADR 0032](0032-login-movel-e-sessao-ligada-ao-dispositivo.md); ameaças TM-AUTH-24 e TM-AUTH-20.
 
 ## Contexto
 
@@ -33,3 +33,30 @@ Uma conta que só tem passkey fica sem saída se a perder (telemóvel novo, muda
 - O `pitbox-api` passa a ter uma credencial para o Zitadel. Linha nova no threat model (roubo da credencial de serviço, abuso do endpoint para spam de email, enumeração por tempo de resposta) e runbook de rotação.
 - O email de recuperação é o único fator de recuperação: quem controla o email da conta controla o registo de uma passkey nova. Aceite e descrito no threat model; mitigado por limites, auditoria e aviso por email ao titular.
 - Prova: teste ponta a ponta no `auth-smoke.py` (conta só com passkey → pedido → email no Mailpit → link de registo) e testes de igualdade de resposta e de tempo (conta existente e inexistente).
+
+## Resultado da implementação (2026-11-10)
+
+**Papel da conta de serviço (spike no Zitadel 4.19.5, por tentativa).** Nenhum papel embutido é estreito:
+
+| Papel | Link de registo de passkey | Efeito colateral medido |
+| --- | --- | --- |
+| `ORG_USER_MANAGER` | 403 (não consegue) | — |
+| `IAM_LOGIN_CLIENT` | sim | também bloqueia utilizadores e lê as definições OIDC |
+| `IAM_USER_MANAGER` | sim | também bloqueia utilizadores |
+
+Por decisão tua (2026-11-10) criou-se um **papel próprio**, `IAM_PITBOX_ACCOUNT_RECOVERY`, só com `user.read` e `user.passkey.write`. Medido: envia o link e lê utilizadores e métodos de autenticação; **não** bloqueia, não repõe palavra-passe, não apaga e não lê definições (403 em todos, provado no `auth-smoke`, passo 4c).
+
+- **Mecanismo:** o Zitadel só aceita a lista inteira de papéis (uma lista por ficheiro ou ambiente substitui a lista por omissão). `scripts/zitadel-roles.py` copia a lista por omissão da versão fixada no compose e acrescenta o papel; o resultado, `deploy/compose/zitadel/roles.yaml`, monta-se no `zitadel-api` com `--config`. **Ao subir a versão do Zitadel** corre-se o script e revê-se o diff. O prefixo `IAM_` é obrigatório (o Zitadel recusa outros como papel de instância).
+- **Utilizador máquina** `pitbox-recovery` e PAT de 90 dias criados e renovados por `make zitadel-provision` (renova quando faltam menos de 14 dias; `--rotate-recovery-pat` força), guardado em `PITBOX_ZITADEL_RECOVERY_PAT` no `.env` (0600); o provisionamento corrige papéis a mais.
+- **Risco residual (aceite):** quem roubar o PAT consegue pedir o código de registo de passkey de **qualquer** conta (`returnCode`) e tomá-la. É inerente a `user.passkey.write`; mitiga-se com o PAT só no processo da API, validade curta, rotação e o runbook `rotacao-credencial-recuperacao.md`.
+
+**Desvios e pormenores face à decisão:**
+
+1. O limite por email (3/hora), por IP (10/hora) e global (120/hora) usa contadores de janela fixa no Valkey (`pitbox:rl:rec:*`, sem ACL novo): o limitador por segundo não exprime «por hora». Além disso há o limite por IP do limitador público (429), que depende só do IP, nunca do email.
+2. O email entra na auditoria como **pseudónimo** (HMAC-SHA256 com chave derivada do anel, 128 bits) ou, se a conta existir, como `sub:<id>`; nunca o endereço. Motivos: `sent`, `no_account`, `no_passkey`, `upstream_error`, `throttled`, `dropped_busy`, `disabled`.
+3. A conta procura-se **no Zitadel** por email (só contas humanas ativas com email verificado e resultado único), sem tabela nem coluna novas no PitBox.
+4. A resposta é 202 antes de qualquer acesso à conta (trabalho em segundo plano, no máximo 8 em simultâneo; acima disso o pedido é descartado e auditado). Só um corpo inválido (400) e o limite por IP (429) diferem, e não dependem da conta.
+5. `recovery_ready` em `/auth/session` é `false` só para quem tem passkey, não tem palavra-passe e não tem códigos por usar; calcula-se com `identity.count_unused_recovery_codes` e a consulta ao Zitadel, com cache de 60 s por utilizador (limpa ao gerar códigos). Se algo falhar o campo **sai** da resposta (o login nunca depende disto).
+6. **Não implementado:** o aviso por email ao titular como mensagem à parte. O próprio email do Zitadel com o link é o aviso.
+7. O aviso na app tem botão para gerar os códigos só na **web** (o endpoint `/auth/recovery-codes` responde ao cookie). No Android o aviso manda gerá-los na versão web; um caminho com Bearer fica para um cartão próprio.
+8. Prova: `auth-smoke.py` passo 4c (conta com passkey de software, email no Mailpit com o link `passkey/set`, conta desconhecida e conta só com palavra-passe sem email, limite de 3 emails, auditoria sem emails) e testes de igualdade de resposta, de ordem (resposta antes do trabalho) e de limites em `recover_test.go`.

@@ -167,7 +167,7 @@ Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a
 - O Zitadel não revoga a família de refresh tokens: a spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06b**. No BFF o risco é menor (o refresh token nunca sai do servidor).
 - A arquitetura §5.1 (principal e *step-up*) passa a ler `auth_time` e `amr` da sessão e não do token.
 - A app deve avisar os donos de equipa que precisam de passkey ou TOTP para fazer login; os códigos de recuperação são o plano B.
-- O endpoint de back-channel logout tem de estar registado no `post_logout_redirect_uri`/back-channel settings do Zitadel pelo script de provisionamento.
+- O endpoint de back-channel logout é registado no Zitadel pelo script de provisionamento (`backChannelLogoutUri`; em local `host.docker.internal`, #154).
 - Novas variáveis: `PITBOX_OIDC_*`, Valkey, base de dados, chave mestra e durações da sessão.
 - **O fim de uma sessão por utilizador desativado depende da resposta do Zitadel.** Verificado na `v4.19.4` com `scripts/auth-smoke.py`: para um utilizador desativado o refresh falha com `invalid_request` e a descrição `Errors.User.NotActive` (não `invalid_grant`). A sessão acaba com `invalid_grant` e com `invalid_request` + `Errors.User.*`; qualquer outra recusa (cliente recusado, pedido mal formado, falha de rede) mantém a sessão (e `UNAVAILABLE` depois da graça). Uma versão do Zitadel que mude isto faz falhar o smoke.
 - `GET /auth/session` (identificadores apenas) existe para a app saber se está autenticada sem ler tokens; renova o access token se preciso.
@@ -177,3 +177,5 @@ Se o access token for JWT, o Zitadel assina-o com `typ` `JWT`, a mesma chave e a
 - `/auth/*` fica sem rate limiting no servidor: risco aceite e ligado ao F5-05 (Cloudflare, por IP).
 - Em desenvolvimento só o Chrome e o Firefox funcionam com `__Host-` sobre `http://localhost`; o Safari espera pelo HTTPS local do F1-09.
 - Revisitar se o Zitadel passar a revogar a família de refresh tokens, ou antes do F2-06b.
+
+*Emenda (F2-06b, 2026-11-10):* o «Bearer» do F2-06b é **opaco** e vale como credencial de uma sessão `kind=mobile` no servidor (ADR 0032); a validação de JWT aplica-se ao ID token e ao logout token, com o JWKS limitado (`boundedKeySet`). O back-channel logout em local chega ao `pitbox-api` por `host.docker.internal` (#154, ADR 0029).

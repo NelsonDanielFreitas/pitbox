@@ -45,11 +45,21 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / "deploy" / "compose" / ".env"
-API = "http://localhost:8081"  # tem de coincidir com o redirect URI registado (PITBOX_PUBLIC_URL)
+API = "http://localhost:8081"  # onde o smoke fala com o pitbox-api (escuta só em 127.0.0.1)
+# Perfil (ADR 0029): no localhost o URL público é a própria API e o issuer é o Zitadel local. No perfil
+# telemóvel o URL público e o issuer são HTTPS da tailnet, que o PC não alcança: http_call() reencaminha-os
+# para o endereço local (com o Host certo) e o API usa PITBOX_OIDC_LOCAL_DIAL, como o `make run-api`.
+PUBLIC = API
+ISSUER = ""  # preenchido em main() (depende da porta do Zitadel)
+ZLOCAL = ""
+ZHOST = ""   # Host que escolhe a instância do Zitadel; vazio no localhost
 
 spec = importlib.util.spec_from_file_location("provision", ROOT / "scripts" / "zitadel-provision.py")
 provision = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(provision)
+_pk_spec = importlib.util.spec_from_file_location("softpasskey", ROOT / "scripts" / "softpasskey.py")
+softpasskey = importlib.util.module_from_spec(_pk_spec)
+_pk_spec.loader.exec_module(softpasskey)
 
 
 SUBJECT_RE = re.compile(r"\d{1,32}")  # os ids do Zitadel (o `sub` do IdP) são numéricos
@@ -102,8 +112,20 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(NoRedirect)
 
 
+def to_local(url, headers):
+    """Reencaminha um URL público do perfil telemóvel para o endereço local (e põe o Host certo)."""
+    headers = dict(headers or {})
+    if ZHOST and url.startswith(ISSUER):
+        headers["Host"] = ZHOST
+        return ZLOCAL + url[len(ISSUER):], headers
+    if PUBLIC != API and url.startswith(PUBLIC):
+        return API + url[len(PUBLIC):], headers
+    return url, headers
+
+
 def http_call(method, url, headers=None, body=None):
     """Devolve (status, headers, corpo); nunca segue redirects."""
+    url, headers = to_local(url, headers)
     req = urllib.request.Request(url, data=body, method=method, headers=headers or {})
     try:
         with OPENER.open(req, timeout=15) as r:
@@ -245,11 +267,20 @@ def main() -> int:
         "PITBOX_OPENFGA_STORE_ID", "PITBOX_OPENFGA_MODEL_ID",
         "MAILPIT_SMTP_USERNAME", "MAILPIT_SMTP_PASSWORD",
         "MAILPIT_UI_USERNAME", "MAILPIT_UI_PASSWORD", "PITBOX_OIDC_MOBILE_CLIENT_ID",
+        "PITBOX_ZITADEL_RECOVERY_PAT",
     ):
         if not env.get(k):
             fail(f"falta {k} no .env (make init; make zitadel-provision; make openfga-provision)")
+    global PUBLIC, ISSUER, ZLOCAL, ZHOST
     zport = env.get("ZITADEL_PORT", "8080")
-    zitadel = f"http://localhost:{zport}"
+    ZLOCAL = f"http://localhost:{zport}"
+    tailnet_host = provision.tailnet.read_host_from_env(ENV_FILE)
+    if tailnet_host:
+        PUBLIC = f"https://{tailnet_host}"
+        ZHOST = f"{tailnet_host}:{provision.tailnet.ZITADEL_TAILNET_PORT}"
+        ISSUER = f"https://{ZHOST}"
+    else:
+        ISSUER = ZLOCAL
 
     try:
         socket.create_connection(("127.0.0.1", 8081), timeout=0.5).close()
@@ -264,8 +295,8 @@ def main() -> int:
     print("== 1. Compilar e arrancar o pitbox-api")
     subprocess.run(["go", "build", "-o", binary, "./cmd/api"], cwd=ROOT / "backend", check=True)
     child_env = {
-        "PATH": os.environ["PATH"], "PITBOX_ENV": "local", "PITBOX_HTTP_ADDR": "127.0.0.1:8081", "PITBOX_PUBLIC_URL": API,
-        "PITBOX_OIDC_ISSUER": zitadel, "PITBOX_OIDC_CLIENT_ID": env["PITBOX_OIDC_CLIENT_ID"],
+        "PATH": os.environ["PATH"], "PITBOX_ENV": "local", "PITBOX_HTTP_ADDR": "127.0.0.1:8081", "PITBOX_PUBLIC_URL": PUBLIC,
+        "PITBOX_OIDC_ISSUER": ISSUER, "PITBOX_OIDC_CLIENT_ID": env["PITBOX_OIDC_CLIENT_ID"],
         "PITBOX_OIDC_CLIENT_SECRET": env["PITBOX_OIDC_CLIENT_SECRET"], "PITBOX_AUTH_KEYS": env["PITBOX_AUTH_KEYS"],
         "PITBOX_VALKEY_ADDR": f"127.0.0.1:{env.get('VALKEY_PORT', '6379')}", "PITBOX_VALKEY_PASSWORD": env["VALKEY_API_PASSWORD"],
         "PITBOX_DATABASE_URL": f"postgres://pitbox_api:{env['PITBOX_API_PASSWORD']}@127.0.0.1:{env.get('POSTGRES_PORT', '5432')}/pitbox?sslmode=disable",
@@ -275,7 +306,11 @@ def main() -> int:
         "PITBOX_OPENFGA_MODEL_ID": env["PITBOX_OPENFGA_MODEL_ID"],
         "PITBOX_OIDC_MOBILE_CLIENT_ID": env["PITBOX_OIDC_MOBILE_CLIENT_ID"],
         "PITBOX_CORS_ORIGINS": env.get("PITBOX_CORS_ORIGINS", "https://localhost"),
+        "PITBOX_ZITADEL_RECOVERY_PAT": env["PITBOX_ZITADEL_RECOVERY_PAT"],
     }
+    if tailnet_host:
+        child_env["PITBOX_OIDC_LOCAL_DIAL"] = f"127.0.0.1:{zport}"
+        child_env["PITBOX_OIDC_LOCAL_LOGOUT_ISSUER"] = f"https://localhost:{provision.tailnet.ZITADEL_TAILNET_PORT}"
     logf = open(logpath, "w")
     proc = subprocess.Popen([binary], env=child_env, stdout=logf, stderr=subprocess.STDOUT)
     user_id = None
@@ -295,8 +330,8 @@ def main() -> int:
 
         admin_pat = provision.read_pat_from_container()
         login_pat = provision.read_pat_from_container("/zitadel/bootstrap/login-client.pat")
-        admin = provision.Zitadel(zitadel, admin_pat)
-        login = provision.Zitadel(zitadel, login_pat)
+        admin = provision.Zitadel(ZLOCAL, admin_pat, ZHOST)
+        login = provision.Zitadel(ZLOCAL, login_pat, ZHOST)
 
         print("== 2. Utilizador de teste no Zitadel")
         tag = secrets.token_hex(4)
@@ -312,6 +347,8 @@ def main() -> int:
         login_name = admin.call(f"/v2/users/{zitadel_user}", method="GET")["user"]["preferredLoginName"]
         secrets_seen += [email]
         check(True, "utilizador criado (email verificado)")
+
+        last = {}  # a sessão do Zitadel criada pelo último sign_in (para o passo do back-channel)
 
         def sign_in(as_login_name=None, as_password=None):
             current_login = as_login_name or login_name
@@ -332,7 +369,8 @@ def main() -> int:
             sess = login.call("/v2/sessions", {"checks": {"user": {"loginName": current_login}, "password": {"password": current_password}}})
             cb = login.call(f"/v2/oidc/auth_requests/{auth_request}", {"session": {"sessionId": sess["sessionId"], "sessionToken": sess["sessionToken"]}})
             callback = cb["callbackUrl"]
-            check(callback.startswith(API + "/auth/callback?"), "o Zitadel devolve o callback da API")
+            last["session_id"] = sess["sessionId"]
+            check(callback.startswith(PUBLIC + "/auth/callback?"), "o Zitadel devolve o callback da API")
             secrets_seen.extend([sess["sessionToken"], urllib.parse.parse_qs(urllib.parse.urlparse(callback).query)["code"][0], state])
             return callback, ck[0], state
 
@@ -366,7 +404,8 @@ def main() -> int:
         check(st == 200 and info["authenticated"] is True and re.fullmatch(r"[0-9a-f-]{36}", info["user_id"]), "/auth/session -> utilizador autenticado")
         check("pwd" in info["amr"] and info["auth_time"], "amr e auth_time vêm da sessão (ID token)")
         user_id = info["user_id"]
-        check(set(info) == {"authenticated", "user_id", "amr", "auth_time"}, "só identificadores na resposta (sem email, nome nem tokens)")
+        check(set(info) == {"authenticated", "user_id", "amr", "auth_time", "recovery_ready"}, "só identificadores na resposta (sem email, nome nem tokens)")
+        check(info["recovery_ready"] is True, "recovery_ready: a conta com palavra-passe não precisa de aviso")
         x = http_call("GET", API + "/auth/session", {"Cookie": cookie_header(**{"__Host-pitbox_session": session_cookie}), "Origin": "https://evil.example"})
         check(x[0] == 403, "pedido de outra origem -> 403")
 
@@ -374,11 +413,11 @@ def main() -> int:
         bad_logout = http_call("POST", API + "/auth/logout", {"Cookie": cookie_header(**{"__Host-pitbox_session": session_cookie}), "Origin": "https://evil.example"}, b"")
         check(bad_logout[0] == 403, "logout com Origin errado -> 403 (a sessão continua)")
         check(whoami(session_cookie, 200)[0][0] == 200, "a sessão sobreviveu ao logout recusado")
-        lo = http_call("POST", API + "/auth/logout", {"Cookie": cookie_header(**{"__Host-pitbox_session": session_cookie}), "Origin": API}, b"")
+        lo = http_call("POST", API + "/auth/logout", {"Cookie": cookie_header(**{"__Host-pitbox_session": session_cookie}), "Origin": PUBLIC}, b"")
         logout_url = meta_refresh_target(lo[2].decode()) if lo[0] == 200 else ""
-        check(lo[0] == 200 and logout_url.startswith(zitadel + "/oidc/v1/end_session?"), "logout -> 200 com meta refresh para o end_session do Zitadel")
+        check(lo[0] == 200 and logout_url.startswith(ISSUER + "/oidc/v1/end_session?"), "logout -> 200 com meta refresh para o end_session do Zitadel")
         lq = urllib.parse.parse_qs(urllib.parse.urlparse(logout_url).query)
-        check("id_token_hint" in lq and lq["post_logout_redirect_uri"] == [API + "/auth/signed-out"], "id_token_hint e post_logout_redirect_uri")
+        check("id_token_hint" in lq and lq["post_logout_redirect_uri"] == [PUBLIC + "/auth/signed-out"], "id_token_hint e post_logout_redirect_uri")
         hint = lq["id_token_hint"][0].split(".")
         claims = json.loads(base64.urlsafe_b64decode(hint[1] + "=" * (-len(hint[1]) % 4)))
         check(not {"email", "email_verified", "name", "given_name", "family_name", "preferred_username"} & set(claims),
@@ -387,6 +426,87 @@ def main() -> int:
         es = http_call("GET", logout_url)
         check(es[0] in (200, 302, 303), "o Zitadel aceita o end_session")
         check(whoami(session_cookie, 401)[0][0] == 401, "/auth/session -> 401 depois do logout")
+
+        print("== 4b. Back-channel logout (#154, TM-AUTH-20): o Zitadel real termina a sessão do BFF")
+        cb4, login_cookie4, _ = sign_in()
+        r4 = http_call("GET", cb4, {"Cookie": cookie_header(**{"__Host-pitbox_login": login_cookie4})})
+        bc = cookies_of(r4[1]).get("__Host-pitbox_session")
+        check(r4[0] == 200 and bc is not None, "novo login cria a sessão do BFF")
+        bc_cookie = bc[0]
+        secrets_seen.append(bc_cookie)
+        check(whoami(bc_cookie, 200)[0][0] == 200, "a sessão do BFF vale antes de o Zitadel a terminar")
+        # Termina a sessão no Zitadel (sem passar pelo BFF): é ele que tem de avisar o pitbox-api por POST
+        # a /auth/backchannel-logout, do contentor para o anfitrião (host.docker.internal).
+        admin.call(f"/v2/sessions/{last['session_id']}", method="DELETE")
+        ended = False
+        for _ in range(30):  # o Zitadel envia o aviso de forma assíncrona (projeções)
+            if whoami(bc_cookie, 401)[0][0] == 401:
+                ended = True
+                break
+            time.sleep(1)
+        check(ended, "o Zitadel avisou o BFF e a sessão acabou sem esperar pela renovação (back-channel logout)")
+
+        print("== 4c. Recuperação de conta só com passkey (#158, ADR 0034)")
+        recovery = provision.Zitadel(ZLOCAL, env["PITBOX_ZITADEL_RECOVERY_PAT"], ZHOST)
+        # Os contadores por hora de uma execução anterior não podem contar nesta.
+        vk = ["docker", "exec", "-e", f"REDISCLI_AUTH={env['VALKEY_PASSWORD']}", "pitbox-valkey-1", "valkey-cli", "--no-auth-warning"]
+        for key in subprocess.run(vk + ["--scan", "--pattern", "pitbox:rl:rec:*"], capture_output=True, text=True, check=True).stdout.split():
+            subprocess.run(vk + ["DEL", key], capture_output=True, check=True)
+        pk_tag = secrets.token_hex(3)
+        pk_email = f"pk-{pk_tag}@example.test"
+        unknown_email = f"nobody-{pk_tag}@example.test"
+        secrets_seen += [pk_email, unknown_email]
+        pk_user = admin.call("/v2/users/human", {
+            "username": pk_email, "profile": {"givenName": "Passkey", "familyName": "Only"},
+            "email": {"email": pk_email, "isVerified": True},
+        })["userId"]
+        test_users.append(pk_user)
+        passkey = softpasskey.SoftPasskey()
+        try:
+            domain = ZHOST.split(":")[0] if ZHOST else "localhost"
+            reg = admin.call(f"/v2/users/{pk_user}/passkeys", {"authenticator": "PASSKEY_AUTHENTICATOR_UNSPECIFIED", "domain": domain})
+            admin.call(f"/v2/users/{pk_user}/passkeys/{reg['passkeyId']}", {
+                "publicKeyCredential": passkey.registration(reg["publicKeyCredentialCreationOptions"], ISSUER), "passkeyName": "smoke"})
+        finally:
+            passkey.close()
+        methods = admin.call(f"/v2/users/{pk_user}/authentication_methods", method="GET").get("authMethodTypes", [])
+        check(methods == ["AUTHENTICATION_METHOD_TYPE_PASSKEY"], "conta só com passkey criada")
+
+        # O papel mínimo: a conta de serviço manda o link, mas não bloqueia, não repõe palavra-passe e não lê definições.
+        denied = []
+        for path, body, method in ((f"/v2/users/{pk_user}/lock", {}, "POST"), (f"/v2/users/{pk_user}/password_reset", {"returnCode": {}}, "POST"),
+                                   ("/admin/v1/settings/oidc", None, "GET"), (f"/v2/users/{pk_user}", None, "DELETE")):
+            try:
+                recovery.call(path, body, method=method)
+            except provision.ProvisionError as e:
+                denied.append(" HTTP 403 " in str(e))
+        check(denied == [True, True, True, True], "a conta de serviço da recuperação não bloqueia, não repõe palavra-passe, não lê definições nem apaga")
+
+        def recover_request(addr):
+            return http_call("POST", API + "/auth/recover", {"Content-Type": "application/json"}, json.dumps({"email": addr}).encode())
+
+        clear_mailpit(env)
+        answers = [recover_request(a) for a in (pk_email, unknown_email, email)]  # com passkey, desconhecido, só palavra-passe
+        check(all(a[0] == 202 for a in answers), "/auth/recover -> 202 em todos os casos")
+        check(len({a[2] for a in answers}) == 1 and len({(a[1]["Content-Type"], a[1]["Cache-Control"]) for a in answers}) == 1,
+              "a resposta é igual exista a conta ou não (corpo e cabeçalhos)")
+        reg_raw = latest_mailpit_raw(env)
+        reg_msg = BytesParser(policy=policy.default).parsebytes(reg_raw)
+        check(pk_email in str(reg_msg["To"]), "o email com o link de passkey chegou à conta só com passkey")
+        reg_link = email_link(reg_raw, "passkey/set")
+        secrets_seen += [reg_link, urllib.parse.parse_qs(urllib.parse.urlparse(reg_link).query).get("code", [""])[0]]
+        time.sleep(3)  # dá tempo a um email indevido (conta desconhecida, conta com palavra-passe)
+        st, _, body = mailpit_call(env, "GET", "/api/v1/messages?limit=50")
+        check(st == 200 and json.loads(body).get("messages_count", json.loads(body).get("total", 0)) == 1,
+              "só a conta com passkey recebeu email (a desconhecida e a de palavra-passe não)")
+        # Anti-flood por conta: o 4.º pedido da mesma conta na hora não envia.
+        for _ in range(3):
+            recover_request(pk_email)
+        time.sleep(3)
+        st, _, body = mailpit_call(env, "GET", "/api/v1/messages?limit=50")
+        check(json.loads(body).get("messages_count", json.loads(body).get("total", 0)) == 3, "no máximo 3 emails por conta e hora")
+        bad = http_call("POST", API + "/auth/recover", {"Content-Type": "application/json"}, b'{"email":"nao-e-email"}')
+        check(bad[0] == 400, "email inválido -> 400")
 
         print("== 5. Segundo login do mesmo utilizador")
         callback2, lc2, _ = sign_in()
@@ -517,7 +637,15 @@ def main() -> int:
         sql = lambda q: psql(env, q)
         rows = sql(f"SELECT action||':'||coalesce(after->>'reason','') FROM audit.audit_log WHERE actor_id='{user_id}' OR (actor_id='anonymous' AND occurred_at > now() - interval '5 minutes') ORDER BY id")
         got = rows.splitlines()
-        check(got.count("auth.login:") == 3 and got.count("auth.logout:") == 2, "auditoria: 3 logins e 2 logouts do utilizador (web e móvel)")
+        check(got.count("auth.login:") == 4 and got.count("auth.logout:") == 2, "auditoria: 4 logins e 2 logouts do utilizador (web e móvel)")
+        # O back-channel é auditado com o `sub` do IdP como autor (não há sessão do BFF nesse pedido).
+        check(int(sql("SELECT count(*) FROM audit.audit_log WHERE action='auth.backchannel_logout' AND occurred_at > now() - interval '10 minutes'")) >= 1,
+              "auditoria: o back-channel logout ficou registado")
+        rec_rows = sql("SELECT actor_id||':'||coalesce(after->>'reason','') FROM audit.audit_log WHERE action='auth.recovery_requested' AND occurred_at > now() - interval '10 minutes' ORDER BY id").splitlines()
+        check(sum(r.endswith(":sent") for r in rec_rows) == 3 and any(r.endswith(":no_account") for r in rec_rows)
+              and any(r.endswith(":no_passkey") for r in rec_rows) and any(r.endswith(":throttled") for r in rec_rows),
+              "auditoria: pedidos de recuperação com o motivo (enviado, sem conta, sem passkey, limitado)")
+        check(not any("@" in r or "example.test" in r for r in rec_rows), "auditoria: nenhum email, só pseudónimos")
         check(got.count("auth.login:mobile") == 2 and "auth.mobile_reuse:refresh_reuse" in got, "auditoria: 2 logins móveis e o alarme de reutilização")
         check("auth.session_revoked:user_not_active" in got, "auditoria: sessão revogada porque o utilizador foi desativado")
         check(not any(g.startswith("auth.login_failed:") and g.split(":", 1)[1] in ("no_login_state", "state_mismatch") for g in got),
@@ -530,7 +658,7 @@ def main() -> int:
         vkeys = subprocess.run(["docker", "exec", "-e", f"REDISCLI_AUTH={env['VALKEY_PASSWORD']}", "pitbox-valkey-1", "valkey-cli", "--no-auth-warning", "KEYS", "pitbox:*"],
                                capture_output=True, text=True, check=True).stdout
         check(session_cookie not in vkeys and sc2 not in vkeys, "o valor do cookie não está em nenhuma chave do Valkey (só o hash)")
-        jwks = json.loads(http_call("GET", zitadel + "/oauth/v2/keys")[2])
+        jwks = json.loads(http_call("GET", ISSUER + "/oauth/v2/keys")[2])
         check(any(k.get("alg") == "ES256" for k in jwks["keys"]), "o Zitadel assina com ES256 (o login só aceita ES256)")
         print("== 8. Registo, verificação de email e página de confirmação")
         check(bool(env.get("MAILPIT_UI_USERNAME") and env.get("MAILPIT_UI_PASSWORD")),
@@ -639,7 +767,7 @@ def main() -> int:
         codes = []
         for _ in range(11):
             status, _, _ = http_call(
-                "POST", zitadel + "/ui/v2/login",
+                "POST", ISSUER + "/ui/v2/login",
                 {"Content-Type": "application/x-www-form-urlencoded"}, b"",
             )
             codes.append(status)
@@ -668,11 +796,11 @@ def main() -> int:
         logf.close()
         if admin_pat and shortened:
             try:  # nunca deixar o Zitadel com o access token de 5 s
-                provision.Zitadel(zitadel, admin_pat).call("/admin/v1/settings/oidc", {k: f"{v}s" for k, v in provision.OIDC_SETTINGS.items()}, method="PUT")
+                provision.Zitadel(ZLOCAL, admin_pat, ZHOST).call("/admin/v1/settings/oidc", {k: f"{v}s" for k, v in provision.OIDC_SETTINGS.items()}, method="PUT")
             except Exception:  # noqa: BLE001
                 print("auth-smoke: AVISO: repõe os tempos dos tokens com `make zitadel-provision`", file=sys.stderr)
         if admin_pat and 'test_users' in locals():
-            admin = provision.Zitadel(zitadel, admin_pat)
+            admin = provision.Zitadel(ZLOCAL, admin_pat, ZHOST)
             for uid in test_users:
                 try:
                     admin.call(f"/v2/users/{uid}", method="DELETE")

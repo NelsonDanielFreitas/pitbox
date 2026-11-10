@@ -72,6 +72,9 @@ class FakeState:
         self.smtp_password = None
         self.projects = []
         self.apps = []
+        self.machine_users = []  # {"userId", "userName"}
+        self.members = {}  # userId -> roles
+        self.pats = {}  # userId -> [{"id"}]
 
 
 def make_handler(st: FakeState):
@@ -227,6 +230,38 @@ def make_handler(st: FakeState):
             if path.endswith("/GenerateClientSecret"):
                 st.calls.append((method, path))
                 return self._send({"clientSecret": SECRET + "-novo"})
+            if path == "/v2/users":
+                name = body["queries"][0]["userNameQuery"]["userName"]
+                return self._send({"result": [u for u in st.machine_users if u["userName"] == name]})
+            if path == "/management/v1/users/machine":
+                st.calls.append((method, path))
+                uid = f"m{len(st.machine_users) + 1}"
+                st.machine_users.append({"userId": uid, "userName": body["userName"]})
+                return self._send({"userId": uid})
+            if path == "/admin/v1/members/_search":
+                uid = body["queries"][0]["userIdQuery"]["userId"]
+                return self._send({"result": [{"userId": uid, "roles": st.members[uid]}] if uid in st.members else []})
+            if path == "/admin/v1/members" and method == "POST":
+                st.calls.append((method, path))
+                st.members[body["userId"]] = body["roles"]
+                return self._send({})
+            if path.startswith("/admin/v1/members/") and method == "PUT":
+                st.calls.append((method, path))
+                st.members[path.rsplit("/", 1)[1]] = body["roles"]
+                return self._send({})
+            if path.startswith("/management/v1/users/") and path.endswith("/pats/_search"):
+                return self._send({"result": st.pats.get(path.split("/")[4], [])})
+            if path.startswith("/management/v1/users/") and path.endswith("/pats") and method == "POST":
+                st.calls.append((method, path))
+                uid = path.split("/")[4]
+                tid = f"t{sum(len(v) for v in st.pats.values()) + 1}"
+                st.pats.setdefault(uid, []).append({"id": tid})
+                return self._send({"tokenId": tid, "token": f"pat-recuperacao-{tid}"})
+            if path.startswith("/management/v1/users/") and "/pats/" in path and method == "DELETE":
+                st.calls.append((method, path))
+                uid, tid = path.split("/")[4], path.rsplit("/", 1)[1]
+                st.pats[uid] = [x for x in st.pats.get(uid, []) if x["id"] != tid]
+                return self._send({})
             return self._send({"code": 5}, 404)
 
         def do_GET(self):
@@ -278,7 +313,7 @@ class ProvisionTest(unittest.TestCase):
         self.assertIn("https://pc.tail1.ts.net/auth/callback", cfg["redirectUris"])
         self.assertIn("http://localhost:8081/auth/callback", cfg["redirectUris"])
         self.assertIn("https://pc.tail1.ts.net/auth/signed-out", cfg["postLogoutRedirectUris"])
-        self.assertEqual(cfg["backChannelLogoutUri"], "http://localhost:8081/auth/backchannel-logout")
+        self.assertEqual(cfg["backChannelLogoutUri"], "http://host.docker.internal:8081/auth/backchannel-logout")
         self.assertTrue(cfg["developmentMode"])
 
     def test_login_v2_uri_follows_the_profile(self):
@@ -399,6 +434,44 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(self.env.read_text(), before)
         self.assertNotIn(SECRET, out)
 
+    def test_recovery_service_account_has_only_the_minimal_role(self):
+        out = self.run_once()
+        self.assertEqual([u["userName"] for u in self.state.machine_users], [prov.RECOVERY_USER])
+        uid = self.state.machine_users[0]["userId"]
+        self.assertEqual(self.state.members[uid], [prov.RECOVERY_ROLE])
+        env = prov.parse_env(self.env.read_text())
+        self.assertEqual(env["PITBOX_ZITADEL_RECOVERY_PAT"], "pat-recuperacao-t1")
+        self.assertRegex(env["PITBOX_ZITADEL_RECOVERY_PAT_EXPIRES"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        self.assertNotIn("pat-recuperacao", out, "o PAT nunca vai para o stdout")
+
+    def test_recovery_service_account_extra_roles_are_removed(self):
+        self.run_once()
+        uid = self.state.machine_users[0]["userId"]
+        self.state.members[uid] = [prov.RECOVERY_ROLE, "IAM_OWNER"]  # alguém deu poder a mais
+        self.run_once()
+        self.assertEqual(self.state.members[uid], [prov.RECOVERY_ROLE])
+
+    def test_recovery_pat_rotates_when_forced_and_old_ones_are_deleted(self):
+        self.run_once()
+        uid = self.state.machine_users[0]["userId"]
+        out = io.StringIO()
+        with redirect_stdout(out):
+            prov.run(self.base, "http://localhost:8081", PAT, self.env, False, log=print, rotate_recovery_pat=True)
+        self.assertEqual([x["id"] for x in self.state.pats[uid]], ["t2"], "só o PAT novo fica")
+        self.assertEqual(prov.parse_env(self.env.read_text())["PITBOX_ZITADEL_RECOVERY_PAT"], "pat-recuperacao-t2")
+
+    def test_recovery_pat_needs_rotation(self):
+        import datetime
+        now = datetime.datetime(2026, 11, 10, tzinfo=datetime.timezone.utc)
+        ok = {"PITBOX_ZITADEL_RECOVERY_PAT": "x", "PITBOX_ZITADEL_RECOVERY_PAT_EXPIRES": "2027-01-30T00:00:00Z"}
+        self.assertFalse(prov.recovery_pat_needs_rotation(ok, now, False))
+        self.assertTrue(prov.recovery_pat_needs_rotation(ok, now, True))
+        self.assertTrue(prov.recovery_pat_needs_rotation({}, now, False))
+        self.assertTrue(prov.recovery_pat_needs_rotation({"PITBOX_ZITADEL_RECOVERY_PAT": "x"}, now, False), "sem validade registada")
+        soon = dict(ok, PITBOX_ZITADEL_RECOVERY_PAT_EXPIRES="2026-11-20T00:00:00Z")
+        self.assertTrue(prov.recovery_pat_needs_rotation(soon, now, False))
+        self.assertTrue(prov.recovery_pat_needs_rotation(dict(ok, PITBOX_ZITADEL_RECOVERY_PAT_EXPIRES="lixo"), now, False))
+
     def test_an_omitted_otp_attempt_limit_stays_unlimited(self):
         # O JSON do Zitadel omite os valores zero: numa instância nova o campo não existe.
         # Não podemos inventar 10 tentativas, senão ligamos um bloqueio que não existia.
@@ -493,7 +566,19 @@ class PureTest(unittest.TestCase):
             cfg["postLogoutRedirectUris"],
             ["http://localhost:8081/auth/signed-out", "http://localhost:5173/auth/signed-out"],
         )
-        self.assertEqual(cfg["backChannelLogoutUri"], "http://localhost:8081/auth/backchannel-logout")
+        self.assertEqual(cfg["backChannelLogoutUri"], "http://host.docker.internal:8081/auth/backchannel-logout")
+
+    def test_backchannel_uri_is_reachable_from_the_zitadel_container(self):
+        # localhost dentro do contentor é o próprio Zitadel (#154, TM-AUTH-20).
+        for base, want in {
+            "http://localhost:8081": "http://host.docker.internal:8081/auth/backchannel-logout",
+            "http://127.0.0.1:9000": "http://host.docker.internal:9000/auth/backchannel-logout",
+            "https://api.example.com": "https://api.example.com/auth/backchannel-logout",
+        }.items():
+            self.assertEqual(prov.backchannel_logout_uri(base), want)
+        # o perfil telemóvel não muda o back-channel (o Zitadel bloqueia ts.net)
+        cfg = prov.desired_oidc_config("http://localhost:8081", "pc.tail1.ts.net")
+        self.assertEqual(cfg["backChannelLogoutUri"], "http://host.docker.internal:8081/auth/backchannel-logout")
 
     def test_an_extra_local_port_is_kept_first(self):
         cfg = prov.desired_oidc_config("http://localhost:9000")

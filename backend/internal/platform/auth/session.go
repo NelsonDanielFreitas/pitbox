@@ -343,7 +343,8 @@ type SessionInfo struct {
 	CreatedAt time.Time
 	UserAgent string
 	IP        string
-	Current   bool // true if this is the session that asked for the list
+	Current   bool   // true if this is the session that asked for the list
+	Kind      string // KindWeb or KindMobile
 }
 
 // ListBySubject returns the active sessions of a user. The excludeRef session is marked
@@ -371,6 +372,7 @@ func (s *Store) ListBySubject(ctx context.Context, sub, excludeRef string) ([]Se
 			UserAgent: sess.UserAgent,
 			IP:        sess.IP,
 			Current:   ref == excludeRef,
+			Kind:      sess.Kind,
 		})
 	}
 	// Deterministic order for tests and stable UI.

@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/auth/principal"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/interceptors"
 	"github.com/NelsonDanielFreitas/pitbox/backend/internal/platform/ratelimit"
 )
@@ -37,6 +38,7 @@ const (
 	mobileErrInvalid         = "invalid_request"
 	mobileErrUnauthenticated = "unauthenticated"
 	mobileErrNotAllowed      = "not_allowed"
+	mobileErrWeakFactor      = "weak_factor"
 	mobileErrEmailNotVerif   = "email_not_verified"
 	mobileErrRateLimited     = "rate_limited"
 	mobileErrUnavailable     = "unavailable"
@@ -130,9 +132,30 @@ func (h *Handler) mobileStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SessionPub    string `json:"session_pub"`
 		CodeChallenge string `json:"code_challenge"`
+		// StepUp asks for a reauthentication of the session the Bearer belongs to: the same
+		// account must come back, with a strong factor, and the new session replaces the old.
+		StepUp bool `json:"step_up"`
 	}
 	if !decodeMobileBody(w, r, &req) {
 		return
+	}
+	var stepUpRef, stepUpSub string
+	if req.StepUp {
+		bearer, present := BearerFromHeader(r.Header.Values("Authorization"))
+		if !present || bearer == "" || SessionTokenFromHeader(r.Header) != "" {
+			mobileFail(w, http.StatusUnauthorized, mobileErrUnauthenticated)
+			return
+		}
+		p, err := h.Authn.AuthenticateBearer(ctx, bearer)
+		switch {
+		case errors.Is(err, ErrUnauthenticated):
+			mobileFail(w, http.StatusUnauthorized, mobileErrUnauthenticated)
+			return
+		case err != nil:
+			mobileFail(w, http.StatusServiceUnavailable, mobileErrUnavailable)
+			return
+		}
+		stepUpRef, stepUpSub = p.SessionRef, p.Subject
 	}
 	spki, _, err := parseDeviceKey(req.SessionPub)
 	if err != nil || !validToken(req.CodeChallenge) { // an S256 challenge is 43 base64url characters
@@ -155,7 +178,9 @@ func (h *Handler) mobileStart(w http.ResponseWriter, r *http.Request) {
 		mobileFail(w, http.StatusServiceUnavailable, mobileErrUnavailable)
 		return
 	}
-	if err := h.Store.PutPending(ctx, state, MobilePending{Challenge: req.CodeChallenge, Nonce: nonce, DevicePub: spki}); err != nil {
+	if err := h.Store.PutPending(ctx, state, MobilePending{
+		Challenge: req.CodeChallenge, Nonce: nonce, DevicePub: spki, StepUpRef: stepUpRef, StepUpSub: stepUpSub,
+	}); err != nil {
 		reason := "store"
 		if errors.Is(err, ErrPendingFull) {
 			reason = "pending_full"
@@ -284,6 +309,23 @@ func (h *Handler) mobileToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A reauthentication must come back as the same account, with a strong factor: anything
+	// else is refused before a session exists.
+	if pending.StepUpRef != "" {
+		switch {
+		case subtle.ConstantTimeCompare([]byte(claims.Subject), []byte(pending.StepUpSub)) != 1:
+			h.discardTokensFor(ctx, tok, true)
+			h.failLogin(ctx, r, "step_up_other_account", claims.Subject)
+			mobileFail(w, http.StatusForbidden, mobileErrNotAllowed)
+			return
+		case !principal.IsStrongFactor(claims.AMR):
+			h.discardTokensFor(ctx, tok, true)
+			h.failLogin(ctx, r, "step_up_weak_factor", claims.Subject)
+			mobileFail(w, http.StatusForbidden, mobileErrWeakFactor)
+			return
+		}
+	}
+
 	// 4. The session, bound to the phone's key, and its first Bearer.
 	meta := interceptors.RequestMeta(r, h.ClientIPHeader)
 	sessIP := ""
@@ -322,7 +364,31 @@ func (h *Handler) mobileToken(w http.ResponseWriter, r *http.Request) {
 		mobileFail(w, http.StatusServiceUnavailable, mobileErrUnavailable)
 		return
 	}
+	if pending.StepUpRef != "" {
+		h.replaceSession(ctx, pending.StepUpRef, ref)
+	}
 	mobileJSON(w, bearerResponse{Session: ref, AccessToken: bearer, ExpiresIn: int(BearerTTL / time.Second)})
+}
+
+// replaceSession ends the session a reauthentication replaced (its tokens at the identity
+// provider too). The new session is already valid, so a failure here only leaves the old one
+// to expire; the user can end it from the list of sessions.
+func (h *Handler) replaceSession(ctx context.Context, oldRef, newRef string) {
+	if oldRef == newRef {
+		return
+	}
+	old, err := h.Store.GetByRef(ctx, oldRef)
+	if err != nil {
+		return
+	}
+	if old.RefreshToken != "" {
+		if err := h.revokeFor(ctx, old.RefreshToken, true); err != nil {
+			h.Log.WarnContext(ctx, "replaced session: revocation failed")
+		}
+	}
+	if err := h.Store.Delete(ctx, old); err != nil {
+		h.Log.ErrorContext(ctx, "replaced session: delete", slog.String("reason", "store"))
+	}
 }
 
 // bearerResponse is what the app gets after a login or a renewal. Session is the session's

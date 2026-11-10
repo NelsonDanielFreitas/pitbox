@@ -149,3 +149,7 @@ make down                # opcional: para os contentores (os dados ficam)
 - `adb devices` vazio ou `offline`: repete `adb connect` com a porta atual (muda quando a depuração sem fios é religada). `adb pair` só se o telemóvel deixou de reconhecer o PC.
 - `gradlew` não encontra Java ou o SDK: corre dentro do repositório (o `mise` ativa o Java 21) e confirma `app/android/local.properties` com `sdk.dir=/home/nelson/Android/Sdk`.
 - Mudaste de máquina ou de nome Tailscale: atualiza `PITBOX_TAILNET_HOST` em `deploy/compose/.env`.
+
+## Telemóvel: `make app-preview` tem de estar a correr
+
+O `tailscale serve` expõe `https://<host>` a partir do `vite preview` (porta 4173), que também faz de proxy da API. Sem `make app-preview` o telemóvel recebe 502 e a app mostra «Sessão offline» (e um erro de CORS no logcat, que é só consequência). Ordem: `make up`, `make run-api`, `make app-preview`, `make serve-phone`, `make android-debug && make android-install`. A página «Conta e segurança» está em `/account` (menu «Conta»).

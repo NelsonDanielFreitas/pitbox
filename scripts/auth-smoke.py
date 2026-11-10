@@ -571,6 +571,19 @@ def main() -> int:
         mix = http_call("GET", API + "/auth/session", dict(bearer, Cookie=cookie_header(**{"__Host-pitbox_session": sc2})))
         check(mix[0] == 401, "Bearer e cookie no mesmo pedido -> 401")
         check(http_call("GET", API + "/auth/session", {"Authorization": "Bearer " + "a.b.c"})[0] == 401, "um JWT como Bearer -> 401")
+        # A conta (a página «Conta e segurança»): o Bearer chega aos mesmos pontos que o cookie.
+        sl = http_call("GET", API + "/auth/sessions", bearer)
+        sl_body = json.loads(sl[2]) if sl[0] == 200 else {}
+        check(sl[0] == 200 and any(x.get("current") and x.get("kind") == "mobile" for x in sl_body.get("sessions", []))
+              and all(set(x) == {"ref", "kind", "created_at", "auth_time", "user_agent", "ip", "current"} for x in sl_body["sessions"]),
+              "GET /auth/sessions com o Bearer -> a lista, com a sessão móvel atual e só os campos do contrato")
+        rs = http_call("GET", API + "/auth/recovery-codes", bearer)
+        check(rs[0] == 200 and set(json.loads(rs[2])) == {"unused"}, "GET /auth/recovery-codes com o Bearer -> só a contagem")
+        check(http_call("POST", API + "/auth/recovery-codes", bearer)[0] == 403,
+              "gerar códigos com um início de sessão sem fator forte -> 403 (passo-up)")
+        check(http_call("GET", API + "/auth/sessions", {"Authorization": "Bearer " + "a.b.c"})[0] == 401, "/auth/sessions com um JWT como Bearer -> 401")
+        mix_s = http_call("GET", API + "/auth/sessions", dict(bearer, Cookie=cookie_header(**{"__Host-pitbox_session": sc2})))
+        check(mix_s[0] == 401, "/auth/sessions com Bearer e cookie juntos -> 401")
         pre = http_call("OPTIONS", API + "/auth/session", {"Origin": "https://localhost", "Access-Control-Request-Method": "GET", "Access-Control-Request-Headers": "authorization"})
         check(pre[0] == 204 and pre[1].get("Access-Control-Allow-Origin") == "https://localhost" and "Access-Control-Allow-Credentials" not in pre[1], "CORS: preflight do WebView -> 204, sem credenciais")
         pre = http_call("OPTIONS", API + "/auth/session", {"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})

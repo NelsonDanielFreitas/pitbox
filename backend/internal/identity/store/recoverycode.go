@@ -32,6 +32,17 @@ func (r *RecoveryCodes) Replace(ctx context.Context, userID, keyID string, codeH
 	return nil
 }
 
+// CountUnused returns how many unused recovery codes the user has.
+func (r *RecoveryCodes) CountUnused(ctx context.Context, userID string) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	var n int
+	if err := r.db.QueryRow(ctx, `SELECT identity.count_unused_recovery_codes($1::uuid)`, userID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("count recovery codes: %w", err)
+	}
+	return n, nil
+}
+
 // Consume marks one code as used if any candidate hash exists and is unused for the user.
 func (r *RecoveryCodes) Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error) {
 	if len(codeHashes) == 0 || len(codeHashes) > 16 {

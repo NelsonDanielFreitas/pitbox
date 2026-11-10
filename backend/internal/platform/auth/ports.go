@@ -34,6 +34,8 @@ type RecoveryCodeStore interface {
 	Replace(ctx context.Context, userID, keyID string, codeHashes [][]byte) error
 	// Consume marks one code as used if any of the candidate hashes exists and is unused.
 	Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error)
+	// CountUnused returns how many unused codes the user has (never the codes themselves).
+	CountUnused(ctx context.Context, userID string) (int, error)
 }
 
 // ActorKind mirrors the actor_kind column of audit.audit_log.

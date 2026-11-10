@@ -56,6 +56,11 @@ func (d *RecoveryCodeDirectory) Replace(ctx context.Context, userID, keyID strin
 	return d.codes.Replace(ctx, userID, keyID, codeHashes)
 }
 
+// CountUnused returns how many unused recovery codes the user has.
+func (d *RecoveryCodeDirectory) CountUnused(ctx context.Context, userID string) (int, error) {
+	return d.codes.CountUnused(ctx, userID)
+}
+
 // Consume marks one code as used if any candidate hash exists and is unused for the user.
 func (d *RecoveryCodeDirectory) Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error) {
 	return d.codes.Consume(ctx, userID, codeHashes)

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -65,6 +66,13 @@ type Handler struct {
 	Log                *slog.Logger
 	// Refusals counts callbacks refused before their state was validated (nil: not counted).
 	Refusals RefusalCounter
+	// Accounts, RecoverThrottle and EmailPseudonyms serve /auth/recover and recovery_ready
+	// (#158, ADR 0034). Accounts nil: the feature is off (the endpoint still answers 202).
+	Accounts        AccountDirectory
+	RecoverThrottle RecoveryThrottler
+	EmailPseudonyms *EmailPseudonymizer
+	recoverySlots   recoverer
+	readiness       readinessCache
 	// Limiter limits the public mobile endpoints per client address (nil: unlimited, tests only).
 	Limiter        PublicLimiter
 	PublicURL      string // origin the browser sees, without a trailing slash
@@ -87,6 +95,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+BackChannelLogoutPath, h.backchannelLogout)
 	mux.HandleFunc("POST "+RecoveryCodesPath, h.generateRecoveryCodes)
 	mux.HandleFunc("POST "+RecoveryCodeConsumePath, h.consumeRecoveryCode)
+	mux.HandleFunc("POST "+RecoverPath, h.recoverAccount)
 	if h.Provider.MobileEnabled() {
 		h.mountMobile(mux)
 	}
@@ -820,7 +829,10 @@ func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		UserID        string    `json:"user_id"`
 		AMR           []string  `json:"amr"`
 		AuthTime      time.Time `json:"auth_time"`
-	}{true, p.UserID, amr, p.AuthTime})
+		// RecoveryReady is false only for an account whose sole credential is a passkey and
+		// that has no recovery code; absent when unknown (#158).
+		RecoveryReady *bool `json:"recovery_ready,omitempty"`
+	}{true, p.UserID, amr, p.AuthTime, h.recoveryReady(r.Context(), p)})
 }
 
 // listSessions returns the active sessions of the authenticated user. It never includes
@@ -990,6 +1002,7 @@ func (h *Handler) generateRecoveryCodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.readiness.forget(sess.UserID)
 	if err := h.Audit.Record(ctx, AuditEvent{
 		Action: "auth.recovery_codes_generated", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(),
 		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
@@ -1150,8 +1163,8 @@ func (h *Handler) verifyLogoutToken(ctx context.Context, raw string) (logoutToke
 	if err != nil {
 		return empty, errors.New("provider_unavailable")
 	}
-	idt, err := prov.verifier.Verify(ctx, raw)
-	if err != nil {
+	idt, err := prov.logoutVerifier.Verify(ctx, raw)
+	if err != nil || !slices.Contains(prov.logoutIssuers, idt.Issuer) {
 		return empty, errors.New("logout_token_invalid")
 	}
 	var c logoutTokenClaims

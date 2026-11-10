@@ -425,6 +425,46 @@ func TestOIDCLocalDial(t *testing.T) {
 	}
 }
 
+func TestOIDCLocalLogoutIssuer(t *testing.T) {
+	t.Parallel()
+
+	const issuer = "https://pc.tail1234.ts.net:8443"
+	phone := map[string]string{"PITBOX_OIDC_ISSUER": issuer, "PITBOX_OIDC_LOCAL_DIAL": "127.0.0.1:8080"}
+	with := func(alias string) map[string]string {
+		m := map[string]string{"PITBOX_OIDC_LOCAL_LOGOUT_ISSUER": alias}
+		for k, v := range phone {
+			m[k] = v
+		}
+		return m
+	}
+	tests := []struct {
+		name    string
+		env     map[string]string
+		wantErr string
+	}{
+		{"valid", localAuth(with("https://localhost:8443")), ""},
+		{"loopback IP", localAuth(with("http://127.0.0.1:8443")), ""},
+		{"without local dial", localAuth(map[string]string{"PITBOX_OIDC_LOCAL_LOGOUT_ISSUER": "https://localhost:8443"}), "only allowed with"},
+		{"not local: refused", hosted("staging", with("https://localhost:8443")), "only allowed"},
+		{"another host", localAuth(with("https://evil.example")), "bare http(s) origin"},
+		{"with a path", localAuth(with("https://localhost:8443/x")), "bare http(s) origin"},
+		{"with credentials", localAuth(with("https://a@localhost:8443")), "bare http(s) origin"},
+		{"other scheme", localAuth(with("ftp://localhost:8443")), "bare http(s) origin"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := LoadFrom(tt.env)
+			switch {
+			case tt.wantErr == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
+				t.Fatalf("err = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestIsTailnetHost(t *testing.T) {
 	t.Parallel()
 	for h, want := range map[string]bool{
@@ -434,5 +474,30 @@ func TestIsTailnetHost(t *testing.T) {
 		if got := IsTailnetHost(h); got != want {
 			t.Errorf("IsTailnetHost(%q) = %v, want %v", h, got, want)
 		}
+	}
+}
+
+func TestZitadelRecoveryPATValidation(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		pat     string
+		wantErr bool
+	}{
+		"off":     {"", false},
+		"token":   {"abcDEF123_-.", false},
+		"space":   {"a b", true},
+		"newline": {"a\nb", true},
+		"huge":    {strings.Repeat("a", 513), true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := LoadFrom(localAuth(map[string]string{"PITBOX_ZITADEL_RECOVERY_PAT": tc.pat}))
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if err != nil && tc.pat != "" && strings.Contains(err.Error(), tc.pat) {
+				t.Fatal("the token is repeated in the error")
+			}
+		})
 	}
 }

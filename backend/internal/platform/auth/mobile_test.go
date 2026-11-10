@@ -416,11 +416,11 @@ func TestMobileStartRefusals(t *testing.T) {
 func TestMobileEndpointsAreOffWhenMobileIsNotConfigured(t *testing.T) {
 	t.Parallel()
 	f := newFlowHarness(t)
-	h := *f.h
-	h.Provider = NewProvider(ProviderConfig{
+	// A new Handler (not a copy of f.h: it holds locks) whose provider has no mobile client.
+	h := &Handler{Provider: NewProvider(ProviderConfig{
 		Issuer: f.idp.srv.URL, ClientID: f.idp.clientID, ClientSecret: f.idp.clientSecret,
 		RedirectURL: publicURL + CallbackPath, AllowedAlgs: []string{"ES256"}, Now: f.h.Now,
-	})
+	})}
 	mux := http.NewServeMux()
 	h.Mount(mux)
 	for _, p := range []string{MobileStartPath, MobileTokenPath, MobileRefreshPath, MobileLogoutPath} {

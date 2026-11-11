@@ -400,6 +400,30 @@ DO $$ DECLARE n int; BEGIN
   IF n <> 0 THEN RAISE EXCEPTION 'FALHOU: utilizador sem códigos devia dar 0, vi %', n; END IF;
 END $$;
 
+-- Recuperação pelo sub do IdP (F2-06b, ADR 0035): resultados fixos, uso único, o resto é gasto.
+DO $$ DECLARE sub text; r text; n int; BEGIN
+  SELECT idp_subject INTO sub FROM identity.user_account WHERE id = app.current_user_id();
+  -- O utilizador acima ficou com 2 códigos por usar (01 e 03) no teste anterior.
+  r := identity.attempt_recovery_by_subject('sub-que-nao-existe', ARRAY[]::bytea[]);
+  IF r <> 'unknown_user' THEN RAISE EXCEPTION 'FALHOU: sub desconhecido deu %', r; END IF;
+  r := identity.attempt_recovery_by_subject(sub, ARRAY[]::bytea[]);
+  IF r <> 'invalid' THEN RAISE EXCEPTION 'FALHOU: sem código devia dar invalid, deu %', r; END IF;
+  r := identity.attempt_recovery_by_subject(sub, ARRAY[decode(repeat('09', 32), 'hex')]);
+  IF r <> 'invalid' THEN RAISE EXCEPTION 'FALHOU: código errado devia dar invalid, deu %', r; END IF;
+  r := identity.attempt_recovery_by_subject(sub, ARRAY[decode(repeat('01', 32), 'hex')]);
+  IF r <> 'consumed' THEN RAISE EXCEPTION 'FALHOU: código certo devia dar consumed, deu %', r; END IF;
+  r := identity.attempt_recovery_by_subject(sub, ARRAY[decode(repeat('01', 32), 'hex')]);
+  IF r <> 'invalid' THEN RAISE EXCEPTION 'FALHOU: o código é de uso único, deu %', r; END IF;
+  n := identity.invalidate_recovery_codes_by_subject(sub);
+  IF n <> 1 THEN RAISE EXCEPTION 'FALHOU: esperava gastar 1 código, gastou %', n; END IF;
+  r := identity.attempt_recovery_by_subject(sub, ARRAY[decode(repeat('03', 32), 'hex')]);
+  IF r <> 'no_codes' THEN RAISE EXCEPTION 'FALHOU: sem códigos por usar devia dar no_codes, deu %', r; END IF;
+  BEGIN
+    PERFORM identity.attempt_recovery_by_subject(sub, ARRAY[decode('00', 'hex')]);
+    RAISE EXCEPTION 'FALHOU: hash curto aceite';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+END $$;
+
 -- Equipa: category e club têm limites de tamanho (alinhados com o protovalidate)
 DO $$ DECLARE v text; BEGIN
   FOREACH v IN ARRAY ARRAY['', repeat('x', 41)] LOOP

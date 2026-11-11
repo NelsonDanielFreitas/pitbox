@@ -3,6 +3,7 @@
 - **Estado:** Aceite (confirmado pelo Nelson em 2026-11-09); implementado (F2-06b, 2026-11-10)
 - **Data:** 2026-11-09
 - **Cartão:** F2-06b (#166), issue #158
+- **Emenda:** [ADR 0035](0035-codigos-de-recuperacao-como-segundo-fator.md): uma conta com códigos de recuperação exige email + código.
 - **Relacionado:** [ADR 0019](0019-defesa-palavra-passe-login.md) (defesa de palavra-passe e login, anti-enumeração parcial), [ADR 0032](0032-login-movel-e-sessao-ligada-ao-dispositivo.md); ameaças TM-AUTH-24 e TM-AUTH-20.
 
 ## Contexto

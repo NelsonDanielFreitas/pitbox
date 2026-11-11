@@ -1225,6 +1225,40 @@ type fakeRecoveryStore struct {
 	hashes map[string]map[string]struct{}
 	used   map[string]map[string]struct{}
 	keyIDs map[string]string
+	// subjects maps an identity provider subject to the user id (for AttemptBySubject).
+	subjects map[string]string
+}
+
+func (r *fakeRecoveryStore) AttemptBySubject(_ context.Context, subject string, codeHashes [][]byte) (RecoveryAttempt, error) {
+	r.mu.Lock()
+	userID, ok := r.subjects[subject]
+	r.mu.Unlock()
+	if !ok {
+		return AttemptUnknownUser, nil
+	}
+	if n, _ := r.CountUnused(context.Background(), userID); n == 0 {
+		return AttemptNoCodes, nil
+	}
+	if len(codeHashes) == 0 {
+		return AttemptInvalid, nil
+	}
+	if ok, _ := r.Consume(context.Background(), userID, codeHashes); ok {
+		return AttemptConsumed, nil
+	}
+	return AttemptInvalid, nil
+}
+
+func (r *fakeRecoveryStore) InvalidateBySubject(_ context.Context, subject string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	userID := r.subjects[subject]
+	if r.used[userID] == nil {
+		r.used[userID] = map[string]struct{}{}
+	}
+	for h := range r.hashes[userID] {
+		r.used[userID][h] = struct{}{}
+	}
+	return nil
 }
 
 func (r *fakeRecoveryStore) Replace(_ context.Context, userID, keyID string, codeHashes [][]byte) error {

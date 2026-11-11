@@ -169,3 +169,92 @@ func TestRecoveryCodesAgainstPostgres(t *testing.T) {
 		}
 	})
 }
+
+// The recovery that has no session finds the account by its identity provider subject (ADR 0035).
+func TestAttemptRecoveryBySubjectAgainstPostgres(t *testing.T) {
+	t.Parallel()
+	pg := testutil.StartPostgres(t)
+	pool, err := db.Open(context.Background(), pg.URL)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	ctx := context.Background()
+	logins := store.NewLogins(pool)
+	codes := store.NewRecoveryCodes(pool)
+	ana, err := logins.ResolveLogin(ctx, "sub-ana", "ana@exemplo.pt", "Ana")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rui, err := logins.ResolveLogin(ctx, "sub-rui", "rui@exemplo.pt", "Rui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := func(s string) []byte {
+		sum := sha256.Sum256([]byte(s))
+		return sum[:]
+	}
+	if err := codes.Replace(ctx, ana, "k1", [][]byte{hash("A1"), hash("A2"), hash("A3")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := codes.Replace(ctx, rui, "k1", [][]byte{hash("R1")}); err != nil {
+		t.Fatal(err)
+	}
+	attempt := func(sub string, hs ...[]byte) store.RecoveryAttempt {
+		t.Helper()
+		got, err := codes.AttemptBySubject(ctx, sub, hs)
+		if err != nil {
+			t.Fatalf("attempt: %v", err)
+		}
+		return got
+	}
+
+	if got := attempt("sub-nobody"); got != store.AttemptUnknownUser {
+		t.Fatalf("unknown subject: %s", got)
+	}
+	if got := attempt("sub-ana"); got != store.AttemptInvalid {
+		t.Fatalf("no candidate on an account with codes: %s", got)
+	}
+	if got := attempt("sub-ana", hash("nope")); got != store.AttemptInvalid {
+		t.Fatalf("wrong code: %s", got)
+	}
+	if got := attempt("sub-ana", hash("R1")); got != store.AttemptInvalid {
+		t.Fatalf("a code of another account: %s", got)
+	}
+	if n, _ := codes.CountUnused(ctx, rui); n != 1 {
+		t.Fatalf("another account's code was spent: %d left", n)
+	}
+
+	// Two requests with the same code in parallel: exactly one passes.
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	consumed := 0
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if got, err := codes.AttemptBySubject(ctx, "sub-ana", [][]byte{hash("A1")}); err == nil && got == store.AttemptConsumed {
+				mu.Lock()
+				consumed++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if consumed != 1 {
+		t.Fatalf("%d parallel requests used the same code, want exactly 1", consumed)
+	}
+
+	if err := codes.InvalidateBySubject(ctx, "sub-ana"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := codes.CountUnused(ctx, ana); n != 0 {
+		t.Fatalf("%d codes left after the invalidation", n)
+	}
+	if n, _ := codes.CountUnused(ctx, rui); n != 1 {
+		t.Fatalf("the invalidation touched another account: %d left", n)
+	}
+	if got := attempt("sub-ana", hash("A2")); got != store.AttemptNoCodes {
+		t.Fatalf("an account with no unused code: %s", got)
+	}
+}

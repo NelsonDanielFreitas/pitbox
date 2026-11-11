@@ -70,6 +70,8 @@ type Handler struct {
 	// (#158, ADR 0034). Accounts nil: the feature is off (the endpoint still answers 202).
 	Accounts        AccountDirectory
 	RecoverThrottle RecoveryThrottler
+	// SessionRevoker ends the sessions of an account after a recovery with a code (nil: none).
+	SessionRevoker  SessionRevoker
 	EmailPseudonyms *EmailPseudonymizer
 	recoverySlots   recoverer
 	readiness       readinessCache
@@ -895,6 +897,21 @@ func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
 		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "keyring"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
+	}
+
+	// Codes are single-use and 128 bits, so guessing is hopeless; the limit keeps the audit
+	// trail and the database from being flooded and meets NIST 800-63B-4 3.2.2 (ADR 0035).
+	if h.RecoverThrottle != nil {
+		within, err := h.RecoverThrottle.Hit(ctx, recoverThrottlePath+"consume:"+sess.UserID, recoverMaxConsumePerUser, recoverWindow)
+		if err != nil {
+			h.Log.WarnContext(ctx, "consume recovery code", slog.String("reason", recoverReasonThrottleIn))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if !within {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
 	}
 
 	hashes := h.RecoveryCodeHasher.Hashes(req.Code)

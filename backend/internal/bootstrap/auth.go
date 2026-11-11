@@ -117,7 +117,8 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 		Users: identity.NewLoginDirectory(pool), RecoveryCodes: identity.NewRecoveryCodeDirectory(pool),
 		RecoveryCodeHasher: recoveryHasher,
 		Audit:              auditor, Log: logger, Refusals: refusals,
-		Limiter: limiter, PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
+		RecoverThrottle: auth.NewValkeyThrottler(vk),
+		Limiter:         limiter, PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
 	}
 	if cfg.ZitadelRecoveryPAT != "" {
 		// Passkey recovery (#158): the Zitadel account has one custom role (read users, write
@@ -133,7 +134,7 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 			return nil, fmt.Errorf("email pseudonyms: %w", err)
 		}
 		handler.Accounts, handler.EmailPseudonyms = accounts, pseudonyms
-		handler.RecoverThrottle = auth.NewValkeyThrottler(vk)
+		handler.SessionRevoker = store
 	}
 	authenticator := &auth.Authenticator{Provider: provider, Store: store, Audit: auditor, Log: logger, Now: now}
 	handler.Authn = authenticator

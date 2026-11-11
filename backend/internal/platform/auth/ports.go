@@ -36,6 +36,28 @@ type RecoveryCodeStore interface {
 	Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error)
 	// CountUnused returns how many unused codes the user has (never the codes themselves).
 	CountUnused(ctx context.Context, userID string) (int, error)
+	// AttemptBySubject tries a code for the account with this identity provider subject, for
+	// the recovery of someone with no session (ADR 0035). No candidates is allowed: the
+	// answer then says whether the account has codes to ask for.
+	AttemptBySubject(ctx context.Context, subject string, codeHashes [][]byte) (RecoveryAttempt, error)
+	// InvalidateBySubject spends every unused code of the account (after a recovery).
+	InvalidateBySubject(ctx context.Context, subject string) error
+}
+
+// RecoveryAttempt is the fixed outcome of AttemptBySubject.
+type RecoveryAttempt string
+
+// The outcomes of AttemptBySubject.
+const (
+	AttemptUnknownUser RecoveryAttempt = "unknown_user" // the account never signed in here
+	AttemptNoCodes     RecoveryAttempt = "no_codes"     // no unused code: there is no second factor to ask for
+	AttemptInvalid     RecoveryAttempt = "invalid"      // the account has codes and none of the candidates fits
+	AttemptConsumed    RecoveryAttempt = "consumed"     // a candidate fitted and is now spent
+)
+
+// SessionRevoker ends every session of an account (the Store does).
+type SessionRevoker interface {
+	DeleteAllBySubject(ctx context.Context, sub string) error
 }
 
 // ActorKind mirrors the actor_kind column of audit.audit_log.

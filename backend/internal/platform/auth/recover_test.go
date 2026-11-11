@@ -69,6 +69,15 @@ type fakeThrottle struct {
 	err    error
 }
 
+func (t *fakeThrottle) Count(_ context.Context, key string) (int64, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.err != nil {
+		return 0, t.err
+	}
+	return t.counts[key], nil
+}
+
 func (t *fakeThrottle) Hit(_ context.Context, key string, max int64, _ time.Duration) (bool, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -88,6 +97,28 @@ type recoverRig struct {
 	throttle *fakeThrottle
 	audit    *fakeAudit
 	logs     *syncLog
+	codes    *fakeRecoveryStore
+	revoker  *fakeRevoker
+	hasher   *RecoveryCodeHasher
+}
+
+// fakeRevoker records the accounts whose sessions were ended.
+type fakeRevoker struct {
+	mu   sync.Mutex
+	subs []string
+}
+
+func (r *fakeRevoker) DeleteAllBySubject(_ context.Context, sub string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.subs = append(r.subs, sub)
+	return nil
+}
+
+func (r *fakeRevoker) ended() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.subs...)
 }
 
 const (
@@ -114,9 +145,13 @@ func newRecoverRig(t *testing.T) *recoverRig {
 		throttle: &fakeThrottle{},
 		audit:    &fakeAudit{},
 		logs:     &syncLog{},
+		codes:    &fakeRecoveryStore{subjects: map[string]string{"1001": "u1", "1002": "u2"}},
+		revoker:  &fakeRevoker{},
+		hasher:   recoveryHasher(t, key("k1", 1)),
 	}
 	rig.h = &Handler{
 		Accounts: rig.accounts, RecoverThrottle: rig.throttle, EmailPseudonyms: pseudo,
+		RecoveryCodes: rig.codes, RecoveryCodeHasher: rig.hasher, SessionRevoker: rig.revoker,
 		Audit: rig.audit, Log: slog.New(slog.NewJSONHandler(rig.logs, nil)),
 		Limiter: fixedLimiter{ratelimit.Allowed}, Now: time.Now,
 	}
@@ -263,18 +298,18 @@ func TestRecoverThrottlesPerEmailPerIPAndGlobally(t *testing.T) {
 	t.Run("per email", func(t *testing.T) {
 		t.Parallel()
 		rig := newRecoverRig(t)
-		for i := 0; i < recoverMaxPerEmail+3; i++ {
+		for i := 0; i < recoverMaxSentPerEmail+3; i++ {
 			if w := rig.email(passkeyEmail); w.Code != http.StatusAccepted {
 				t.Fatalf("status %d", w.Code)
 			}
 		}
-		waitFor(t, "all requests worked", func() bool { return len(rig.audit.actions()) == recoverMaxPerEmail+3 })
-		if got := rig.accounts.sentCount(); got != recoverMaxPerEmail {
-			t.Fatalf("sent %d links, want %d: the inbox of one address is not a mail cannon", got, recoverMaxPerEmail)
+		waitFor(t, "all requests worked", func() bool { return len(rig.audit.actions()) == recoverMaxSentPerEmail+3 })
+		if got := rig.accounts.sentCount(); got != recoverMaxSentPerEmail {
+			t.Fatalf("sent %d links, want %d: the inbox of one address is not a mail cannon", got, recoverMaxSentPerEmail)
 		}
 		// Another address is not affected.
 		rig.email(passwordEmail)
-		waitFor(t, "other address", func() bool { return len(rig.audit.actions()) == recoverMaxPerEmail+4 })
+		waitFor(t, "other address", func() bool { return len(rig.audit.actions()) == recoverMaxSentPerEmail+4 })
 	})
 	t.Run("per IP", func(t *testing.T) {
 		t.Parallel()
@@ -639,6 +674,16 @@ func TestValkeyThrottler(t *testing.T) {
 	if within, _ := th.Hit(ctx, short, 1, 150*time.Millisecond); !within {
 		t.Fatal("hit after the window refused")
 	}
+	// Count reads without counting.
+	if n, err := th.Count(ctx, key); err != nil || n != 4 {
+		t.Fatalf("count = %d err=%v, want 4", n, err)
+	}
+	if n, err := th.Count(ctx, recoverThrottlePath+"test:never"); err != nil || n != 0 {
+		t.Fatalf("count of an unused key = %d err=%v, want 0", n, err)
+	}
+	if _, err := th.Count(ctx, "pitbox:sess:x"); err == nil {
+		t.Fatal("a key outside the prefix was read")
+	}
 	// A key outside pitbox:rl:rec: is never written (the Valkey ACL is wider than this feature).
 	if _, err := th.Hit(ctx, "pitbox:sess:x", 3, time.Hour); err == nil {
 		t.Fatal("a key outside the prefix was accepted")
@@ -669,4 +714,228 @@ func TestSessionReportsRecoveryReady(t *testing.T) {
 	if _, present := get()["recovery_ready"]; present {
 		t.Fatal("recovery_ready is present with the feature off")
 	}
+}
+
+// recoveryRig is a rig where the account 1001 (passkeyEmail) owns a set of recovery codes.
+func recoveryRig(t *testing.T) (*recoverRig, []string) {
+	t.Helper()
+	rig := newRecoverRig(t)
+	codes, hashes, err := rig.hasher.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rig.codes.Replace(context.Background(), "u1", rig.hasher.KeyID(), hashes); err != nil {
+		t.Fatal(err)
+	}
+	return rig, codes
+}
+
+func (rig *recoverRig) withCode(addr, code string) *httptest.ResponseRecorder {
+	return rig.post(`{"email":"` + addr + `","code":"` + code + `"}`)
+}
+
+// wrongCode is a well-formed code that belongs to nobody.
+func (rig *recoverRig) wrongCode() string {
+	codes, _, _ := rig.hasher.Generate()
+	return codes[0]
+}
+
+func (rig *recoverRig) lastAudit() string {
+	a := rig.audit.actions()
+	if len(a) == 0 {
+		return ""
+	}
+	return a[len(a)-1]
+}
+
+// An account with recovery codes needs one of them besides the email (ADR 0035).
+func TestRecoverWithCodesNeedsTheCode(t *testing.T) {
+	t.Parallel()
+	t.Run("email alone is refused", func(t *testing.T) {
+		t.Parallel()
+		rig, _ := recoveryRig(t)
+		rig.email(passkeyEmail)
+		waitFor(t, "audit", func() bool { return rig.lastAudit() == "auth.recovery_requested:code_required" })
+		if rig.accounts.sentCount() != 0 {
+			t.Fatal("a link was sent with the email alone")
+		}
+	})
+	t.Run("a wrong code is refused", func(t *testing.T) {
+		t.Parallel()
+		rig, _ := recoveryRig(t)
+		rig.withCode(passkeyEmail, rig.wrongCode())
+		waitFor(t, "audit", func() bool { return rig.lastAudit() == "auth.recovery_requested:invalid_code" })
+		if rig.accounts.sentCount() != 0 || len(rig.revoker.ended()) != 0 {
+			t.Fatal("a wrong code did something")
+		}
+	})
+	t.Run("a code of another account is refused", func(t *testing.T) {
+		t.Parallel()
+		rig, _ := recoveryRig(t)
+		otherCodes, otherHashes, _ := rig.hasher.Generate()
+		_ = rig.codes.Replace(context.Background(), "u2", rig.hasher.KeyID(), otherHashes)
+		rig.withCode(passkeyEmail, otherCodes[0])
+		waitFor(t, "audit", func() bool { return rig.lastAudit() == "auth.recovery_requested:invalid_code" })
+		if rig.accounts.sentCount() != 0 {
+			t.Fatal("a code of another account opened this recovery")
+		}
+	})
+	t.Run("a code alone, with an unknown email, sends nothing", func(t *testing.T) {
+		t.Parallel()
+		rig, codes := recoveryRig(t)
+		rig.withCode(unknownEmail, codes[0])
+		waitFor(t, "audit", func() bool { return rig.lastAudit() == "auth.recovery_requested:no_account" })
+		if rig.accounts.sentCount() != 0 {
+			t.Fatal("a code without its email sent a link")
+		}
+	})
+	t.Run("the right code sends the link once, spends the set and ends the sessions", func(t *testing.T) {
+		t.Parallel()
+		rig, codes := recoveryRig(t)
+		rig.withCode(passkeyEmail, codes[0])
+		waitFor(t, "the link", func() bool { return rig.lastAudit() == "auth.recovery_requested:sent_with_code" })
+		if rig.accounts.sentCount() != 1 {
+			t.Fatalf("sent %d links", rig.accounts.sentCount())
+		}
+		if n, _ := rig.codes.CountUnused(context.Background(), "u1"); n != 0 {
+			t.Fatalf("%d codes left after a recovery: the rest of the set may have been seen", n)
+		}
+		if got := rig.revoker.ended(); len(got) != 1 || got[0] != "1001" {
+			t.Fatalf("sessions ended for %v, want [1001]", got)
+		}
+		// The set is spent, so there is no code left to ask for until the person makes a new
+		// one (the app asks at the next sign-in): what remains is the email alone, as for an
+		// account that never made codes (ADR 0035).
+		if n, _ := rig.codes.CountUnused(context.Background(), "u1"); n != 0 {
+			t.Fatalf("%d codes left", n)
+		}
+	})
+	t.Run("a malformed code is a bad request whatever the account", func(t *testing.T) {
+		t.Parallel()
+		rig, _ := recoveryRig(t)
+		for _, c := range []string{"nope", "AAAA", strings.Repeat("A", 80), "1111-1111-1111-1111-1111-1111-11"} {
+			if w := rig.withCode(passkeyEmail, c); w.Code != http.StatusBadRequest {
+				t.Errorf("%q: status %d, want 400", c, w.Code)
+			}
+		}
+		time.Sleep(30 * time.Millisecond)
+		if rig.accounts.finds != 0 {
+			t.Fatal("a malformed code reached the account lookup")
+		}
+	})
+}
+
+// The answer is the same whether the code is right or wrong: nothing tells the caller.
+func TestRecoverWithCodesAnswersTheSame(t *testing.T) {
+	t.Parallel()
+	rig, codes := recoveryRig(t)
+	want := rig.withCode(passkeyEmail, codes[0])
+	for name, w := range map[string]*httptest.ResponseRecorder{
+		"wrong code": rig.withCode(passkeyEmail, rig.wrongCode()),
+		"no code":    rig.email(passkeyEmail),
+		"no account": rig.withCode(unknownEmail, codes[1]),
+	} {
+		if w.Code != want.Code || w.Body.String() != want.Body.String() {
+			t.Errorf("%s: %d %q, want %d %q", name, w.Code, w.Body.String(), want.Code, want.Body.String())
+		}
+	}
+}
+
+// Wrong codes are counted per address and per caller: a stranger cannot use up the owner's tries.
+func TestRecoverFailuresAreCountedPerCaller(t *testing.T) {
+	t.Parallel()
+	rig, codes := recoveryRig(t)
+	// The stranger (203.0.113.7) has used up its tries for this address.
+	rig.throttle.mu.Lock()
+	rig.throttle.counts = map[string]int64{
+		recoverThrottlePath + "fail:" + rig.h.EmailPseudonyms.Pseudonym(passkeyEmail) + ":203.0.113.7": recoverMaxFailPerEmail,
+	}
+	rig.throttle.mu.Unlock()
+	// The stranger is refused before the check, even with the right code...
+	rig.withCode(passkeyEmail, codes[0])
+	waitFor(t, "throttled", func() bool { return rig.lastAudit() == "auth.recovery_requested:throttled" })
+	if rig.accounts.sentCount() != 0 {
+		t.Fatal("a link went out over the failure limit")
+	}
+	// ...but the owner, from another address, is not affected.
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoverPath,
+		strings.NewReader(`{"email":"`+passkeyEmail+`","code":"`+codes[0]+`"}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.RemoteAddr = "198.51.100.9:40000"
+	rig.h.recoverAccount(httptest.NewRecorder(), r)
+	waitFor(t, "the owner", func() bool { return rig.accounts.sentCount() == 1 })
+}
+
+// Without the store or the key to check codes, nothing is sent (fail closed).
+func TestRecoverFailsClosedWithoutTheCodeStore(t *testing.T) {
+	t.Parallel()
+	rig := newRecoverRig(t)
+	rig.h.RecoveryCodes = nil
+	rig.email(passkeyEmail)
+	waitFor(t, "audit", func() bool { return rig.lastAudit() == "auth.recovery_requested:codes_unavailable" })
+	if rig.accounts.sentCount() != 0 {
+		t.Fatal("a link went out without a way to check the codes")
+	}
+}
+
+// The code never reaches the log or the audit trail.
+func TestRecoverNeverRecordsTheCode(t *testing.T) {
+	t.Parallel()
+	rig, codes := recoveryRig(t)
+	rig.withCode(passkeyEmail, codes[0])
+	rig.withCode(passkeyEmail, rig.wrongCode())
+	waitFor(t, "rows", func() bool { return len(rig.audit.actions()) == 2 })
+	raw, _ := NormalizeRecoveryCode(codes[0])
+	rig.audit.mu.Lock()
+	defer rig.audit.mu.Unlock()
+	for _, e := range rig.audit.events {
+		if strings.Contains(e.ActorID+e.Reason+e.SessionRef, raw) || strings.Contains(e.ActorID+e.Reason, codes[0]) {
+			t.Errorf("the code leaked into the audit trail: %+v", e)
+		}
+	}
+	if logs := rig.logs.String(); strings.Contains(logs, raw) || strings.Contains(logs, codes[0]) {
+		t.Errorf("the code leaked into the log: %s", logs)
+	}
+}
+
+func FuzzRecoverBodyWithCode(f *testing.F) {
+	for _, s := range []string{`{"email":"ana@example.com","code":rig.wrongCode()}`, `{"email":"a@b.c","code":null}`, `{"code":1}`, `{"email":"a@b.c","code":"` + strings.Repeat("é", 100) + `"}`} {
+		f.Add(s)
+	}
+	rig := newRecoverRigForFuzz()
+	f.Fuzz(func(t *testing.T, body string) {
+		w := rig.post(body)
+		switch w.Code {
+		case http.StatusAccepted, http.StatusBadRequest, http.StatusRequestEntityTooLarge:
+		default:
+			t.Fatalf("unexpected status %d", w.Code)
+		}
+	})
+}
+
+// A signed-in user cannot try codes without limit (NIST 800-63B-4 3.2.2).
+func TestConsumeRecoveryCodeIsThrottled(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	f.h.RecoverThrottle = &fakeThrottle{}
+	v := f.login("sub-bob", "sid-bob", []string{"pwd"})
+	ck := &http.Cookie{Name: SessionCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+	var last int
+	for i := 0; i <= recoverMaxConsumePerUser; i++ {
+		r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, publicURL+RecoveryCodeConsumePath,
+			strings.NewReader(`{"code":"`+f.codeNotStored()+`"}`))
+		r.AddCookie(ck)
+		r.Header.Set("Sec-Fetch-Site", "same-origin")
+		w := httptest.NewRecorder()
+		f.mux.ServeHTTP(w, r)
+		last = w.Code
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("attempt %d: status %d, want 429", recoverMaxConsumePerUser+1, last)
+	}
+}
+
+func (f *flowHarness) codeNotStored() string {
+	codes, _, _ := f.h.RecoveryCodeHasher.Generate()
+	return codes[0]
 }

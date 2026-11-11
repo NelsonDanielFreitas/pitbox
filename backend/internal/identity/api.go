@@ -65,3 +65,17 @@ func (d *RecoveryCodeDirectory) CountUnused(ctx context.Context, userID string) 
 func (d *RecoveryCodeDirectory) Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error) {
 	return d.codes.Consume(ctx, userID, codeHashes)
 }
+
+// AttemptBySubject implements auth.RecoveryCodeStore for the recovery that has no session.
+func (d *RecoveryCodeDirectory) AttemptBySubject(ctx context.Context, subject string, codeHashes [][]byte) (auth.RecoveryAttempt, error) {
+	got, err := d.codes.AttemptBySubject(ctx, subject, codeHashes)
+	if err != nil {
+		return "", err
+	}
+	return auth.RecoveryAttempt(got), nil
+}
+
+// InvalidateBySubject spends the codes that are left after a recovery.
+func (d *RecoveryCodeDirectory) InvalidateBySubject(ctx context.Context, subject string) error {
+	return d.codes.InvalidateBySubject(ctx, subject)
+}

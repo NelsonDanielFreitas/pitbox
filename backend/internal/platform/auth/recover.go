@@ -28,17 +28,26 @@ const (
 	recoverMaxWorkers = 8 // requests being worked on at once; more are dropped
 
 	// Per window: a victim's inbox is not a mailbox to flood, one address is not a mail
-	// cannon, and the whole service has a ceiling.
-	recoverWindow       = time.Hour
-	recoverMaxPerEmail  = 3
-	recoverMaxPerIP     = 10
-	recoverMaxGlobal    = 120
-	recoverThrottlePath = "pitbox:rl:rec:"
+	// cannon, and the whole service has a ceiling. Wrong recovery codes are counted apart from
+	// the emails sent (ADR 0035): someone who only knows an address can fill the first count,
+	// but never the second, so the owner can still get the link when they have the code.
+	recoverWindow            = time.Hour
+	recoverMaxSentPerEmail   = 3  // links sent to one address
+	recoverMaxFailPerEmail   = 10 // failed or missing codes for one address
+	recoverMaxPerIP          = 10
+	recoverMaxConsumePerUser = 20 // codes tried by a signed-in user (the step-up)
+	recoverMaxGlobal         = 120
+	recoverThrottlePath      = "pitbox:rl:rec:"
 )
 
 // Audit reasons of auth.recovery_requested. The client never sees them.
 const (
 	recoverReasonSent       = "sent"
+	recoverReasonSentCode   = "sent_with_code"
+	recoverReasonCodeNeeded = "code_required"
+	recoverReasonBadCode    = "invalid_code"
+	recoverReasonNoCodeKeys = "codes_unavailable"
+	recoverReasonStore      = "store_error"
 	recoverReasonNoAccount  = "no_account"
 	recoverReasonNoPasskey  = "no_passkey"
 	recoverReasonUpstream   = "upstream_error"
@@ -53,6 +62,8 @@ const (
 type RecoveryThrottler interface {
 	// Hit counts one event for key and reports whether it is still within max for the window.
 	Hit(ctx context.Context, key string, max int64, window time.Duration) (within bool, err error)
+	// Count reads the events counted for key in the current window without counting one.
+	Count(ctx context.Context, key string) (int64, error)
 }
 
 // ValkeyThrottler implements RecoveryThrottler on Valkey with a fixed window: the first event
@@ -78,6 +89,18 @@ func (t *ValkeyThrottler) Hit(ctx context.Context, key string, max int64, window
 		return false, err
 	}
 	return n <= max, nil
+}
+
+// Count implements RecoveryThrottler.
+func (t *ValkeyThrottler) Count(ctx context.Context, key string) (int64, error) {
+	if !strings.HasPrefix(key, recoverThrottlePath) {
+		return 0, errors.New("auth: throttle key outside its prefix")
+	}
+	n, err := t.c.Do(ctx, t.c.B().Get().Key(key).Build()).AsInt64()
+	if valkey.IsValkeyNil(err) {
+		return 0, nil
+	}
+	return n, err
 }
 
 // recoverer holds the state the handler needs for /auth/recover. The zero value is usable:
@@ -130,6 +153,9 @@ func (h *Handler) recoverAccount(w http.ResponseWriter, r *http.Request) {
 	noStore(w)
 	var req struct {
 		Email string `json:"email"`
+		// Code is a recovery code. Optional: an account without codes recovers with the
+		// email alone (ADR 0035).
+		Code string `json:"code"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, recoverMaxBody)
 	if !decodeMobileBody(w, r, &req) {
@@ -139,6 +165,14 @@ func (h *Handler) recoverAccount(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		mobileFail(w, http.StatusBadRequest, mobileErrInvalid)
 		return
+	}
+	code := ""
+	if req.Code != "" {
+		// A code that is not even well formed is the caller's typing, whatever the account.
+		if code, ok = NormalizeRecoveryCode(req.Code); !ok {
+			mobileFail(w, http.StatusBadRequest, mobileErrInvalid)
+			return
+		}
 	}
 	if h.Limiter == nil {
 		// Fail closed: a public endpoint without a limit is not served.
@@ -173,14 +207,14 @@ func (h *Handler) recoverAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), recoverWorkTime)
 	go func() {
 		defer cancel()
-		h.recoverWork(ctx, email, meta, ipKey)
+		h.recoverWork(ctx, email, code, meta, ipKey)
 	}()
 }
 
 // recoverWork does what the request asked, after the answer is gone. The reason of the
 // outcome goes to the audit trail with a pseudonym of the email (or the subject, when the
 // account was found), never the address.
-func (h *Handler) recoverWork(ctx context.Context, email string, meta interceptors.AuditMeta, ipKey string) {
+func (h *Handler) recoverWork(ctx context.Context, email, code string, meta interceptors.AuditMeta, ipKey string) {
 	actor := "email:" + h.pseudonym(email)
 	record := func(reason string) {
 		if h.Audit == nil {
@@ -204,12 +238,13 @@ func (h *Handler) recoverWork(ctx context.Context, email string, meta intercepto
 		h.Log.ErrorContext(ctx, "recovery request dropped", slog.String("reason", recoverReasonThrottleIn))
 		return
 	}
+	// Every request counts against its address and the whole service; the count per email is
+	// taken later and only for what the email can be blamed for.
 	for _, l := range []struct {
 		key string
 		max int64
 	}{
 		{recoverThrottlePath + "ip:" + ipKey, recoverMaxPerIP},
-		{recoverThrottlePath + "email:" + h.pseudonym(email), recoverMaxPerEmail},
 		{recoverThrottlePath + "global", recoverMaxGlobal},
 	} {
 		within, err := h.RecoverThrottle.Hit(ctx, l.key, l.max, recoverWindow)
@@ -249,12 +284,78 @@ func (h *Handler) recoverWork(ctx context.Context, email string, meta intercepto
 		record(recoverReasonNoPasskey)
 		return
 	}
+
+	// The second factor (ADR 0035): an account with recovery codes needs one of them besides
+	// the email. Without a store or a key to check it, nothing is sent.
+	if h.RecoveryCodes == nil || h.RecoveryCodeHasher == nil {
+		h.Log.ErrorContext(ctx, "recovery request dropped", slog.String("reason", recoverReasonNoCodeKeys))
+		record(recoverReasonNoCodeKeys)
+		return
+	}
+	pseudo := h.pseudonym(email)
+	// Failures are counted per address AND per caller: someone who only knows an address can
+	// fill their own count, never the one of the person who owns it.
+	failKey, sentKey := recoverThrottlePath+"fail:"+pseudo+":"+ipKey, recoverThrottlePath+"sent:"+pseudo
+	for _, l := range []struct {
+		key string
+		max int64
+	}{{failKey, recoverMaxFailPerEmail}, {sentKey, recoverMaxSentPerEmail}} {
+		n, err := h.RecoverThrottle.Count(ctx, l.key)
+		if err != nil {
+			h.Log.WarnContext(ctx, "recovery request dropped", slog.String("reason", recoverReasonThrottleIn))
+			return
+		}
+		if n >= l.max {
+			record(recoverReasonThrottle)
+			return
+		}
+	}
+	attempt, err := h.RecoveryCodes.AttemptBySubject(ctx, subject, h.RecoveryCodeHasher.Hashes(code))
+	if err != nil {
+		h.Log.WarnContext(ctx, "recovery code check failed", slog.String("reason", recoverReasonStore))
+		record(recoverReasonStore)
+		return
+	}
+	usedCode := false
+	switch attempt {
+	case AttemptUnknownUser, AttemptNoCodes:
+		// No code to ask for: this account recovers with the email alone, as before.
+	case AttemptConsumed:
+		usedCode = true
+	default: // AttemptInvalid
+		_, _ = h.RecoverThrottle.Hit(ctx, failKey, recoverMaxFailPerEmail, recoverWindow)
+		if code == "" {
+			record(recoverReasonCodeNeeded)
+		} else {
+			record(recoverReasonBadCode)
+		}
+		return
+	}
+
+	if within, err := h.RecoverThrottle.Hit(ctx, sentKey, recoverMaxSentPerEmail, recoverWindow); err != nil || !within {
+		record(recoverReasonThrottle)
+		return
+	}
 	if err := h.Accounts.SendPasskeyRegistrationLink(ctx, subject); err != nil {
 		h.Log.WarnContext(ctx, "recovery link failed", slog.String("reason", recoverReasonUpstream))
 		record(recoverReasonUpstream)
 		return
 	}
-	record(recoverReasonSent)
+	if !usedCode {
+		record(recoverReasonSent)
+		return
+	}
+	// A code was used: the rest of the set may have been seen, and every session of the
+	// account ends, so what the person finds after the new passkey is a clean account.
+	if err := h.RecoveryCodes.InvalidateBySubject(ctx, subject); err != nil {
+		h.Log.ErrorContext(ctx, "recovery codes not invalidated", slog.String("reason", recoverReasonStore))
+	}
+	if h.SessionRevoker != nil {
+		if err := h.SessionRevoker.DeleteAllBySubject(ctx, subject); err != nil {
+			h.Log.ErrorContext(ctx, "sessions not ended after recovery", slog.String("reason", recoverReasonStore))
+		}
+	}
+	record(recoverReasonSentCode)
 }
 
 // pseudonym is the audit identifier of an email; without a key it is a constant, so nothing

@@ -27,13 +27,16 @@ export const ptPT = {
     lostPasskey: "Perdi a passkey",
     recoverTitle: "Perdi a passkey",
     recoverBody:
-      "Indica o email da conta. Se existir uma conta com passkey, enviamos um email com um link para registares uma nova.",
+      "Indica o email da conta e um dos teus códigos de recuperação. Se os dados estiverem certos, enviamos um email com um link para registares uma nova passkey.",
     recoverEmail: "Email da conta",
+    recoverCode: "Código de recuperação",
+    recoverCodeHint:
+      "Obrigatório se geraste códigos de recuperação. Cada código só vale uma vez e, depois de o usares, os restantes deixam de valer e as sessões abertas terminam.",
     recoverSubmit: "Enviar link",
     recoverBusy: "A enviar…",
     recoverDone:
-      "Se existir uma conta com passkey, enviámos um email com um link para registar uma nova passkey. O link expira em pouco tempo; confirma também a pasta de spam.",
-    recoverInvalid: "Indica um email válido.",
+      "Se os dados estiverem certos, enviámos um email com um link para registar uma nova passkey. O link expira em pouco tempo; confirma também a pasta de spam.",
+    recoverInvalid: "Indica um email válido e, se tiveres, um código com o formato certo.",
     recoverRateLimited: "Demasiados pedidos. Espera um pouco e tenta outra vez.",
     recoverUnavailable: "Não foi possível enviar o pedido. Tenta outra vez mais tarde.",
     recoveryNoticeTitle: "Sem plano B para a tua conta",

@@ -27,13 +27,16 @@ export const en = {
     lostPasskey: "I lost my passkey",
     recoverTitle: "I lost my passkey",
     recoverBody:
-      "Enter the email of the account. If an account with a passkey exists, we send an email with a link to register a new one.",
+      "Enter the account email and one of your recovery codes. If the details are right, we send an email with a link to register a new passkey.",
     recoverEmail: "Account email",
+    recoverCode: "Recovery code",
+    recoverCodeHint:
+      "Required if you made recovery codes. Each code works once; after you use one the others stop working and open sessions end.",
     recoverSubmit: "Send link",
     recoverBusy: "Sending…",
     recoverDone:
-      "If an account with a passkey exists, we sent an email with a link to register a new passkey. The link expires soon; also check your spam folder.",
-    recoverInvalid: "Enter a valid email.",
+      "If the details are right, we sent an email with a link to register a new passkey. The link expires soon; also check your spam folder.",
+    recoverInvalid: "Enter a valid email and, if you have one, a code in the right format.",
     recoverRateLimited: "Too many requests. Wait a little and try again.",
     recoverUnavailable: "Could not send the request. Try again later.",
     recoveryNoticeTitle: "No plan B for your account",

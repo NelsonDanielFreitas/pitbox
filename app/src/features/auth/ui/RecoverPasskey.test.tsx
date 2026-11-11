@@ -29,7 +29,7 @@ describe("RecoverPasskey", () => {
   it("says the same thing whether the account exists or not, and never claims an email was sent", async () => {
     await ask(202);
     const alert = await screen.findByRole("status");
-    expect(alert).toHaveTextContent("Se existir uma conta com passkey");
+    expect(alert).toHaveTextContent("Se os dados estiverem certos");
     expect(alert).not.toHaveTextContent("enviámos um email para ana@example.com");
     expect(alert).not.toHaveTextContent("ana@example.com");
   });
@@ -49,5 +49,22 @@ describe("RecoverPasskey", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent("email válido");
     expect(screen.getByLabelText("Email da conta")).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("sends the code with the email, labels it, and clears it after the try", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<RecoverPasskey />);
+    await userEvent.click(screen.getByRole("button", { name: "Perdi a passkey" }));
+    await userEvent.type(screen.getByLabelText("Email da conta"), "ana@example.com");
+    const code = screen.getByLabelText("Código de recuperação");
+    expect(code).toHaveAttribute("autocomplete", "off");
+    expect(code).toHaveAccessibleDescription(/Obrigatório se geraste códigos/);
+    await userEvent.type(code, "ABCD-EFGH-IJKL");
+    await userEvent.click(screen.getByRole("button", { name: "Enviar link" }));
+    await screen.findByRole("status");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ email: "ana@example.com", code: "ABCD-EFGH-IJKL" });
+    expect(screen.getByLabelText("Código de recuperação")).toHaveValue("");
   });
 });

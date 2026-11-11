@@ -17,8 +17,11 @@ const messageKey = {
 export function RecoverPasskey() {
   const { t } = useTranslation();
   const inputId = useId();
+  const codeId = useId();
+  const codeHintId = useId();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<RecoveryOutcome | null>(null);
 
@@ -27,8 +30,9 @@ export function RecoverPasskey() {
     setBusy(true);
     setOutcome(null);
     try {
-      setOutcome(await requestRecovery(email));
+      setOutcome(await requestRecovery(email, code));
     } finally {
+      setCode(""); // a code is for one try: it is not kept on screen
       setBusy(false);
     }
   };
@@ -58,6 +62,24 @@ export function RecoverPasskey() {
         onChange={(event) => setEmail(event.target.value)}
         invalid={outcome === "invalid"}
       />
+      <label htmlFor={codeId} className="text-sm font-medium text-fg">
+        {t("auth.recoverCode")}
+      </label>
+      <TextInput
+        id={codeId}
+        type="text"
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        maxLength={64}
+        aria-describedby={codeHintId}
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        invalid={outcome === "invalid"}
+      />
+      <p id={codeHintId} className="text-sm text-muted">
+        {t("auth.recoverCodeHint")}
+      </p>
       {outcome ? (
         <Alert tone={outcome === "accepted" ? "ok" : "warn"}>{t(messageKey[outcome])}</Alert>
       ) : null}

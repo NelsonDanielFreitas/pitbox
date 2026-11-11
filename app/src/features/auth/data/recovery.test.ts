@@ -55,4 +55,21 @@ describe("recoveryEmailSchema", () => {
   it("trims and lowercases", () => {
     expect(recoveryEmailSchema.parse(" Ana@Example.COM ")).toBe("ana@example.com");
   });
+
+  it("sends the recovery code when there is one, and only then", async () => {
+    const fetchMock = stubFetch(202);
+    await requestRecovery("ana@example.com", " abcd-efgh ");
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBe(JSON.stringify({ email: "ana@example.com", code: "abcd-efgh" }));
+    fetchMock.mockClear();
+    await requestRecovery("ana@example.com", "   ");
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].body).toBe(JSON.stringify({ email: "ana@example.com" }));
+  });
+
+  it("does not call the server for a code with characters a code never has", async () => {
+    const fetchMock = stubFetch(202);
+    expect(await requestRecovery("ana@example.com", "abc<script>")).toBe("invalid");
+    expect(await requestRecovery("ana@example.com", "A".repeat(65))).toBe("invalid");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

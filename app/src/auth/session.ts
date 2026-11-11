@@ -17,6 +17,9 @@ const authenticatedSchema = z
     user_id: z.string().uuid(),
     amr: z.array(z.string()),
     auth_time: z.iso.datetime({ offset: true }),
+    // False only for an account whose sole credential is a passkey and that has no recovery
+    // code; left out when the server does not know (ADR 0034).
+    recovery_ready: z.boolean().optional(),
   })
   .strict();
 

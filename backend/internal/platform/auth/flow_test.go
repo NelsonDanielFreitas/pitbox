@@ -1110,6 +1110,30 @@ func TestSessionInfoFixture(t *testing.T) {
 	}
 }
 
+// The contract with the app for recovery_ready (#158): the field is there, false, only for an
+// account whose sole credential is a passkey and that has no recovery code.
+func TestSessionInfoRecoveryReadyFixture(t *testing.T) {
+	t.Parallel()
+	f := newFlowHarness(t)
+	f.h.Accounts = &fakeAccounts{methods: map[string]AuthMethods{"1001": {Passkey: true}}}
+	token, err := f.store.Create(context.Background(), Session{
+		UserID: "0190f2a4-7c3e-7b1a-8d2f-3c5e9a1b4d60", Subject: "1001", AMR: []string{"user"},
+		AuthTime: t0, AccessExpires: t0.Add(10 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	ck := &http.Cookie{Name: SessionCookieName, Value: token, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+	w := f.do(http.MethodGet, SessionPath, []*http.Cookie{ck}, map[string]string{"Sec-Fetch-Site": "same-origin"})
+	fixture, err := os.ReadFile("testdata/session_recovery_not_ready.json")
+	if err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	if got, want := strings.TrimSpace(w.Body.String()), strings.TrimSpace(string(fixture)); got != want {
+		t.Fatalf("session body = %s, want %s", got, want)
+	}
+}
+
 // The audit trail starts once the state has matched. What anybody can send without a valid
 // login state costs a log line and a counter, not a database write.
 func TestCallbacksWithoutAValidStateAreCountedNotAudited(t *testing.T) {
@@ -1201,6 +1225,40 @@ type fakeRecoveryStore struct {
 	hashes map[string]map[string]struct{}
 	used   map[string]map[string]struct{}
 	keyIDs map[string]string
+	// subjects maps an identity provider subject to the user id (for AttemptBySubject).
+	subjects map[string]string
+}
+
+func (r *fakeRecoveryStore) AttemptBySubject(_ context.Context, subject string, codeHashes [][]byte) (RecoveryAttempt, error) {
+	r.mu.Lock()
+	userID, ok := r.subjects[subject]
+	r.mu.Unlock()
+	if !ok {
+		return AttemptUnknownUser, nil
+	}
+	if n, _ := r.CountUnused(context.Background(), userID); n == 0 {
+		return AttemptNoCodes, nil
+	}
+	if len(codeHashes) == 0 {
+		return AttemptInvalid, nil
+	}
+	if ok, _ := r.Consume(context.Background(), userID, codeHashes); ok {
+		return AttemptConsumed, nil
+	}
+	return AttemptInvalid, nil
+}
+
+func (r *fakeRecoveryStore) InvalidateBySubject(_ context.Context, subject string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	userID := r.subjects[subject]
+	if r.used[userID] == nil {
+		r.used[userID] = map[string]struct{}{}
+	}
+	for h := range r.hashes[userID] {
+		r.used[userID][h] = struct{}{}
+	}
+	return nil
 }
 
 func (r *fakeRecoveryStore) Replace(_ context.Context, userID, keyID string, codeHashes [][]byte) error {
@@ -1218,6 +1276,18 @@ func (r *fakeRecoveryStore) Replace(_ context.Context, userID, keyID string, cod
 		r.hashes[userID][string(h)] = struct{}{}
 	}
 	return nil
+}
+
+func (r *fakeRecoveryStore) CountUnused(_ context.Context, userID string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for h := range r.hashes[userID] {
+		if _, used := r.used[userID][h]; !used {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (r *fakeRecoveryStore) Consume(_ context.Context, userID string, codeHashes [][]byte) (bool, error) {
@@ -1416,5 +1486,46 @@ func TestBackchannelLogoutUnknownKidBurstIsBounded(t *testing.T) {
 	_ = f.login("sub-alice", "sid-alice", []string{"user"})
 	if code := post(f.idp.logoutToken("sub-alice", "sid-alice", nil)); code != http.StatusOK {
 		t.Fatalf("a valid logout token got status %d after the burst, want 200", code)
+	}
+}
+
+// TestLogoutTokenIssuerAlias covers #154: the local Zitadel signs back-channel logout tokens
+// with its primary domain ("https://localhost:8443"), not with the issuer of the sign-in. The
+// alias is accepted for logout tokens only, and only the exact configured value.
+func TestLogoutTokenIssuerAlias(t *testing.T) {
+	t.Parallel()
+	const alias = "https://localhost:8443"
+	tests := []struct {
+		name    string
+		alias   string // configured alias
+		iss     string // empty: the issuer of the fake IdP
+		wantErr bool
+	}{
+		{"issuer itself, no alias", "", "", false},
+		{"alias token, alias off: refused", "", alias, true},
+		{"alias token, alias on: accepted", alias, alias, false},
+		{"issuer itself, alias on: accepted", alias, "", false},
+		{"another issuer, alias on: refused", alias, "https://evil.example", true},
+		{"alias with a path appended: refused", alias, alias + "/x", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			idp := newFakeIdP(t, func() time.Time { return t0 })
+			h := &Handler{Provider: NewProvider(ProviderConfig{
+				Issuer: idp.srv.URL, ClientID: idp.clientID, ClientSecret: idp.clientSecret,
+				RedirectURL: publicURL + CallbackPath, AllowedAlgs: []string{"ES256"}, Now: func() time.Time { return t0 },
+				LogoutIssuerAlias: tt.alias,
+			})}
+			tok := idp.logoutToken("sub-alice", "sid-alice", func(p map[string]any) {
+				if tt.iss != "" {
+					p["iss"] = tt.iss
+				}
+			})
+			_, err := h.verifyLogoutToken(context.Background(), tok)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

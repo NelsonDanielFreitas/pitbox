@@ -39,7 +39,7 @@ As credenciais estão no `.env` (`ZITADEL_ADMIN_USERNAME` / `ZITADEL_ADMIN_PASSW
 ```bash
 make up                  # a 1.ª vez com volumes novos (make reset): o Zitadel cria o utilizador de provisionamento
 make db-migrate          # esquema da aplicação
-make zitadel-provision   # projeto e app OIDC, chave ES256, tempos dos tokens; escreve PITBOX_OIDC_* no .env
+make zitadel-provision   # projeto e app OIDC, chave ES256, tempos dos tokens, conta de recuperação; escreve PITBOX_OIDC_* e PITBOX_ZITADEL_RECOVERY_PAT no .env
 make run-api             # pitbox-api em http://localhost:8081 com o login ligado
 make smoke-auth          # prova login, registo/verificação e recuperação no Mailpit (cria e apaga utilizadores de teste)
 ```
@@ -85,7 +85,7 @@ Sem `PITBOX_TAILNET_HOST` tudo funciona como antes (`localhost`): CI, E2E e `mak
 - **Nada mais é exposto.** Confirma com `ss -tlnH`: só `443` e `8443` em `tailscale0`; Postgres, Valkey, OpenFGA, Jaeger, Mailpit, SeaweedFS, o `pitbox-api` (`8081`) e o `vite preview` (`4173`) ficam em `127.0.0.1`.
 - **Privacidade:** o HTTPS do Tailscale publica o nome da máquina e o da tailnet nos registos públicos de Certificate Transparency. Usa um nome que não identifique pessoas nem o projeto.
 - **Desvio local ao Zitadel:** o PC não alcança o próprio endereço da tailnet (a ligação dá timeout). Com o perfil telemóvel o `make run-api` define `PITBOX_OIDC_LOCAL_DIAL=127.0.0.1:<porta>`: só o host e a porta exatos do issuer são desviados, por HTTP, para esse endereço fixo, mantendo o `Host`. O `pitbox-api` recusa a variável fora de `PITBOX_ENV=local`, com um IP que não seja `127.0.0.1` ou com um issuer que não seja `*.ts.net`, e deixa um aviso no arranque.
-- **Terminar sessão no Zitadel não corta a sessão do BFF** (back-channel logout não funciona em local; #154, TM-AUTH-20). Num telemóvel perdido, revoga o dispositivo.
+- **Back-channel logout em local (#154, TM-AUTH-20):** o Zitadel avisa o `pitbox-api` por `host.docker.internal:8081` (Docker Desktop + WSL2 em modo mirrored). Se esse nome não chegar ao anfitrião (outro ambiente), a sessão do BFF só corta no refresh seguinte (10 min); prova com `make smoke-auth` (passo 4b). No perfil telemóvel `make run-api` define `PITBOX_OIDC_LOCAL_LOGOUT_ISSUER` (o Zitadel assina o logout token com `localhost`). Num telemóvel perdido, revoga o dispositivo.
 - **Disponibilidade:** o servidor é o PC. Se o WSL parar por inatividade, o `tailscaled` pára e o acesso cai (a app continua offline, ADR 0028).
 - **Rate limiting:** atrás do `tailscale serve`, todos os pedidos chegam de `127.0.0.1`; o limite por IP do login é global (aceitável com um só utilizador).
 - **Cookies não isolam portas:** o cookie `__Host-` da app também segue para `:8443`. O BFF recusa pedidos `same-site` de outra origem (`Sec-Fetch-Site`).
@@ -134,3 +134,5 @@ make db-backup-test                  # prova automática em contentores descart�
   - O Jaeger não tem health check do Docker (a imagem não tem shell): usar `make health`.
   - O Postgres e o Valkey ficam sem `cap_drop` porque o entrypoint precisa de `CHOWN`/`SETUID`/`SETGID`.
 - Verificação de assinaturas cosign das imagens (por exemplo do OpenFGA): fica para o CI (F0-05 ou posterior).
+
+**Papéis do Zitadel:** o `zitadel-api` arranca com `--config zitadel/roles.yaml` (gerado por `scripts/zitadel-roles.py`: a lista de papéis por omissão mais `IAM_PITBOX_ACCOUNT_RECOVERY`, ADR 0034). Ao subir a versão do Zitadel, volta a correr o script e revê o diff.

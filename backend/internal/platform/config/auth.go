@@ -81,6 +81,13 @@ func (c Config) validateAuth() []error {
 	if err := c.validateOIDCLocalDial(); err != nil {
 		errs = append(errs, err)
 	}
+	if err := c.validateOIDCLocalLogoutIssuer(); err != nil {
+		errs = append(errs, err)
+	}
+	if c.ZitadelRecoveryPAT != "" && (len(c.ZitadelRecoveryPAT) > 512 || strings.ContainsAny(c.ZitadelRecoveryPAT, " \t\r\n")) {
+		// The value is never repeated in the message.
+		errs = append(errs, errors.New("PITBOX_ZITADEL_RECOVERY_PAT: not a valid token"))
+	}
 
 	if len(c.OIDCAllowedAlgs) == 0 {
 		errs = append(errs, errors.New("PITBOX_OIDC_ALLOWED_ALGS: at least one algorithm is required"))
@@ -223,6 +230,26 @@ func (c Config) validateOIDCLocalDial() error {
 	u, err := url.Parse(c.OIDCIssuer)
 	if err != nil || u.Scheme != "https" || !IsTailnetHost(u.Hostname()) {
 		return fmt.Errorf("%s: only valid with an https PITBOX_OIDC_ISSUER on a *.ts.net host", name)
+	}
+	return nil
+}
+
+// validateOIDCLocalLogoutIssuer guards the second issuer accepted in back-channel logout
+// tokens. The signature is still checked against the identity provider's keys; this only
+// admits the name the local instance uses for itself, so it is limited to the developer
+// machine, to the phone profile and to a bare loopback origin.
+func (c Config) validateOIDCLocalLogoutIssuer() error {
+	if c.OIDCLocalLogoutIssuer == "" {
+		return nil
+	}
+	const name = "PITBOX_OIDC_LOCAL_LOGOUT_ISSUER"
+	if c.Env != EnvLocal || c.OIDCLocalDial == "" {
+		return fmt.Errorf("%s: only allowed with PITBOX_ENV=local and PITBOX_OIDC_LOCAL_DIAL", name)
+	}
+	u, err := url.Parse(c.OIDCLocalLogoutIssuer)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Opaque != "" || u.User != nil ||
+		u.Path != "" || u.RawQuery != "" || u.Fragment != "" || (u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1") {
+		return fmt.Errorf("%s: must be a bare http(s) origin on localhost or 127.0.0.1", name)
 	}
 	return nil
 }

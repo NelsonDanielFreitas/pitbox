@@ -35,5 +35,5 @@ Verificada contra o Zitadel `v4.19.4` e o `go-oidc` v3.21.0. O resto do ADR mant
 - **`auth_time`, `amr` e `sid` só existem no ID token.** O principal e o *step-up* leem-nos da sessão do BFF, preenchida com o ID token validado no login (arquitetura §5.1).
 - **Sem revogação da família de refresh tokens.** O Zitadel rejeita o refresh token antigo mas, segundo a revisão do código, não revoga a família. A spec §3.4 ("reutilização revoga toda a família") **fica por cumprir até ao F2-06b**; no BFF o refresh token nunca sai do servidor.
 - **Tolerâncias do `go-oidc`:** `exp` sem tolerância e `nbf` com 5 min fixos (a §5.1 dizia 30 s).
-- **Sem Bearer no F1-03:** o caminho `Authorization: Bearer` passa para o F2-06b.
+- **Sem Bearer no F1-03:** o caminho `Authorization: Bearer` passou para o F2-06b, **implementado** (ADR 0032): Bearer opaco `pbm1_…`, nunca um JWT.
 - **Valkey:** cliente `valkey-go` (não `go-redis`).

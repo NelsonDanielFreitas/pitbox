@@ -28,6 +28,9 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
     # O PC não alcança o próprio endereço da tailnet: a API fala com o Traefik local, com o
     # Host do issuer. Só em PITBOX_ENV=local (a API recusa-o noutros ambientes).
     export PITBOX_OIDC_LOCAL_DIAL="127.0.0.1:${zitadel_port}"
+    # O Zitadel assina os logout tokens do back-channel (#154) com o domínio principal da instância
+    # (localhost), não com o do login. Só em PITBOX_ENV=local; a assinatura continua a ser verificada.
+    export PITBOX_OIDC_LOCAL_LOGOUT_ISSUER="https://localhost:8443"
   else
     if [ -z "${PITBOX_PUBLIC_URL:-}" ]; then
       PITBOX_PUBLIC_URL="$(get PITBOX_PUBLIC_URL)"
@@ -49,6 +52,11 @@ if [ -f "$ENV_FILE" ] && [ -n "$(get PITBOX_OIDC_CLIENT_ID)" ] && [ -n "$(get PI
   fi
   # Login do telemóvel (ADR 0032): tudo ou nada, como o resto. Só com o client_id da app nativa
   # E a origem CORS; sem um deles o pitbox-api arranca sem o login móvel (a config recusa metade).
+  # Recuperação de conta só com passkey (#158, ADR 0034): conta de serviço com o papel mínimo; sem
+  # o PAT a funcionalidade fica desligada (o endpoint responde 202 na mesma).
+  if [ -n "$(get PITBOX_ZITADEL_RECOVERY_PAT)" ]; then
+    export PITBOX_ZITADEL_RECOVERY_PAT="$(get PITBOX_ZITADEL_RECOVERY_PAT)"
+  fi
   if [ -n "$(get PITBOX_OIDC_MOBILE_CLIENT_ID)" ] && [ -n "$(get PITBOX_CORS_ORIGINS)" ]; then
     export PITBOX_OIDC_MOBILE_CLIENT_ID="$(get PITBOX_OIDC_MOBILE_CLIENT_ID)"
     export PITBOX_CORS_ORIGINS="$(get PITBOX_CORS_ORIGINS)"

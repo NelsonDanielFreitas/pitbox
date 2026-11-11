@@ -17,6 +17,8 @@ import { Alert } from "@/shared/ui/Alert";
 import { Button } from "@/shared/ui/Button";
 import { Logo } from "@/shared/ui/Logo";
 
+import { RecoverPasskey } from "./RecoverPasskey";
+
 type NativeFailure = "error" | "cancelled" | "noAuthTab" | "offline" | "refused";
 
 const failureKey = {
@@ -88,6 +90,7 @@ export function LoginPage({ returnTo, loggedOut }: { returnTo: string; loggedOut
             <a href={loginHref(returnTo)}>{t("auth.cta")}</a>
           </Button>
         )}
+        <RecoverPasskey />
       </div>
     </main>
   );

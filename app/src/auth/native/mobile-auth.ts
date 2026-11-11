@@ -85,17 +85,34 @@ export class MobileAuth {
     return this.deps.storage.read() !== undefined;
   }
 
+  /**
+   * Reauthenticates this phone's session (the "step-up" before a sensitive action): a new login
+   * that must come back as the same account with a strong factor. The server replaces the old
+   * session with the new one, so a failure leaves the old session as it was.
+   */
+  async stepUp(): Promise<void> {
+    return this.login({ stepUp: true });
+  }
+
   /** Login in three steps. On any failure the key made for this attempt is deleted. */
-  async login(): Promise<void> {
+  async login(options: { stepUp?: boolean } = {}): Promise<void> {
     const { plugin, storage } = this.deps;
     let keyId: string | undefined;
     try {
       const key = await plugin.createSessionKey();
       keyId = key.keyId;
       const { verifier, challenge } = await newPkce();
-      const start = startSchema.parse(
-        await this.postJson("/auth/mobile/start", { session_pub: key.publicKey, code_challenge: challenge }),
-      );
+      const start = options.stepUp
+        ? startSchema.parse(
+            await this.postJson(
+              "/auth/mobile/start",
+              { session_pub: key.publicKey, code_challenge: challenge, step_up: true },
+              { Authorization: `Bearer ${await this.bearerToken()}` },
+            ),
+          )
+        : startSchema.parse(
+            await this.postJson("/auth/mobile/start", { session_pub: key.publicKey, code_challenge: challenge }),
+          );
       let redirect: { code: string; state: string };
       try {
         redirect = await plugin.loginWithBrowser({ url: start.authorization_url });
@@ -238,12 +255,12 @@ export class MobileAuth {
     if (record) await this.deps.plugin.deleteSessionKey({ keyId: record.keyId }).catch(() => undefined);
   }
 
-  private async postJson(path: string, body: unknown): Promise<unknown> {
+  private async postJson(path: string, body: unknown, extraHeaders: Record<string, string> = {}): Promise<unknown> {
     let response: Response;
     try {
       response = await this.fetchFn(`${this.deps.apiBase}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...extraHeaders },
         body: JSON.stringify(body),
         credentials: "omit",
         signal: AbortSignal.timeout(15_000),

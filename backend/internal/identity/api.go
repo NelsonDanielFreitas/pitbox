@@ -56,7 +56,26 @@ func (d *RecoveryCodeDirectory) Replace(ctx context.Context, userID, keyID strin
 	return d.codes.Replace(ctx, userID, keyID, codeHashes)
 }
 
+// CountUnused returns how many unused recovery codes the user has.
+func (d *RecoveryCodeDirectory) CountUnused(ctx context.Context, userID string) (int, error) {
+	return d.codes.CountUnused(ctx, userID)
+}
+
 // Consume marks one code as used if any candidate hash exists and is unused for the user.
 func (d *RecoveryCodeDirectory) Consume(ctx context.Context, userID string, codeHashes [][]byte) (bool, error) {
 	return d.codes.Consume(ctx, userID, codeHashes)
+}
+
+// AttemptBySubject implements auth.RecoveryCodeStore for the recovery that has no session.
+func (d *RecoveryCodeDirectory) AttemptBySubject(ctx context.Context, subject string, codeHashes [][]byte) (auth.RecoveryAttempt, error) {
+	got, err := d.codes.AttemptBySubject(ctx, subject, codeHashes)
+	if err != nil {
+		return "", err
+	}
+	return auth.RecoveryAttempt(got), nil
+}
+
+// InvalidateBySubject spends the codes that are left after a recovery.
+func (d *RecoveryCodeDirectory) InvalidateBySubject(ctx context.Context, subject string) error {
+	return d.codes.InvalidateBySubject(ctx, subject)
 }

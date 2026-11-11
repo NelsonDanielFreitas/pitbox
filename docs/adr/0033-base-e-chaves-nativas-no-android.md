@@ -77,6 +77,6 @@ O mesmo plugin expõe `biometric.authenticate()` com `androidx.biometric` (`BIOM
 - Ainda por confirmar: `RETURNING` no plugin, várias bases por utilizador em simultâneo, o ramo Android 10 do `BiometricPrompt` (`setDeviceCredentialAllowed`; o telemóvel de teste é API 37), o `securityLevel` num emulador, e o ecrã de bloqueio numa sessão real (precisa do login, F2-06b). O apagamento do logout não consegue apagar uma base que não abra (chave perdida): fica por tratar.
 - A migração local corre em dois motores; a mesma bateria de testes tem de passar nos dois, e a divergência passa a ser um risco gerido pela interface única.
 - Dependências novas a justificar no PR: `@capacitor/core|cli|android`, `haptics`, `local-notifications`, `@capacitor-community/keep-awake`, `@capacitor-community/sqlite`, versões fixas.
-- Os documentos que ainda dizem «Bearer e CORS no F2-06» (ADR 0004, 0013, 0017; arquitetura §7.4) são atualizados para F2-06b.
+- Os documentos que diziam «Bearer e CORS no F2-06» (ADR 0004, 0013, 0017; arquitetura §7.4) foram atualizados para F2-06b.
 
 💼 Portfólio: «base cifrada igual em web e Android» e «chave de assinatura não exportável no Keystore» cobrem MASVS-STORAGE e MASVS-CRYPTO; bom artigo sobre assinatura de dispositivo num protocolo offline-first.

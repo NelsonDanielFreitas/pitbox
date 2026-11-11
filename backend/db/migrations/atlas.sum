@@ -1,4 +1,4 @@
-h1:xNlCR4/dL6YgVatoXrZPzU97flgUzTpyRGndViQ/5Xk=
+h1:FU5pcho6WI90AvvexphRGBBODarPtnr+KqJn1fXp1LE=
 20261012181718_initial.sql h1:Tiv1ABbDQmkD6Y/HZoE8Z7u2and+3cHSOASf5Ogdb20=
 20261013194110_resolve_login.sql h1:nx80NCYa8Lts3HZCs9dUb7AxcEm9oXjjk1T1UPCW4bY=
 20261017121627_is_owner_function.sql h1:hKUyQprD/UjKM6c29rubP068LbtDWgQMzJxrEA9Ss3Y=
@@ -21,3 +21,5 @@ h1:xNlCR4/dL6YgVatoXrZPzU97flgUzTpyRGndViQ/5Xk=
 20261101220032_template-generic-1-8-nitro-v1.sql h1:fResI4BIwgIBl4ZGfuZsZnbn+TVu8Lsgp7KtwkdkkMc=
 20261101221151_f2-00-template-change-log.sql h1:MJfJcVraqiQJfr3d0rjGirh0DcBhbkg8QamPpMIg8XY=
 20261102233647_template-mugen-mbx8-v1.sql h1:vFjCUDdHlSNfJpKm3FXrFHowj1LkqieIW2rX6dm1rAc=
+20261110194352_f2-06c-recovery-code-count.sql h1:e3DEsAtnPxDjLEU94bpY2pnOKg/ltylhzaHUPHRtoZc=
+20261110223357_f2-06c-recovery-by-subject.sql h1:T6i5WM82Cf1rnBWmDPQRrMxPoYiTxovsn0pf5rGOD9I=

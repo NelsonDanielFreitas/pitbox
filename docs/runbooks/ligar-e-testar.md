@@ -30,6 +30,8 @@ Só na **primeira vez** ou depois de um `make reset`: `make zitadel-provision` e
 
 Para trabalhar na app web com recarga automática, usa em vez do terminal 2: `make app-dev` e abre `http://localhost:5173` (**não** `127.0.0.1`).
 
+Se o Zitadel local está no perfil telemóvel, `make run-api` define também `PITBOX_OIDC_LOCAL_LOGOUT_ISSUER` (o back-channel logout, #154) e, havendo `PITBOX_ZITADEL_RECOVERY_PAT` no `.env` (criado por `make zitadel-provision`), liga a recuperação «Perdi a passkey» (#158). Depois de atualizar o repositório corre `make up` (monta `deploy/compose/zitadel/roles.yaml`), `make db-migrate` e `make zitadel-provision`.
+
 Verificar: `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8081/healthz` deve dar `200`; no telemóvel abre `https://portatil-wsl.tail9f9359.ts.net`.
 
 ## 3. Testar
@@ -147,3 +149,7 @@ make down                # opcional: para os contentores (os dados ficam)
 - `adb devices` vazio ou `offline`: repete `adb connect` com a porta atual (muda quando a depuração sem fios é religada). `adb pair` só se o telemóvel deixou de reconhecer o PC.
 - `gradlew` não encontra Java ou o SDK: corre dentro do repositório (o `mise` ativa o Java 21) e confirma `app/android/local.properties` com `sdk.dir=/home/nelson/Android/Sdk`.
 - Mudaste de máquina ou de nome Tailscale: atualiza `PITBOX_TAILNET_HOST` em `deploy/compose/.env`.
+
+## Telemóvel: `make app-preview` tem de estar a correr
+
+O `tailscale serve` expõe `https://<host>` a partir do `vite preview` (porta 4173), que também faz de proxy da API. Sem `make app-preview` o telemóvel recebe 502 e a app mostra «Sessão offline» (e um erro de CORS no logcat, que é só consequência). Ordem: `make up`, `make run-api`, `make app-preview`, `make serve-phone`, `make android-debug && make android-install`. A página «Conta e segurança» está em `/account` (menu «Conta»).

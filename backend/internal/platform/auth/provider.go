@@ -31,6 +31,9 @@ type ProviderConfig struct {
 	// public application of the identity provider (no secret) with its own audience.
 	MobileClientID    string
 	MobileRedirectURL string
+	// LogoutIssuerAlias is a second issuer accepted in back-channel logout tokens only
+	// (#154, local phone profile; see config.Config.OIDCLocalLogoutIssuer). Empty: only Issuer.
+	LogoutIssuerAlias string
 	HTTPClient        *http.Client
 	Now               func() time.Time
 }
@@ -40,6 +43,11 @@ type ready struct {
 	provider *oidc.Provider // for the userinfo endpoint
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier
+	// logoutVerifier verifies logout tokens. It is verifier unless an issuer alias is set; then
+	// it skips go-oidc's exact issuer check and verifyLogoutToken compares the issuer with the
+	// two accepted names itself. The signature, audience and expiry are checked either way.
+	logoutVerifier *oidc.IDTokenVerifier
+	logoutIssuers  []string
 	// mobileOAuth and mobileVerifier are set only when the mobile login is on. The verifier
 	// accepts the mobile client id as audience and nothing else, so an ID token issued for
 	// the web application is refused on the mobile path and the other way round.
@@ -148,6 +156,13 @@ func (p *Provider) discover(ctx context.Context) (*ready, error) {
 		}),
 		endSession: extra.EndSession,
 		revocation: extra.Revocation,
+	}
+	r.logoutVerifier, r.logoutIssuers = r.verifier, []string{p.cfg.Issuer}
+	if p.cfg.LogoutIssuerAlias != "" {
+		r.logoutVerifier = oidc.NewVerifier(p.cfg.Issuer, keySet, &oidc.Config{
+			ClientID: p.cfg.ClientID, SupportedSigningAlgs: p.cfg.AllowedAlgs, Now: p.cfg.Now, SkipIssuerCheck: true,
+		})
+		r.logoutIssuers = []string{p.cfg.Issuer, p.cfg.LogoutIssuerAlias}
 	}
 	if p.cfg.MobileClientID != "" {
 		mobile := endpoint

@@ -100,6 +100,7 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 		Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret,
 		RedirectURL: origin + auth.CallbackPath, AllowedAlgs: cfg.OIDCAllowedAlgs, HTTPClient: oidcClient, Now: now,
 	}
+	provCfg.LogoutIssuerAlias = cfg.OIDCLocalLogoutIssuer
 	if cfg.MobileEnabled() {
 		// Config.Validate guarantees all-or-nothing: the native client and its redirect.
 		provCfg.MobileClientID, provCfg.MobileRedirectURL = cfg.OIDCMobileClientID, cfg.MobileRedirectURI
@@ -116,7 +117,24 @@ func newAuthStack(ctx context.Context, cfg config.Config, logger *slog.Logger, v
 		Users: identity.NewLoginDirectory(pool), RecoveryCodes: identity.NewRecoveryCodeDirectory(pool),
 		RecoveryCodeHasher: recoveryHasher,
 		Audit:              auditor, Log: logger, Refusals: refusals,
-		Limiter: limiter, PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
+		RecoverThrottle: auth.NewValkeyThrottler(vk),
+		Limiter:         limiter, PublicURL: origin, ClientIPHeader: cfg.ClientIPHeader(), SessionMaxAge: cfg.SessionAbsoluteTimeout, Now: now,
+	}
+	if cfg.ZitadelRecoveryPAT != "" {
+		// Passkey recovery (#158): the Zitadel account has one custom role (read users, write
+		// passkeys). The same HTTP client as the login: it carries the local dial of the phone profile.
+		accounts, err := auth.NewZitadelAccounts(cfg.OIDCIssuer, cfg.ZitadelRecoveryPAT, oidcClient)
+		if err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("recovery account: %w", err)
+		}
+		pseudonyms, err := keyring.EmailPseudonymizer()
+		if err != nil {
+			pool.Close()
+			return nil, fmt.Errorf("email pseudonyms: %w", err)
+		}
+		handler.Accounts, handler.EmailPseudonyms = accounts, pseudonyms
+		handler.SessionRevoker = store
 	}
 	authenticator := &auth.Authenticator{Provider: provider, Store: store, Audit: auditor, Log: logger, Now: now}
 	handler.Authn = authenticator

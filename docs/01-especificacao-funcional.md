@@ -96,8 +96,16 @@ O login usa passkeys como método principal, com email + palavra-passe + segundo
 ### 3.5 Recuperação e alterações sensíveis
 
 - Recuperação de palavra-passe por link de uso único (15 min); após recuperação, todas as outras sessões terminam
+- Conta só com passkey que perdeu a passkey: «Perdi a passkey» no ecrã de entrada pede um email com um link de registo de passkey nova (resposta igual exista a conta ou não, limites por conta, IP e global; ADR 0034). Uma conta com códigos de recuperação exige também um deles (email + código, ADR 0035): gasta-o, gasta o resto do conjunto e termina as sessões; sem códigos, basta o email. Até gerar códigos de recuperação, a conta vê um aviso persistente
 - Mudar email, palavra-passe, MFA ou apagar conta exige reautenticação recente (≤ 5 min)
 - Mudança de email notifica o endereço antigo, com link para reverter durante 7 dias
+
+### 3.5.1 Conta e segurança (ecrã `/account`)
+
+- Estado da recuperação: quantos códigos de recuperação restam (nunca os códigos), aviso com 2 ou menos, «Gerar códigos novos» (o conjunto anterior deixa de valer; mostrados uma só vez; gerados ao acaso pelo servidor, nunca escolhidos pelo utilizador). Gerar exige um fator forte usado nos últimos 5 minutos
+- Sessões abertas (navegador e telemóvel): tipo, data de abertura, agente e IP; terminar uma ou todas as outras; a atual só termina com «terminar sessão»
+- Passkeys, MFA e palavra-passe: ligação ao fornecedor de identidade (web); no telemóvel remete para a versão web
+- Funciona na web e no Android; sem rede mostra só o aviso de que precisa de ligação
 
 ### 3.6 Equipas e convites
 

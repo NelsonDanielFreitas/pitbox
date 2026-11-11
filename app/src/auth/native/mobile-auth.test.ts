@@ -75,6 +75,7 @@ class FakeServer {
   apiStatuses: number[] = [];
   seenAuth: string[] = [];
   seenCounterInStorage: number[] = [];
+  starts: { body: Record<string, unknown>; authorization: string | null }[] = [];
   constructor(private readonly storage: MemoryStorage) {}
 
   readonly fetchFn: typeof fetch = (input, init) => {
@@ -84,6 +85,7 @@ class FakeServer {
     const json = (status: number, payload: unknown) =>
       Promise.resolve(new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } }));
     if (url.endsWith("/auth/mobile/start")) {
+      this.starts.push({ body, authorization: new Headers(init?.headers).get("Authorization") });
       this.publicKey = createPublicKey({ key: Buffer.from(String(body.session_pub), "base64"), format: "der", type: "spki" });
       return json(200, { authorization_url: `https://idp.test/authorize?state=st-1&redirect_uri=x`, state: "st-1" });
     }
@@ -190,6 +192,44 @@ describe("MobileAuth.login", () => {
     await auth.login();
     await auth.login();
     expect(plugin.keys.size).toBe(1);
+  });
+});
+
+describe("MobileAuth.stepUp", () => {
+  it("asks the server to reauthenticate THIS session: step_up and its Bearer, then replaces the key", async () => {
+    const { auth, server, plugin, storage } = setup();
+    await auth.login();
+    const firstKey = storage.record?.keyId;
+    await auth.stepUp();
+    expect(server.starts[1]?.body).toMatchObject({ step_up: true });
+    expect(server.starts[1]?.authorization).toBe(`Bearer ${bearerFor(1)}`);
+    expect(plugin.keys.size).toBe(1);
+    expect(storage.record?.keyId).not.toBe(firstKey);
+    await expect(auth.bearerToken()).resolves.toBe(bearerFor(2));
+  });
+
+  it("a plain login never asks for a step-up and never sends a Bearer", async () => {
+    const { auth, server } = setup();
+    await auth.login();
+    expect(server.starts[0]?.body).not.toHaveProperty("step_up");
+    expect(server.starts[0]?.authorization).toBeNull();
+  });
+
+  it("needs a session on the phone: with none it fails and leaves no key behind", async () => {
+    const { auth, plugin } = setup();
+    await expect(auth.stepUp()).rejects.toBeInstanceOf(SessionEndedError);
+    expect(plugin.keys.size).toBe(0);
+  });
+
+  it("keeps the old session and its key when the server refuses the reauthentication", async () => {
+    const { auth, server, plugin, storage } = setup();
+    await auth.login();
+    const before = storage.record;
+    server.tokenStatus = 403;
+    await expect(auth.stepUp()).rejects.toMatchObject({ reason: "not_allowed" });
+    expect(storage.record).toEqual(before);
+    expect(plugin.keys.size).toBe(1);
+    await expect(auth.bearerToken()).resolves.toBe(bearerFor(1));
   });
 });
 

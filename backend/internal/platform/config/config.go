@@ -97,9 +97,18 @@ type Config struct {
 	// OIDCLocalDial is "127.0.0.1:<port>": the local plain-HTTP door of the identity provider.
 	// Only for the phone profile (ADR 0029), where the issuer is a *.ts.net address this very
 	// machine cannot reach through the tailnet. Validate refuses it outside PITBOX_ENV=local.
-	OIDCLocalDial    string `env:"PITBOX_OIDC_LOCAL_DIAL"`
-	OIDCClientID     string `env:"PITBOX_OIDC_CLIENT_ID"`
-	OIDCClientSecret string `env:"PITBOX_OIDC_CLIENT_SECRET"`
+	OIDCLocalDial string `env:"PITBOX_OIDC_LOCAL_DIAL"`
+	// OIDCLocalLogoutIssuer is the other issuer the local Zitadel puts in back-channel logout
+	// tokens (#154): its asynchronous notifications use the instance's primary domain
+	// ("https://localhost:8443"), not the domain the user signed in on. Only for the phone
+	// profile; Validate refuses it outside PITBOX_ENV=local and without PITBOX_OIDC_LOCAL_DIAL.
+	OIDCLocalLogoutIssuer string `env:"PITBOX_OIDC_LOCAL_LOGOUT_ISSUER"`
+	OIDCClientID          string `env:"PITBOX_OIDC_CLIENT_ID"`
+	OIDCClientSecret      string `env:"PITBOX_OIDC_CLIENT_SECRET"`
+	// ZitadelRecoveryPAT is the personal access token of the Zitadel account that sends passkey
+	// registration links (#158, ADR 0034). Optional: empty turns the recovery off. It is a
+	// secret: never in a log line, an error or the startup summary.
+	ZitadelRecoveryPAT string `env:"PITBOX_ZITADEL_RECOVERY_PAT"`
 	// OIDCAllowedAlgs are the ID token signature algorithms accepted (cryptographic
 	// agility: change the list, not the code). "none" and HS* are never valid.
 	OIDCAllowedAlgs []string `env:"PITBOX_OIDC_ALLOWED_ALGS" envSeparator:"," envDefault:"ES256"`
@@ -403,6 +412,8 @@ func (c Config) LogValue() slog.Value {
 		slog.String("public_url", c.PublicURL),
 		slog.String("oidc_issuer", c.OIDCIssuer),
 		slog.Bool("oidc_local_dial", c.OIDCLocalDial != ""),
+		slog.Bool("oidc_local_logout_issuer", c.OIDCLocalLogoutIssuer != ""),
+		slog.Bool("account_recovery", c.ZitadelRecoveryPAT != ""),
 		slog.Bool("mobile_login", c.MobileEnabled()),
 		slog.Int("cors_origins", len(c.CORSOrigins)),
 		slog.Duration("session_idle_timeout", c.SessionIdleTimeout),

@@ -170,7 +170,9 @@ services:
     # login-client no volume partilhado). Só local; ver deploy/README.md.
     user: "0"
     mem_limit: 1g
-    command: ["start-from-init", "--masterkeyFromEnv"]
+    # roles.yaml (gerado por scripts/zitadel-roles.py): lista de papéis por omissão + PITBOX_ACCOUNT_RECOVERY
+    # (#158, ADR 0034). Uma lista por ficheiro ou ambiente substitui a lista por omissão inteira.
+    command: ["start-from-init", "--masterkeyFromEnv", "--config", "/zitadel/config/roles.yaml"]
     environment:
       ZITADEL_MASTERKEY: ${ZITADEL_MASTERKEY:?}
       ZITADEL_PORT: 8080
@@ -220,6 +222,7 @@ services:
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:rw
       - zitadel-provisioner:/zitadel/provisioner:rw
+      - ./zitadel/roles.yaml:/zitadel/config/roles.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy

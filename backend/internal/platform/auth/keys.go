@@ -8,9 +8,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,6 +27,9 @@ const (
 	PurposeLoginCookie  = "login-cookie"
 	PurposeSessionToken = "session-token"
 	PurposeRecoveryCode = "recovery-code"
+	// PurposeEmailPseudonym keys the pseudonym of an email in the audit trail (#158): the trail
+	// can tell that two requests were for the same address without ever holding the address.
+	PurposeEmailPseudonym = "email-pseudonym"
 )
 
 // ErrInvalidSealed is the only error Open returns. A malformed value, an unknown kid and
@@ -99,6 +104,27 @@ func (k *Keyring) RecoveryCodeHasher() (*RecoveryCodeHasher, error) {
 		h.keys = append(h.keys, recoveryCodeKey{id: key.ID, macKey: macKey})
 	}
 	return h, nil
+}
+
+// EmailPseudonymizer turns a normalized email into a short, keyed, one-way identifier.
+type EmailPseudonymizer struct{ macKey []byte }
+
+// EmailPseudonymizer derives the key of the active master key for PurposeEmailPseudonym.
+// A rotation changes the pseudonym of the same address, which only means the trail cannot
+// link requests across the rotation.
+func (k *Keyring) EmailPseudonymizer() (*EmailPseudonymizer, error) {
+	macKey, err := deriveKey(k.keys[0].Secret, PurposeEmailPseudonym, k.keys[0].ID)
+	if err != nil {
+		return nil, fmt.Errorf("derive email pseudonym key: %w", err)
+	}
+	return &EmailPseudonymizer{macKey: macKey}, nil
+}
+
+// Pseudonym returns 128 bits of HMAC-SHA256(key, email) in hex.
+func (p *EmailPseudonymizer) Pseudonym(email string) string {
+	m := hmac.New(sha256.New, p.macKey)
+	_, _ = m.Write([]byte(email))
+	return hex.EncodeToString(m.Sum(nil)[:16])
 }
 
 // Sealer seals and opens values with AES-256-GCM. The format is "<kid>.<base64url(nonce||ciphertext)>".

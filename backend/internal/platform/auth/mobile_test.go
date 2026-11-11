@@ -69,11 +69,18 @@ type mobileAttempt struct {
 	challenge         string
 }
 
-func (f *flowHarness) mobileStart(key deviceKey) mobileAttempt {
+func (f *flowHarness) mobileStart(key deviceKey) mobileAttempt { return f.mobileStartWith(key, "") }
+
+// mobileStartWith starts a login; with a Bearer it is a reauthentication of that session.
+func (f *flowHarness) mobileStartWith(key deviceKey, bearer string) mobileAttempt {
 	f.t.Helper()
 	verifier := oauth2.GenerateVerifier()
 	a := mobileAttempt{key: key, verifier: verifier, challenge: oauth2.S256ChallengeFromVerifier(verifier)}
-	w := f.post(MobileStartPath, map[string]string{"session_pub": key.spkiB6, "code_challenge": a.challenge}, nil)
+	body, hdr := map[string]any{"session_pub": key.spkiB6, "code_challenge": a.challenge}, map[string]string(nil)
+	if bearer != "" {
+		body["step_up"], hdr = true, bearerHdr(bearer)
+	}
+	w := f.post(MobileStartPath, body, hdr)
 	if w.Code != http.StatusOK {
 		f.t.Fatalf("start: status %d: %s", w.Code, w.Body.String())
 	}
@@ -416,11 +423,11 @@ func TestMobileStartRefusals(t *testing.T) {
 func TestMobileEndpointsAreOffWhenMobileIsNotConfigured(t *testing.T) {
 	t.Parallel()
 	f := newFlowHarness(t)
-	h := *f.h
-	h.Provider = NewProvider(ProviderConfig{
+	// A new Handler (not a copy of f.h: it holds locks) whose provider has no mobile client.
+	h := &Handler{Provider: NewProvider(ProviderConfig{
 		Issuer: f.idp.srv.URL, ClientID: f.idp.clientID, ClientSecret: f.idp.clientSecret,
 		RedirectURL: publicURL + CallbackPath, AllowedAlgs: []string{"ES256"}, Now: f.h.Now,
-	})
+	})}
 	mux := http.NewServeMux()
 	h.Mount(mux)
 	for _, p := range []string{MobileStartPath, MobileTokenPath, MobileRefreshPath, MobileLogoutPath} {

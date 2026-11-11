@@ -145,7 +145,7 @@ DO $$ DECLARE got text; bad text; BEGIN
   SELECT string_agg(p.oid::regprocedure::text, ', ' ORDER BY p.oid::regprocedure::text) INTO got
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit');
-  ASSERT got = 'identity.accept_invitation(bytea), identity.consume_recovery_code(uuid,bytea[]), identity.is_owner(uuid), identity.replace_recovery_codes(uuid,bytea[],text), identity.resolve_login(text,citext,text), setup.open_share_link(bytea), setup.open_share_link_v2(bytea)', format('funções SECURITY DEFINER: %s', got);
+  ASSERT got = 'identity.accept_invitation(bytea), identity.attempt_recovery_by_subject(text,bytea[]), identity.consume_recovery_code(uuid,bytea[]), identity.count_unused_recovery_codes(uuid), identity.invalidate_recovery_codes_by_subject(text), identity.is_owner(uuid), identity.replace_recovery_codes(uuid,bytea[],text), identity.resolve_login(text,citext,text), setup.open_share_link(bytea), setup.open_share_link_v2(bytea)', format('funções SECURITY DEFINER: %s', got);
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE p.prosecdef AND n.nspname IN ('app','identity','garage','setup','maintenance','events','timing','telemetry','sync','platform','audit')

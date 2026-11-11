@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -65,6 +66,15 @@ type Handler struct {
 	Log                *slog.Logger
 	// Refusals counts callbacks refused before their state was validated (nil: not counted).
 	Refusals RefusalCounter
+	// Accounts, RecoverThrottle and EmailPseudonyms serve /auth/recover and recovery_ready
+	// (#158, ADR 0034). Accounts nil: the feature is off (the endpoint still answers 202).
+	Accounts        AccountDirectory
+	RecoverThrottle RecoveryThrottler
+	// SessionRevoker ends the sessions of an account after a recovery with a code (nil: none).
+	SessionRevoker  SessionRevoker
+	EmailPseudonyms *EmailPseudonymizer
+	recoverySlots   recoverer
+	readiness       readinessCache
 	// Limiter limits the public mobile endpoints per client address (nil: unlimited, tests only).
 	Limiter        PublicLimiter
 	PublicURL      string // origin the browser sees, without a trailing slash
@@ -83,10 +93,13 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+AccountSecurityPath, h.accountSecurity)
 	mux.HandleFunc("GET "+SessionPath, h.sessionInfo)
 	mux.HandleFunc("GET "+SessionsPath, h.listSessions)
+	mux.HandleFunc("DELETE "+SessionsPath, h.revokeOtherSessions)
 	mux.HandleFunc("DELETE "+SessionRefPath, h.revokeSession)
 	mux.HandleFunc("POST "+BackChannelLogoutPath, h.backchannelLogout)
+	mux.HandleFunc("GET "+RecoveryCodesPath, h.recoveryCodesStatus)
 	mux.HandleFunc("POST "+RecoveryCodesPath, h.generateRecoveryCodes)
 	mux.HandleFunc("POST "+RecoveryCodeConsumePath, h.consumeRecoveryCode)
+	mux.HandleFunc("POST "+RecoverPath, h.recoverAccount)
 	if h.Provider.MobileEnabled() {
 		h.mountMobile(mux)
 	}
@@ -820,97 +833,10 @@ func (h *Handler) sessionInfo(w http.ResponseWriter, r *http.Request) {
 		UserID        string    `json:"user_id"`
 		AMR           []string  `json:"amr"`
 		AuthTime      time.Time `json:"auth_time"`
-	}{true, p.UserID, amr, p.AuthTime})
-}
-
-// listSessions returns the active sessions of the authenticated user. It never includes
-// tokens or the full cookie value: only the session reference and metadata.
-func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	noStore(w)
-	w.Header().Set("Content-Type", "application/json")
-
-	token := SessionTokenFromHeader(r.Header)
-	sess, err := h.Store.Get(ctx, token)
-	switch {
-	case errors.Is(err, ErrNoSession):
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":"unauthenticated"}`))
-		return
-	case err != nil:
-		h.Log.ErrorContext(ctx, "list sessions", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
-		return
-	}
-
-	sessions, err := h.Store.ListBySubject(ctx, sess.Subject, sess.Ref())
-	if err != nil {
-		h.Log.ErrorContext(ctx, "list sessions", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
-		return
-	}
-	_ = json.NewEncoder(w).Encode(struct {
-		Sessions []StoreSessionInfo `json:"sessions"`
-	}{sessions})
-}
-
-// StoreSessionInfo is an alias exported for JSON marshalling.
-type StoreSessionInfo = SessionInfo
-
-// revokeSession terminates a session of the authenticated user. A user can only revoke their
-// own sessions; the current session can be revoked, which is equivalent to signing out.
-func (h *Handler) revokeSession(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	noStore(w)
-
-	token := SessionTokenFromHeader(r.Header)
-	sess, err := h.Store.Get(ctx, token)
-	switch {
-	case errors.Is(err, ErrNoSession):
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	case err != nil:
-		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-
-	ref := r.PathValue("ref")
-	if ref == "" || !validRef(ref) {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	// Verify the target belongs to the same user before deleting.
-	target, err := h.Store.GetByRef(ctx, ref)
-	if err != nil {
-		if errors.Is(err, ErrNoSession) {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-	if subtle.ConstantTimeCompare([]byte(target.Subject), []byte(sess.Subject)) != 1 {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	if err := h.Store.DeleteByRef(ctx, ref); err != nil {
-		h.Log.ErrorContext(ctx, "revoke session", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
-	if err := h.Audit.Record(ctx, AuditEvent{
-		Action: "auth.session_revoked", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: ref,
-		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
-	}); err != nil {
-		h.Log.ErrorContext(ctx, "audit revoke session", slog.String("reason", "audit"))
-	}
-	w.WriteHeader(http.StatusNoContent)
+		// RecoveryReady is false only for an account whose sole credential is a passkey and
+		// that has no recovery code; absent when unknown (#158).
+		RecoveryReady *bool `json:"recovery_ready,omitempty"`
+	}{true, p.UserID, amr, p.AuthTime, h.recoveryReady(r.Context(), p)})
 }
 
 // appendStrongAMR adds a strong factor to amr without duplicates, preserving any existing
@@ -938,68 +864,6 @@ func validRef(ref string) bool {
 		}
 	}
 	return true
-}
-
-// generateRecoveryCodes creates a fresh set of single-use MFA recovery codes for the
-// authenticated user. The request must be step-up authenticated (strong factor); the plaintext
-// codes are returned exactly once and are never stored.
-func (h *Handler) generateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	noStore(w)
-	w.Header().Set("Content-Type", "application/json")
-
-	token := SessionTokenFromHeader(r.Header)
-	sess, err := h.Store.Get(ctx, token)
-	switch {
-	case errors.Is(err, ErrNoSession):
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":"unauthenticated"}`))
-		return
-	case err != nil:
-		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
-		return
-	}
-
-	if !principal.IsStrongFactor(sess.AMR) {
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"error":"step-up required"}`))
-		return
-	}
-
-	if h.RecoveryCodeHasher == nil {
-		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "keyring"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
-		return
-	}
-
-	codes, hashes, err := h.RecoveryCodeHasher.Generate()
-	if err != nil {
-		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "random"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
-		return
-	}
-
-	if err := h.RecoveryCodes.Replace(ctx, sess.UserID, h.RecoveryCodeHasher.KeyID(), hashes); err != nil {
-		h.Log.ErrorContext(ctx, "generate recovery codes", slog.String("reason", "store"))
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte(`{"error":"authentication temporarily unavailable"}`))
-		return
-	}
-
-	if err := h.Audit.Record(ctx, AuditEvent{
-		Action: "auth.recovery_codes_generated", ActorKind: ActorUser, ActorID: sess.UserID, SessionRef: sess.Ref(),
-		Meta: interceptors.RequestMeta(r, h.ClientIPHeader),
-	}); err != nil {
-		h.Log.ErrorContext(ctx, "audit recovery codes generated", slog.String("reason", "audit"))
-	}
-
-	_ = json.NewEncoder(w).Encode(struct {
-		Codes []string `json:"codes"`
-	}{codes})
 }
 
 // consumeRecoveryCode validates a single-use recovery code and, if valid, elevates the current
@@ -1033,6 +897,21 @@ func (h *Handler) consumeRecoveryCode(w http.ResponseWriter, r *http.Request) {
 		h.Log.ErrorContext(ctx, "consume recovery code", slog.String("reason", "keyring"))
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
+	}
+
+	// Codes are single-use and 128 bits, so guessing is hopeless; the limit keeps the audit
+	// trail and the database from being flooded and meets NIST 800-63B-4 3.2.2 (ADR 0035).
+	if h.RecoverThrottle != nil {
+		within, err := h.RecoverThrottle.Hit(ctx, recoverThrottlePath+"consume:"+sess.UserID, recoverMaxConsumePerUser, recoverWindow)
+		if err != nil {
+			h.Log.WarnContext(ctx, "consume recovery code", slog.String("reason", recoverReasonThrottleIn))
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if !within {
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
 	}
 
 	hashes := h.RecoveryCodeHasher.Hashes(req.Code)
@@ -1150,8 +1029,8 @@ func (h *Handler) verifyLogoutToken(ctx context.Context, raw string) (logoutToke
 	if err != nil {
 		return empty, errors.New("provider_unavailable")
 	}
-	idt, err := prov.verifier.Verify(ctx, raw)
-	if err != nil {
+	idt, err := prov.logoutVerifier.Verify(ctx, raw)
+	if err != nil || !slices.Contains(prov.logoutIssuers, idt.Issuer) {
 		return empty, errors.New("logout_token_invalid")
 	}
 	var c logoutTokenClaims

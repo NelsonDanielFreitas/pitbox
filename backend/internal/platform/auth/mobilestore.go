@@ -45,6 +45,10 @@ type MobilePending struct {
 	Challenge string `json:"c"`  // base64url SHA-256 of the PKCE verifier
 	Nonce     string `json:"n"`  // sent to the identity provider; must come back in the ID token
 	DevicePub []byte `json:"dp"` // SPKI DER of the session key
+	// StepUpRef and StepUpSub are set when the login is a reauthentication of a session the
+	// phone already has: the session it replaces and the account it must stay (F2-06b).
+	StepUpRef string `json:"sr,omitempty"`
+	StepUpSub string `json:"ss,omitempty"`
 }
 
 var (

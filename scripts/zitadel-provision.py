@@ -8,8 +8,9 @@ Leva a instância ao estado desejado, sempre pela mesma ordem:
   4. complexidade de palavra-passe, lockout sem bloqueio permanente e validade dos códigos;
   5. provider SMTP do Mailpit local, idioma pt e textos de verificação/recuperação;
   6. projeto "pitbox";
-  7. aplicação OIDC web "pitbox-api" (cliente confidencial, code + PKCE, access token opaco).
-Escreve PITBOX_OIDC_CLIENT_ID e PITBOX_OIDC_CLIENT_SECRET em deploy/compose/.env (0600).
+  7. aplicação OIDC web "pitbox-api" (cliente confidencial, code + PKCE, access token opaco);
+  8. aplicação nativa do telemóvel e conta de serviço da recuperação (papel mínimo, PAT de 90 dias).
+Escreve PITBOX_OIDC_CLIENT_ID, PITBOX_OIDC_CLIENT_SECRET e PITBOX_ZITADEL_RECOVERY_PAT em deploy/compose/.env (0600).
 O que escreve ali nunca vai para o stdout, e o PAT nunca é impresso nem escrito em disco.
 
 O PAT do utilizador "provisioner" (IAM_OWNER, 30 dias) vive num volume que só o contentor
@@ -21,6 +22,7 @@ Uso: python3 -I scripts/zitadel-provision.py [--rotate-secret] [--rotate-smtp-pa
 Só usa a biblioteca padrão.
 """
 import argparse
+import datetime
 import importlib.util
 import io
 import json
@@ -52,6 +54,12 @@ PROJECT_NAME = "pitbox"
 APP_NAME = "pitbox-api"
 # Aplicação nativa pública do telemóvel (ADR 0032): sem segredo, PKCE, esquema próprio.
 MOBILE_APP_NAME = "pitbox-android"
+# Conta de serviço da recuperação de conta (#158, ADR 0034): utilizador máquina com o papel mínimo
+# IAM_PITBOX_ACCOUNT_RECOVERY (deploy/compose/zitadel/roles.yaml, gerado por scripts/zitadel-roles.py).
+RECOVERY_USER = "pitbox-recovery"
+RECOVERY_ROLE = "IAM_PITBOX_ACCOUNT_RECOVERY"
+RECOVERY_PAT_DAYS = 90  # validade do PAT
+RECOVERY_PAT_RENEW_DAYS = 14  # renova-se quando faltam menos dias
 MOBILE_REDIRECT_URI = "app.pitbox.mobile:/auth/callback"
 # Origem do WebView do Capacitor (androidScheme https); vai para PITBOX_CORS_ORIGINS se ainda não existir.
 MOBILE_CORS_ORIGIN = "https://localhost"
@@ -92,6 +100,7 @@ ENUM_ZERO = {
     "version": "OIDC_VERSION_1_0",
     "accessTokenType": "OIDC_TOKEN_TYPE_BEARER",
 }
+BACKCHANNEL_PATH = "/auth/backchannel-logout"
 SET_FIELDS = ("redirectUris", "postLogoutRedirectUris", "responseTypes", "grantTypes")
 
 
@@ -102,12 +111,27 @@ class ProvisionError(Exception):
 # --------------------------------------------------------------------------- puro
 
 
+def backchannel_logout_uri(base: str) -> str:
+    """URI do back-channel logout, alcançável a partir do contentor do Zitadel (#154).
+
+    Em local o pitbox-api corre no anfitrião e o Zitadel num contentor: `localhost` dentro do
+    contentor é ele próprio (connection refused, TM-AUTH-20). `host.docker.internal` (Docker Desktop)
+    chega ao anfitrião. Sem `extra_hosts`: `host-gateway` resolve para IPv6 inalcançável (ADR 0032).
+    Um URL público que não seja localhost (produção) mantém-se como está.
+    """
+    parts = urllib.parse.urlsplit(base)
+    if parts.hostname in ("localhost", "127.0.0.1"):
+        port = f":{parts.port}" if parts.port else ""
+        return f"http://host.docker.internal{port}{BACKCHANNEL_PATH}"
+    return f"{base}{BACKCHANNEL_PATH}"
+
+
 def desired_oidc_config(public_url: str, tailnet_host: str = "") -> dict:
     """Configuração OIDC desejada da aplicação, a partir do URL público do pitbox-api.
 
     Com `tailnet_host` (perfil telemóvel, ADR 0029) acrescenta os URIs https://<host> SEM tirar os
     de localhost: o mesmo registo serve o PC (CI, E2E, smoke) e o telemóvel. O back-channel logout
-    fica em localhost: o Zitadel bloqueia URLs ts.net (#154, TM-AUTH-20).
+    não usa a tailnet (o Zitadel bloqueia URLs ts.net) mas `host.docker.internal` (#154, TM-AUTH-20).
     """
     base = public_url.rstrip("/")
     origins = [base]
@@ -122,7 +146,7 @@ def desired_oidc_config(public_url: str, tailnet_host: str = "") -> dict:
     return {
         "redirectUris": [f"{origin}/auth/callback" for origin in origins],
         "postLogoutRedirectUris": [f"{origin}/auth/signed-out" for origin in origins],
-        "backChannelLogoutUri": f"{base}/auth/backchannel-logout",
+        "backChannelLogoutUri": backchannel_logout_uri(base),
         "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
         "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
         "applicationType": "OIDC_APP_TYPE_WEB",
@@ -663,6 +687,59 @@ def ensure_app(z: Zitadel, project_id: str, public_url: str, env: dict, rotate: 
     return out
 
 
+def recovery_pat_needs_rotation(env: dict, now, force: bool) -> bool:
+    """Pura: o PAT da recuperação não existe, não tem validade registada, está perto de expirar, ou foi pedido."""
+    if force or not env.get("PITBOX_ZITADEL_RECOVERY_PAT"):
+        return True
+    raw = env.get("PITBOX_ZITADEL_RECOVERY_PAT_EXPIRES", "")
+    try:
+        expires = datetime.datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        return True
+    return expires - now < datetime.timedelta(days=RECOVERY_PAT_RENEW_DAYS)
+
+
+def ensure_recovery_service(z: Zitadel, env: dict, rotate_pat: bool, log, now=None) -> dict:
+    """Utilizador máquina da recuperação, só com o papel mínimo, e o seu PAT. Devolve as chaves de .env a escrever.
+
+    O membro tem de ter EXATAMENTE o papel mínimo (um papel a mais é corrigido); o PAT novo cria-se
+    antes de apagar os antigos, para a API nunca ficar sem credencial válida.
+    """
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    found = z.call("/v2/users", {"queries": [{"userNameQuery": {"userName": RECOVERY_USER, "method": "TEXT_QUERY_METHOD_EQUALS"}}]})
+    users = found.get("result", [])
+    if users:
+        user_id = users[0]["userId"]
+        log("conta de serviço da recuperação: já existe")
+    else:
+        user_id = z.call("/management/v1/users/machine", {
+            "userName": RECOVERY_USER, "name": "PitBox account recovery (passkey registration links only)",
+            "description": "ADR 0034. Papel mínimo; PAT rotativo.", "accessTokenType": "ACCESS_TOKEN_TYPE_BEARER",
+        })["userId"]
+        log("conta de serviço da recuperação: criada")
+
+    members = z.call("/admin/v1/members/_search", {"queries": [{"userIdQuery": {"userId": user_id}}]}).get("result", [])
+    if not members:
+        z.call("/admin/v1/members", {"userId": user_id, "roles": [RECOVERY_ROLE]})
+        log(f"conta de serviço da recuperação: papel {RECOVERY_ROLE} atribuído")
+    elif sorted(members[0].get("roles", [])) != [RECOVERY_ROLE]:
+        z.call(f"/admin/v1/members/{user_id}", {"roles": [RECOVERY_ROLE]}, method="PUT")
+        log(f"conta de serviço da recuperação: papéis corrigidos para só {RECOVERY_ROLE}")
+
+    if not recovery_pat_needs_rotation(env, now, rotate_pat):
+        log("PAT da recuperação: ainda válido")
+        return {}
+    old = z.call(f"/management/v1/users/{user_id}/pats/_search", {}).get("result", [])
+    expires = (now + datetime.timedelta(days=RECOVERY_PAT_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    created = z.call(f"/management/v1/users/{user_id}/pats", {"expirationDate": expires})
+    if not created.get("token"):
+        raise ProvisionError("o Zitadel criou o PAT da recuperação sem o devolver")
+    for tok in old:
+        z.call(f"/management/v1/users/{user_id}/pats/{tok['id']}", None, method="DELETE")
+    log("PAT da recuperação: gerado de novo" + (f" ({len(old)} antigo(s) apagado(s))" if old else ""))
+    return {"PITBOX_ZITADEL_RECOVERY_PAT": created["token"], "PITBOX_ZITADEL_RECOVERY_PAT_EXPIRES": expires}
+
+
 def ensure_native_app(z: Zitadel, project_id: str, env: dict, log) -> dict:
     """App nativa do telemóvel. Devolve as chaves de .env a escrever (vazio se nada mudou).
 
@@ -732,6 +809,7 @@ def run(
     log=print,
     rotate_smtp_password: bool = False,
     tailnet_host: str = "",
+    rotate_recovery_pat: bool = False,
 ) -> None:
     if tailnet_host:
         tailnet.validate_host(tailnet_host)
@@ -753,6 +831,7 @@ def run(
     project_id = ensure_project(z, log)
     changes.update(ensure_app(z, project_id, public_url, env, rotate, log, tailnet_host))
     changes.update(ensure_native_app(z, project_id, env, log))
+    changes.update(ensure_recovery_service(z, env, rotate_recovery_pat, log))
     if changes:
         write_private(env_file, update_env(env_text, changes))
         log(f"escrito em {env_file.name}: {', '.join(sorted(changes))}")
@@ -764,6 +843,7 @@ def main(argv=None) -> int:
     ap.add_argument("--public-url", default=None, help="URL público do pitbox-api (por omissão http://localhost:8081)")
     ap.add_argument("--pat-file", default=None, help="ficheiro 0600 com o PAT (por omissão lê-o do contentor)")
     ap.add_argument("--rotate-secret", action="store_true", help="gera um segredo de cliente novo")
+    ap.add_argument("--rotate-recovery-pat", action="store_true", help="gera um PAT novo para a conta de serviço da recuperação")
     ap.add_argument("--rotate-smtp-password", action="store_true", help="gera uma password SMTP local nova")
     args = ap.parse_args(argv)
     env = parse_env(ENV_FILE.read_text(encoding="utf-8")) if ENV_FILE.exists() else {}
@@ -775,7 +855,8 @@ def main(argv=None) -> int:
             tailnet.validate_host(host)
             print(f"zitadel-provision: perfil telemóvel ({host})", file=sys.stderr)
         pat = read_pat_file(args.pat_file) if args.pat_file else read_pat_from_container()
-        run(base, public, pat, ENV_FILE, args.rotate_secret, rotate_smtp_password=args.rotate_smtp_password, tailnet_host=host)
+        run(base, public, pat, ENV_FILE, args.rotate_secret, rotate_smtp_password=args.rotate_smtp_password, tailnet_host=host,
+            rotate_recovery_pat=args.rotate_recovery_pat)
     except (ProvisionError, tailnet.TailnetError) as e:
         print(f"zitadel-provision: {e}", file=sys.stderr)
         return 1

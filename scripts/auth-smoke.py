@@ -507,6 +507,9 @@ def main() -> int:
         check(json.loads(body).get("messages_count", json.loads(body).get("total", 0)) == 3, "no máximo 3 emails por conta e hora")
         bad = http_call("POST", API + "/auth/recover", {"Content-Type": "application/json"}, b'{"email":"nao-e-email"}')
         check(bad[0] == 400, "email inválido -> 400")
+        bad_code = http_call("POST", API + "/auth/recover", {"Content-Type": "application/json"},
+                             json.dumps({"email": pk_email, "code": "isto-nao-e-um-codigo"}).encode())
+        check(bad_code[0] == 400, "código de recuperação mal formado -> 400 (ADR 0035; o caso com códigos tem testes de integração em Go e prova no telemóvel)")
 
         print("== 5. Segundo login do mesmo utilizador")
         callback2, lc2, _ = sign_in()
